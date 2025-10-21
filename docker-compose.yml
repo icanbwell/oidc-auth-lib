@@ -1,0 +1,13 @@
+version: '3.5'
+services:
+  dev:
+    user: root
+    build:
+      dockerfile: Dockerfile
+      context: .
+    volumes:
+      - ./:/usr/src/oidcauthlib
+    container_name: oidcauthlib_dev
+    working_dir: /usr/src/oidcauthlib
+    env_file:
+      - docker.env
