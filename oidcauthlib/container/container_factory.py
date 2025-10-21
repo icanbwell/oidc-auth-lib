@@ -16,6 +16,12 @@ class ContainerFactory:
 
         container = SimpleContainer()
 
+        return self.register_services_in_container(container=container)
+
+    @staticmethod
+    def register_services_in_container(
+        *, container: SimpleContainer
+    ) -> SimpleContainer:
         # register services here
         container.register(
             EnvironmentVariables,
