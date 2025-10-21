@@ -49,7 +49,6 @@ class SimpleContainer:
             service_type: The type of service to register
             factory: Factory function that creates the service
         """
-        # noinspection PyUnreachableCode
         if not callable(factory):
             raise ValueError(f"Factory for {service_type} must be callable")
 
