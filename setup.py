@@ -66,5 +66,5 @@ setup(
     dependency_links=[],
     include_package_data=True,
     zip_safe=False,
-    package_data={"oidcauthlib": ["py.typed"]}
+    package_data={"oidcauthlib": ["py.typed"]},
 )
