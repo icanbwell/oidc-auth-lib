@@ -10,23 +10,41 @@ url = "https://imranq2.github.io/alpine-wheels/docs/"
 verify_ssl = true
 
 [packages]
+# httpx is a Python library for making HTTP requests
+httpx = ">=0.27.2"
+# authlib is a Python library for OAuth and OpenID Connect
+authlib = ">=1.6.4"
+# joserfc is a Python library for working with JOSE (JSON Object Signing and Encryption)
+joserfc = ">=1.2.2"
+# pydantic is a Python library for data validation
+pydantic = ">=2.0,<3.0.0"
 
 [dev-packages]
 setuptools=">=60.9.3"
+# wheel is needed for building the package and installing wheels
 wheel = ">=0.43.0"
+# twine is needed for uploading the package to PyPI
 twine=">=4.0.2"
-pre-commit=">=3.6.1"
-autoflake=">=2.2.0"
-mypy = ">=1.8.0"
-pytest = ">=8.1.1"
-pytest-asyncio = ">=0.23.6"
-black = ">=24.2.0"
+# pre-commit is a Python library for running pre-commit checks
+pre-commit=">=3.8.0"
+# autoflake is a Python library for removing unused imports
+autoflake=">=2.3.1"
+# mypy is a Python library for type checking
+mypy = ">=1.11.2"
+# pytest is a Python library for running tests
+pytest = ">=8.3.3"
+# pytest-asyncio is a Python library for running asyncio tests
+pytest-asyncio = ">=0.24.0"
+# black is a Python library for formatting code
+black = ">=24.8.0"
 # bandit is needed for security checks
 bandit = ">=1.8.3"
 # ruff is needed for linting
 ruff = ">=0.11.5"
 # pytest-cov is needed for measuring test coverage
 pytest-cov = ">=6.1.1"
+# types-Authlib is a Python library for typing Authlib
+types-Authlib = ">=1.6.5"
 
 # These dependencies are required for pipenv-setup.  They conflict with ones above, so we install these
 # only when running pipenv-setup

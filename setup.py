@@ -55,7 +55,12 @@ setup(
     long_description_content_type="text/markdown",
     url="https://github.com/icanbwell/oidc-auth-lib",
     packages=find_packages(),
-    install_requires=[],
+    install_requires=[
+        "httpx>=0.27.2",
+        "authlib>=1.6.4",
+        "joserfc>=1.2.2",
+        "pydantic>=2.0,<3.0.0",
+    ],
     classifiers=[
         "Development Status :: 4 - Beta",
         "Programming Language :: Python :: 3",
