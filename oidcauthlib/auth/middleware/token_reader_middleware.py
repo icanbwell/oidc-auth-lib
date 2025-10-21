@@ -56,9 +56,14 @@ class TokenReaderMiddleware(BaseHTTPMiddleware):
         path = request.url.path
         require_token = self._is_route_match(path, self.require_token_patterns)
         optional_token = self._is_route_match(path, self.optional_token_patterns)
-        enforce_token = require_token or (
-            not optional_token and not self.require_token_patterns
-        )
+
+        # If neither parameter is set, require token for all routes except /health
+        if not self.require_token_patterns and not self.optional_token_patterns:
+            enforce_token = path != "/health"
+        else:
+            enforce_token = require_token or (
+                not optional_token and not self.require_token_patterns
+            )
         try:
             auth_header = request.headers.get("authorization")
             token: str | None = self.token_reader.extract_token(
