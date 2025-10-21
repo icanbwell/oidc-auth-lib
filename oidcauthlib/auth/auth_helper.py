@@ -43,7 +43,7 @@ class AuthHelper:
                 logger.error("Failed to decode state: Input is empty or not a string")
                 raise ValueError("Encoded state is empty or not a string")
             # Fix base64 padding
-            padding_needed = (4 - len(encoded_content) % 4) % 4
+            padding_needed = (-len(encoded_content)) % 4
             padded_content = encoded_content + ("=" * padding_needed)
             try:
                 json_content = base64.urlsafe_b64decode(padded_content).decode("utf-8")
