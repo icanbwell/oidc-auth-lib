@@ -62,6 +62,7 @@ setup(
         "pydantic>=2.0,<3.0.0",
         "pymongo[srv]>=4.15.3",
         "fastapi>=0.115.8",
+        "starlette>=0.48.0",
     ],
     classifiers=[
         "Development Status :: 4 - Beta",
