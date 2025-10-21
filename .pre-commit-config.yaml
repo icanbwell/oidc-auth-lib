@@ -61,8 +61,7 @@ repos:
           --strict,
           --python-version=3.12,
           --show-error-codes,
-          --allow-untyped-decorators,
-          --ignore-missing-imports
+          --allow-untyped-decorators
         ]
 
       # Bandit for security scanning
