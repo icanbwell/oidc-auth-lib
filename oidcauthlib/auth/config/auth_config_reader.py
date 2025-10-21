@@ -1,5 +1,4 @@
 import os
-from typing import Optional
 
 from oidcauthlib.auth.config.auth_config import AuthConfig
 from oidcauthlib.utilities.environment.abstract_environment_variables import (
@@ -88,23 +87,6 @@ class AuthConfigReader:
             client_secret=auth_client_secret,
             well_known_uri=auth_well_known_uri,
         )
-
-    def get_issuer_for_provider(self, *, auth_provider: str) -> Optional[str]:
-        """
-        Get the issuer for a specific auth provider.
-
-        Args:
-            auth_provider (str): The auth provider for which to retrieve the issuer.
-
-        Returns:
-            str: The issuer for the specified auth provider.
-        """
-        auth_config: AuthConfig | None = self.get_config_for_auth_provider(
-            auth_provider=auth_provider
-        )
-        if auth_config is None:
-            raise ValueError(f"AuthConfig for audience {auth_provider} not found.")
-        return auth_config.issuer
 
     def get_audience_for_provider(self, *, auth_provider: str) -> str:
         """
