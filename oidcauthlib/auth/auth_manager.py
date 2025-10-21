@@ -23,7 +23,7 @@ from oidcauthlib.auth.exceptions.authorization_needed_exception import (
 )
 from oidcauthlib.auth.token_reader import TokenReader
 from oidcauthlib.utilities.environment_variables import (
-    EnvironmentVariables,
+    AbstractEnvironmentVariables,
 )
 from oidcauthlib.utilities.logger.log_levels import SRC_LOG_LEVELS
 from oidcauthlib.utilities.logger.logging_transport import (
@@ -45,7 +45,7 @@ class AuthManager:
     def __init__(
         self,
         *,
-        environment_variables: EnvironmentVariables,
+        environment_variables: AbstractEnvironmentVariables,
         auth_config_reader: AuthConfigReader,
         token_reader: TokenReader,
     ) -> None:
@@ -62,14 +62,14 @@ class AuthManager:
         If the OAUTH_CACHE environment variable is not set, it defaults to "memory".
 
         Args:
-            environment_variables (EnvironmentVariables): The environment variables for the application.
+            environment_variables (AbstractEnvironmentVariables): The environment variables for the application.
             auth_config_reader (AuthConfigReader): The reader for authentication configurations.
             token_reader (TokenReader): The reader for tokens.
         """
-        self.environment_variables: EnvironmentVariables = environment_variables
+        self.environment_variables: AbstractEnvironmentVariables = environment_variables
         if self.environment_variables is None:
             raise ValueError("environment_variables must not be None")
-        if not isinstance(self.environment_variables, EnvironmentVariables):
+        if not isinstance(self.environment_variables, AbstractEnvironmentVariables):
             raise TypeError(
                 "environment_variables must be an instance of EnvironmentVariables"
             )

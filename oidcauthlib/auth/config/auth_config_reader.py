@@ -2,7 +2,7 @@ import os
 
 from oidcauthlib.auth.config.auth_config import AuthConfig
 from oidcauthlib.utilities.environment_variables import (
-    EnvironmentVariables,
+    AbstractEnvironmentVariables,
 )
 
 
@@ -11,18 +11,18 @@ class AuthConfigReader:
     A class to read authentication configurations from environment variables.
     """
 
-    def __init__(self, *, environment_variables: EnvironmentVariables) -> None:
+    def __init__(self, *, environment_variables: AbstractEnvironmentVariables) -> None:
         """
         Initialize the AuthConfigReader with an EnvironmentVariables instance.
         Args:
-            environment_variables (EnvironmentVariables): An instance of EnvironmentVariables to read auth configurations.
+            environment_variables (AbstractEnvironmentVariables): An instance of EnvironmentVariables to read auth configurations.
         """
-        self.environment_variables: EnvironmentVariables = environment_variables
+        self.environment_variables: AbstractEnvironmentVariables = environment_variables
         if self.environment_variables is None:
             raise ValueError(
                 "AuthConfigReader requires an EnvironmentVariables instance."
             )
-        if not isinstance(self.environment_variables, EnvironmentVariables):
+        if not isinstance(self.environment_variables, AbstractEnvironmentVariables):
             raise TypeError(
                 "environment_variables must be an instance of EnvironmentVariables"
             )

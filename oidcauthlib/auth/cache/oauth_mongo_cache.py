@@ -14,7 +14,7 @@ from oidcauthlib.auth.repository.repository_factory import (
     RepositoryFactory,
 )
 from oidcauthlib.utilities.environment_variables import (
-    EnvironmentVariables,
+    AbstractEnvironmentVariables,
 )
 from oidcauthlib.utilities.logger.log_levels import SRC_LOG_LEVELS
 
@@ -31,7 +31,7 @@ class OAuthMongoCache(OAuthCache):
 
     """
 
-    def __init__(self, *, environment_variables: EnvironmentVariables) -> None:
+    def __init__(self, *, environment_variables: AbstractEnvironmentVariables) -> None:
         """
         Initialize the OAuthMongoCache with a unique ID and MongoDB connection.
         It reads the connection string, database name, and collection name from environment variables.
@@ -58,12 +58,12 @@ class OAuthMongoCache(OAuthCache):
             )
         self.collection_name: str = collection_name
 
-        self.environment_variables: EnvironmentVariables = environment_variables
+        self.environment_variables: AbstractEnvironmentVariables = environment_variables
         if self.environment_variables is None:
             raise ValueError(
                 "OAuthMongoCache requires an EnvironmentVariables instance."
             )
-        if not isinstance(self.environment_variables, EnvironmentVariables):
+        if not isinstance(self.environment_variables, AbstractEnvironmentVariables):
             raise TypeError(
                 "environment_variables must be an instance of EnvironmentVariables"
             )
