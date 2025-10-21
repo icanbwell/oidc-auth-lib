@@ -26,3 +26,24 @@ class AbstractEnvironmentVariables(ABC):
     @abstractmethod
     def auth_providers(self) -> Optional[list[str]]:
         pass
+
+    # Added for repository_factory.py compatibility
+    @property
+    @abstractmethod
+    def mongo_uri(self) -> Optional[str]:
+        pass
+
+    @property
+    @abstractmethod
+    def mongo_db_name(self) -> Optional[str]:
+        pass
+
+    @property
+    @abstractmethod
+    def mongo_db_username(self) -> Optional[str]:
+        pass
+
+    @property
+    @abstractmethod
+    def mongo_db_password(self) -> Optional[str]:
+        pass

@@ -13,7 +13,7 @@ from oidcauthlib.auth.repository.base_repository import (
 from oidcauthlib.auth.repository.repository_factory import (
     RepositoryFactory,
 )
-from oidcauthlib.utilities.environment_variables import (
+from oidcauthlib.utilities.environment.abstract_environment_variables import (
     AbstractEnvironmentVariables,
 )
 from oidcauthlib.utilities.logger.log_levels import SRC_LOG_LEVELS

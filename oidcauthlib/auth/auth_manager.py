@@ -22,7 +22,7 @@ from oidcauthlib.auth.exceptions.authorization_needed_exception import (
     AuthorizationNeededException,
 )
 from oidcauthlib.auth.token_reader import TokenReader
-from oidcauthlib.utilities.environment_variables import (
+from oidcauthlib.utilities.environment.abstract_environment_variables import (
     AbstractEnvironmentVariables,
 )
 from oidcauthlib.utilities.logger.log_levels import SRC_LOG_LEVELS

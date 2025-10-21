@@ -18,6 +18,10 @@ authlib = ">=1.6.4"
 joserfc = ">=1.2.2"
 # pydantic is a Python library for data validation
 pydantic = ">=2.0,<3.0.0"
+# pymongo is a Python library for working with MongoDB
+pymongo = { version = ">=4.15.3", extras = ["srv"] }
+# fastapi is a Python library for building APIs
+fastapi = ">=0.115.8"
 
 [dev-packages]
 setuptools=">=60.9.3"

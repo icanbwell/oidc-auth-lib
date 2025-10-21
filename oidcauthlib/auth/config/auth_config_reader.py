@@ -1,7 +1,7 @@
 import os
 
 from oidcauthlib.auth.config.auth_config import AuthConfig
-from oidcauthlib.utilities.environment_variables import (
+from oidcauthlib.utilities.environment.abstract_environment_variables import (
     AbstractEnvironmentVariables,
 )
 
