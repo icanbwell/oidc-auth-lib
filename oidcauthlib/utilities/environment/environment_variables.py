@@ -53,37 +53,5 @@ class EnvironmentVariables(AbstractEnvironmentVariables):
         return os.environ.get("OAUTH_REFERRING_SUBJECT")
 
     @property
-    def server_base_url(self) -> Optional[str]:
-        return os.environ.get("SERVER_BASE_URL")
-
-    @property
     def auth_redirect_uri(self) -> Optional[str]:
         return os.environ.get("AUTH_REDIRECT_URI")
-
-    @property
-    def mongo_dynamic_client_registration_collection(self) -> str:
-        return os.environ.get(
-            "MONGO_DYNAMIC_CLIENT_REGISTRATION_COLLECTION", "oauth-clients"
-        )
-
-    @property
-    def mongo_oauth_transactions_collection_name(self) -> str:
-        return os.environ.get(
-            "MONGO_OAUTH_TRANSACTIONS_COLLECTION_NAME", "oauth-transactions"
-        )
-
-    @property
-    def mongo_oauth_client_codes_collection_name(self) -> str:
-        return os.environ.get(
-            "MONGO_OAUTH_CLIENT_CODES_COLLECTION_NAME", "oauth-client-codes"
-        )
-
-    @property
-    def default_model(self) -> str:
-        return os.environ.get(
-            "DEFAULT_MODEL_NAME", "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
-        )
-
-    @property
-    def model_override(self) -> Optional[str]:
-        return os.environ.get("MODEL_OVERRIDE")

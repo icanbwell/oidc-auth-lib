@@ -14,22 +14,6 @@ class AbstractEnvironmentVariables(ABC):
 
     @property
     @abstractmethod
-    def mongo_db_auth_cache_collection_name(self) -> Optional[str]:
-        pass
-
-    @property
-    @abstractmethod
-    def mongo_db_cache_disable_delete(self) -> Optional[bool]:
-        pass
-
-    @property
-    @abstractmethod
-    def auth_providers(self) -> Optional[list[str]]:
-        pass
-
-    # Added for repository_factory.py compatibility
-    @property
-    @abstractmethod
     def mongo_uri(self) -> Optional[str]:
         pass
 
@@ -46,4 +30,34 @@ class AbstractEnvironmentVariables(ABC):
     @property
     @abstractmethod
     def mongo_db_password(self) -> Optional[str]:
+        pass
+
+    @property
+    @abstractmethod
+    def mongo_db_auth_cache_collection_name(self) -> Optional[str]:
+        pass
+
+    @property
+    @abstractmethod
+    def mongo_db_cache_disable_delete(self) -> Optional[bool]:
+        pass
+
+    @property
+    @abstractmethod
+    def auth_providers(self) -> Optional[list[str]]:
+        pass
+
+    @property
+    @abstractmethod
+    def oauth_referring_email(self) -> Optional[str]:
+        pass
+
+    @property
+    @abstractmethod
+    def oauth_referring_subject(self) -> Optional[str]:
+        pass
+
+    @property
+    @abstractmethod
+    def auth_redirect_uri(self) -> Optional[str]:
         pass
