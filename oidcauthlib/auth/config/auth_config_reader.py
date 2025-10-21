@@ -1,4 +1,5 @@
 import os
+from typing import Optional
 
 from oidcauthlib.auth.config.auth_config import AuthConfig
 from oidcauthlib.utilities.environment.abstract_environment_variables import (
@@ -63,15 +64,9 @@ class AuthConfigReader:
         auth_provider = auth_provider.upper()
         # read client_id and client_secret from the environment variables
         auth_client_id: str | None = os.getenv(f"AUTH_CLIENT_ID_{auth_provider}")
-        if auth_client_id is None:
-            # This auth provider is not configured
-            return None
         auth_client_secret: str | None = os.getenv(
             f"AUTH_CLIENT_SECRET_{auth_provider}"
         )
-        if auth_client_secret is None:
-            # This auth provider is not configured
-            return None
         auth_well_known_uri: str | None = os.getenv(
             f"AUTH_WELL_KNOWN_URI_{auth_provider}"
         )
@@ -80,10 +75,6 @@ class AuthConfigReader:
                 f"AUTH_WELL_KNOWN_URI_{auth_provider} environment variable must be set"
             )
         issuer: str | None = os.getenv(f"AUTH_ISSUER_{auth_provider}")
-        if issuer is None:
-            raise ValueError(
-                f"AUTH_ISSUER_{auth_provider} environment variable must be set"
-            )
         audience: str | None = os.getenv(f"AUTH_AUDIENCE_{auth_provider}")
         if audience is None:
             raise ValueError(
@@ -98,7 +89,7 @@ class AuthConfigReader:
             well_known_uri=auth_well_known_uri,
         )
 
-    def get_issuer_for_provider(self, *, auth_provider: str) -> str:
+    def get_issuer_for_provider(self, *, auth_provider: str) -> Optional[str]:
         """
         Get the issuer for a specific auth provider.
 

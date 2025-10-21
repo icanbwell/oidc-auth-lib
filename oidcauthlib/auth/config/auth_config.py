@@ -14,7 +14,7 @@ class AuthConfig(BaseModel):
     """The name of the auth provider, typically used to identify the provider in logs and error messages."""
     audience: str
     """The audience for the auth provider, typically the API or service that the token is intended for."""
-    issuer: str
+    issuer: str | None
     """The issuer of the token, typically the URL of the auth provider."""
     client_id: str | None
     """The client ID for the auth provider, used to identify the application making the request."""
