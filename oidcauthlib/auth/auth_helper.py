@@ -38,14 +38,29 @@ class AuthHelper:
             The decoded content as a dictionary.
         """
         # Add padding if necessary
-        padding_needed = (-len(encoded_content)) % 4
-        padded_content = encoded_content + ("=" * padding_needed)
         try:
-            json_content = base64.urlsafe_b64decode(padded_content).decode("utf-8")
-            result = json.loads(json_content)
+            if not encoded_content or not isinstance(encoded_content, str):
+                logger.error("Failed to decode state: Input is empty or not a string")
+                raise ValueError("Encoded state is empty or not a string")
+            # Fix base64 padding
+            padding_needed = (4 - len(encoded_content) % 4) % 4
+            padded_content = encoded_content + ("=" * padding_needed)
+            try:
+                json_content = base64.urlsafe_b64decode(padded_content).decode("utf-8")
+            except Exception as e:
+                logger.error(f"Failed to decode state (base64 error): {e}")
+                raise ValueError("Invalid base64 encoding in state") from e
+            try:
+                result = json.loads(json_content)
+            except Exception as e:
+                logger.error(f"Failed to decode state (JSON error): {e}")
+                raise ValueError("Invalid JSON in decoded state") from e
             if not isinstance(result, dict):
+                logger.error(
+                    "Failed to decode state: Decoded state is not a dictionary"
+                )
                 raise ValueError("Decoded state is not a dictionary")
             return result
-        except Exception as e:
-            logger.error(f"Failed to decode state: {e}")
-            raise ValueError("Invalid encoded state") from e
+        except Exception:
+            # Already logged specific error above
+            raise
