@@ -1,7 +1,7 @@
 import os
 
 from oidcauthlib.auth.config.auth_config import AuthConfig
-from oidcauthlib.utilities.environment_variables import (
+from oidcauthlib.utilities.environment.abstract_environment_variables import (
     AbstractEnvironmentVariables,
 )
 
@@ -63,15 +63,9 @@ class AuthConfigReader:
         auth_provider = auth_provider.upper()
         # read client_id and client_secret from the environment variables
         auth_client_id: str | None = os.getenv(f"AUTH_CLIENT_ID_{auth_provider}")
-        if auth_client_id is None:
-            # This auth provider is not configured
-            return None
         auth_client_secret: str | None = os.getenv(
             f"AUTH_CLIENT_SECRET_{auth_provider}"
         )
-        if auth_client_secret is None:
-            # This auth provider is not configured
-            return None
         auth_well_known_uri: str | None = os.getenv(
             f"AUTH_WELL_KNOWN_URI_{auth_provider}"
         )
@@ -80,10 +74,6 @@ class AuthConfigReader:
                 f"AUTH_WELL_KNOWN_URI_{auth_provider} environment variable must be set"
             )
         issuer: str | None = os.getenv(f"AUTH_ISSUER_{auth_provider}")
-        if issuer is None:
-            raise ValueError(
-                f"AUTH_ISSUER_{auth_provider} environment variable must be set"
-            )
         audience: str | None = os.getenv(f"AUTH_AUDIENCE_{auth_provider}")
         if audience is None:
             raise ValueError(
@@ -97,23 +87,6 @@ class AuthConfigReader:
             client_secret=auth_client_secret,
             well_known_uri=auth_well_known_uri,
         )
-
-    def get_issuer_for_provider(self, *, auth_provider: str) -> str:
-        """
-        Get the issuer for a specific auth provider.
-
-        Args:
-            auth_provider (str): The auth provider for which to retrieve the issuer.
-
-        Returns:
-            str: The issuer for the specified auth provider.
-        """
-        auth_config: AuthConfig | None = self.get_config_for_auth_provider(
-            auth_provider=auth_provider
-        )
-        if auth_config is None:
-            raise ValueError(f"AuthConfig for audience {auth_provider} not found.")
-        return auth_config.issuer
 
     def get_audience_for_provider(self, *, auth_provider: str) -> str:
         """

@@ -60,6 +60,9 @@ setup(
         "authlib>=1.6.4",
         "joserfc>=1.2.2",
         "pydantic>=2.0,<3.0.0",
+        "pymongo[srv]>=4.15.3",
+        "fastapi>=0.115.8",
+        "starlette>=0.48.0",
     ],
     classifiers=[
         "Development Status :: 4 - Beta",

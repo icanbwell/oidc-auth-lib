@@ -1,5 +1,4 @@
 import uuid
-from typing import override
 
 from oidcauthlib.auth.cache.oauth_cache import OAuthCache
 
@@ -19,7 +18,6 @@ class OAuthMemoryCache(OAuthCache):
         """Initialize the AuthCache."""
         self.id_ = uuid.uuid4()
 
-    @override
     async def delete(self, key: str) -> None:
         """
         Delete a cache entry.
@@ -29,7 +27,6 @@ class OAuthMemoryCache(OAuthCache):
         if key in self._cache:
             del self._cache[key]
 
-    @override
     async def get(self, key: str, default: str | None = None) -> str | None:
         """
         Retrieve a value from the cache.
@@ -40,7 +37,6 @@ class OAuthMemoryCache(OAuthCache):
         """
         return self._cache.get(key) or default
 
-    @override
     async def set(self, key: str, value: str, expires: int | None = None) -> None:
         """
         Set a value in the cache with optional expiration.

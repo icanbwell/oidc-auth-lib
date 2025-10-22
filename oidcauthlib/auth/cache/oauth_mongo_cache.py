@@ -1,7 +1,6 @@
 import logging
 import uuid
-from datetime import datetime, UTC
-from typing import override
+from datetime import datetime, timezone
 
 from bson import ObjectId
 
@@ -13,7 +12,7 @@ from oidcauthlib.auth.repository.base_repository import (
 from oidcauthlib.auth.repository.repository_factory import (
     RepositoryFactory,
 )
-from oidcauthlib.utilities.environment_variables import (
+from oidcauthlib.utilities.environment.abstract_environment_variables import (
     AbstractEnvironmentVariables,
 )
 from oidcauthlib.utilities.logger.log_levels import SRC_LOG_LEVELS
@@ -75,7 +74,6 @@ class OAuthMongoCache(OAuthCache):
         """
         return self.id_
 
-    @override
     async def delete(self, key: str) -> None:
         """
         Delete a cache entry.
@@ -98,7 +96,7 @@ class OAuthMongoCache(OAuthCache):
             # delete the cache item if it exists
             logger.debug(f" ====== Deleting {cache_item.id} =====")
             if disable_delete:
-                cache_item.deleted = datetime.now(UTC)
+                cache_item.deleted = datetime.now(timezone.utc)
                 await self.repository.insert_or_update(
                     collection_name=self.collection_name,
                     model_class=CacheItem,
@@ -113,7 +111,6 @@ class OAuthMongoCache(OAuthCache):
                     document_id=cache_item.id,
                 )
 
-    @override
     async def get(self, key: str, default: str | None = None) -> str | None:
         """
         Retrieve a value from the cache.
@@ -135,7 +132,6 @@ class OAuthMongoCache(OAuthCache):
         )
         return cache_item.value if cache_item is not None else default
 
-    @override
     async def set(self, key: str, value: str, expires: int | None = None) -> None:
         """
         Set a value in the cache with optional expiration.
@@ -173,7 +169,9 @@ class OAuthMongoCache(OAuthCache):
             )
         else:
             logger.debug(f" ====== Creating new cache item {key}: {value} =====")
-            cache_item = CacheItem(key=key, value=value, created=datetime.now(UTC))
+            cache_item = CacheItem(
+                key=key, value=value, created=datetime.now(timezone.utc)
+            )
             new_object_id = await self.repository.insert(
                 collection_name=self.collection_name,
                 model=cache_item,
