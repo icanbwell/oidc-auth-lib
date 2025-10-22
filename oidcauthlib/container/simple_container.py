@@ -12,6 +12,13 @@ from typing import (
 class ServiceFactory[T](Protocol):
     def __call__(self, container: "SimpleContainer") -> T: ...
 
+    """
+    Factory function type for creating services
+
+    :param container: The DI container
+    :return: An instance of type T
+    """
+
 
 @runtime_checkable
 class Injectable(Protocol):
