@@ -9,6 +9,7 @@ from starlette.responses import Response, JSONResponse
 from starlette.types import ASGIApp
 
 from oidcauthlib.auth.config.auth_config_reader import AuthConfigReader
+from oidcauthlib.auth.models.token import Token
 from oidcauthlib.auth.token_reader import TokenReader
 
 logger = logging.getLogger(__name__)
@@ -61,20 +62,25 @@ class TokenReaderMiddleware(BaseHTTPMiddleware):
         if not self.require_token_patterns and not self.optional_token_patterns:
             enforce_token = path != "/health"
         else:
+            # Determine if token enforcement is needed
+            # require_token takes precedence over optional_token
+            # If require_token is True, enforce token
+            # If optional_token is True, do not enforce token
+            # If neither, enforce token only if require_token_patterns is empty
             enforce_token = require_token or (
                 not optional_token and not self.require_token_patterns
             )
         try:
             auth_header = request.headers.get("authorization")
-            token: str | None = self.token_reader.extract_token(
+            raw_token: str | None = self.token_reader.extract_token(
                 authorization_header=auth_header
             )
-            if token:
-                # Decode token (signature verification ON)
-                decoded = await self.token_reader.decode_token_async(
-                    token=token, verify_signature=True
-                )
-                request.state.token = decoded
+            if raw_token:
+                # Decode raw_token (signature verification ON)
+                decoded_token: (
+                    Token | None
+                ) = await self.token_reader.verify_token_async(token=raw_token)
+                request.state.token = decoded_token
             else:
                 request.state.token = None
                 if enforce_token:
