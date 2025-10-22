@@ -13,6 +13,7 @@ def foo_factory(container: SimpleContainer) -> Foo:
 
 def test_register_and_resolve() -> None:
     c: SimpleContainer = SimpleContainer()
+    SimpleContainer.clear_singletons()
     c.register(Foo, foo_factory)
     foo: Foo = c.resolve(Foo)
     assert isinstance(foo, Foo)
@@ -21,6 +22,7 @@ def test_register_and_resolve() -> None:
 
 def test_singleton() -> None:
     c: SimpleContainer = SimpleContainer()
+    SimpleContainer.clear_singletons()
     c.singleton(Foo, foo_factory)
     foo1: Foo = c.resolve(Foo)
     foo2: Foo = c.resolve(Foo)
@@ -29,6 +31,7 @@ def test_singleton() -> None:
 
 def test_transient() -> None:
     c: SimpleContainer = SimpleContainer()
+    SimpleContainer.clear_singletons()
     c.transient(Foo, foo_factory)
     foo1: Foo = c.resolve(Foo)
     foo2: Foo = c.resolve(Foo)
@@ -38,5 +41,6 @@ def test_transient() -> None:
 
 def test_service_not_found() -> None:
     c: SimpleContainer = SimpleContainer()
+    SimpleContainer.clear_singletons()
     with pytest.raises(ServiceNotFoundError):
         c.resolve(Foo)

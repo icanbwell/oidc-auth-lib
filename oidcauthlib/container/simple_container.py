@@ -103,3 +103,8 @@ class SimpleContainer:
 
         self.register(service_type, create_new)
         return self
+
+    @classmethod
+    def clear_singletons(cls) -> None:
+        """Clear all singleton instances from the container"""
+        SimpleContainer._singletons.clear()
