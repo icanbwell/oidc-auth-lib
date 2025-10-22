@@ -1,19 +1,16 @@
 from typing import (
     Any,
-    Callable,
     Dict,
     Protocol,
-    TypeVar,
-    TypeAlias,
     runtime_checkable,
     cast,
 )
 
-T = TypeVar("T")
-S = TypeVar("S")
 
 # Type definitions
-ServiceFactory: TypeAlias = Callable[["SimpleContainer"], T]
+@runtime_checkable
+class ServiceFactory[T](Protocol):
+    def __call__(self, container: "SimpleContainer") -> T: ...
 
 
 @runtime_checkable
@@ -39,7 +36,7 @@ class SimpleContainer:
         self._factories: Dict[type[Any], ServiceFactory[Any]] = {}
         self._singleton_types: set[type[Any]] = set()
 
-    def register(
+    def register[T](
         self, service_type: type[T], factory: ServiceFactory[T]
     ) -> "SimpleContainer":
         """
@@ -55,7 +52,7 @@ class SimpleContainer:
         self._factories[service_type] = factory
         return self
 
-    def resolve(self, service_type: type[T]) -> T:
+    def resolve[T](self, service_type: type[T]) -> T:
         """
         Resolve a service instance
 
@@ -81,7 +78,7 @@ class SimpleContainer:
 
         return service
 
-    def singleton(
+    def singleton[T](
         self, service_type: type[T], factory: ServiceFactory[T]
     ) -> "SimpleContainer":
         """Register a singleton instance"""
@@ -89,7 +86,7 @@ class SimpleContainer:
         self._singleton_types.add(service_type)
         return self
 
-    def transient(
+    def transient[T](
         self, service_type: type[T], factory: ServiceFactory[T]
     ) -> "SimpleContainer":
         """Register a transient service"""
