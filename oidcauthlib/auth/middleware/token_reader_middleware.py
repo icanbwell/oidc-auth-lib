@@ -80,6 +80,10 @@ class TokenReaderMiddleware(BaseHTTPMiddleware):
                 decoded_token: (
                     Token | None
                 ) = await self.token_reader.verify_token_async(token=raw_token)
+                if decoded_token is None and enforce_token:
+                    return JSONResponse(
+                        {"detail": "Invalid authorization token"}, status_code=401
+                    )
                 request.state.token = decoded_token
             else:
                 request.state.token = None
