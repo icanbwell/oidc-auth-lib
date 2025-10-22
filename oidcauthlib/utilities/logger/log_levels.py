@@ -3,7 +3,7 @@ import os
 import sys
 
 GLOBAL_LOG_LEVEL = os.environ.get("LOG_LEVEL", "").upper()
-if GLOBAL_LOG_LEVEL in logging.getLevelNamesMapping():
+if GLOBAL_LOG_LEVEL in logging._nameToLevel:
     logging.basicConfig(
         stream=sys.stdout,
         level=GLOBAL_LOG_LEVEL,
