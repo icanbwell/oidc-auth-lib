@@ -59,7 +59,7 @@ setup(
         "httpx>=0.27.2",
         "authlib>=1.6.4",
         "joserfc>=1.2.2",
-        "pydantic>=2.0,<3.0.0",
+        "pydantic<3.0.0,>=2.0",
         "pymongo[srv]>=4.15.3",
         "fastapi>=0.115.8",
         "starlette>=0.48.0",
