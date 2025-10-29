@@ -117,9 +117,17 @@ class TokenReader:
                     response.raise_for_status()
                     jwks_data: Dict[str, Any] = response.json()
                     for key in jwks_data.get("keys", []):
+                        kid = key.get("kid")
                         # if there is no matching "kid" in keys then add it
-                        if not any([k.get("kid") == key.get("kid") for k in keys]):
+                        if not any([k.get("kid") == kid for k in keys]):
                             keys.append(key)
+                        else:
+                            # Log warning if duplicate kid is found
+                            logger.warning(
+                                f"Duplicate key ID '{kid}' found when fetching JWKS from {jwks_uri}. "
+                                f"This may indicate overlapping keys from different providers. "
+                                f"Skipping duplicate key from {auth_config.auth_provider}."
+                            )
 
                     logger.info(
                         f"Successfully fetched JWKS from {jwks_uri}, keys= {len(keys)}"
@@ -230,6 +238,35 @@ class TokenReader:
                 "client_id"
             )  # AWS Cognito does not have aud claim but has client_id
 
+            # Validate that the token's issuer and/or audience match at least one configured auth provider
+            # This prevents tokens from one provider being accepted when intended for another
+            token_matches_config = False
+            for auth_config in self.auth_configs:
+                # Check if either issuer or audience matches
+                # Some providers may not have issuer configured, so we check both
+                issuer_matches = (
+                    auth_config.issuer is not None and issuer == auth_config.issuer
+                )
+                audience_matches = audience == auth_config.audience
+                
+                if issuer_matches or audience_matches:
+                    token_matches_config = True
+                    logger.debug(
+                        f"Token matched auth config: provider={auth_config.auth_provider}, "
+                        f"issuer_matches={issuer_matches}, audience_matches={audience_matches}"
+                    )
+                    break
+            
+            if not token_matches_config:
+                logger.warning(
+                    f"Token validation failed: issuer '{issuer}' and audience '{audience}' "
+                    f"do not match any configured auth provider"
+                )
+                raise AuthorizationBearerTokenInvalidException(
+                    message=f"Token issuer '{issuer}' and audience '{audience}' do not match any configured auth provider",
+                    token=token,
+                )
+
             exp = verified.claims.get("exp")
             now = time.time()
             # convert exp and now to ET (America/New_York) for logging
@@ -275,6 +312,9 @@ class TokenReader:
                 issuer=issuer,
                 audience=audience,
             ) from e
+        except AuthorizationBearerTokenInvalidException:
+            # Re-raise our custom validation exceptions without wrapping them
+            raise
         except Exception as e:
             raise AuthorizationBearerTokenInvalidException(
                 message=f"Invalid token provided. Exp: {exp_str}, Now: {now_str}. Please check the token:\n{token}.",
