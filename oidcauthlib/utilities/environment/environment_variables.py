@@ -42,7 +42,7 @@ class EnvironmentVariables(AbstractEnvironmentVariables):
     @property
     def auth_providers(self) -> Optional[list[str]]:
         auth_providers: str | None = os.environ.get("AUTH_PROVIDERS")
-        return auth_providers.split(",") if auth_providers else None
+        return [p.strip() for p in auth_providers.split(",")] if auth_providers else None
 
     @property
     def oauth_referring_email(self) -> Optional[str]:
