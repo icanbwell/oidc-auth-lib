@@ -122,7 +122,7 @@ class TokenReader:
                         if not any([k.get("kid") == kid for k in keys]):
                             keys.append(key)
                         else:
-                            # Log warning if duplicate kid is found
+                            # Log warning if a duplicate kid is found
                             logger.warning(
                                 f"Duplicate key ID '{kid}' found when fetching JWKS from {jwks_uri}. "
                                 f"This may indicate overlapping keys from different providers. "
@@ -238,24 +238,41 @@ class TokenReader:
                 "client_id"
             )  # AWS Cognito does not have aud claim but has client_id
 
-            # Validate that the token's issuer and/or audience match at least one configured auth provider
-            # This prevents tokens from one provider being accepted when intended for another
+            # Require audience to be present (either 'aud' or 'client_id')
+            if audience is None:
+                raise AuthorizationBearerTokenInvalidException(
+                    message="Token is missing 'aud' and 'client_id' claims",
+                    token=token,
+                )
+
+            # Validate that the token matches a configured provider securely.
+            # Require audience to match; if an issuer is configured for that provider, require the issuer to match as well.
             token_matches_config = False
             for auth_config in self.auth_configs:
-                # Check if either issuer or audience matches
-                # Some providers may not have issuer configured, so we check both
-                issuer_matches = (
-                    auth_config.issuer is not None and issuer == auth_config.issuer
-                )
                 audience_matches = audience == auth_config.audience
+                if not audience_matches:
+                    continue
 
-                if issuer_matches or audience_matches:
-                    token_matches_config = True
-                    logger.debug(
-                        f"Token matched auth config: provider={auth_config.auth_provider}, "
-                        f"issuer_matches={issuer_matches}, audience_matches={audience_matches}"
-                    )
-                    break
+                # Check if both issuer and audience match this provider's configuration
+                if auth_config.issuer is not None:
+                    if issuer == auth_config.issuer:
+                        token_matches_config = True
+                        logger.debug(
+                            f"Token matched auth config: provider={auth_config.auth_provider}, "
+                            f"issuer_matches=True, audience_matches=True"
+                        )
+                        break
+                    else:
+                        # audience matched, but issuer did not; try the next provider
+                        continue
+
+                # No issuer configured for this provider; audience match is sufficient
+                token_matches_config = True
+                logger.debug(
+                    f"Token matched auth config: provider={auth_config.auth_provider}, "
+                    f"issuer_matches=False (not configured), audience_matches=True"
+                )
+                break
 
             if not token_matches_config:
                 logger.warning(
