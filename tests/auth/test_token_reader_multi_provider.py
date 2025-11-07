@@ -3,9 +3,10 @@ Tests for TokenReader with multiple OAuth providers.
 Specifically tests the fix for the enumeration bug where tokens from one provider
 could be incorrectly validated when multiple providers are configured.
 """
+
 import pytest
 from unittest.mock import patch, MagicMock
-from typing import List
+from typing import List, Any
 from joserfc.jwk import KeySet
 from oidcauthlib.auth.token_reader import TokenReader
 from oidcauthlib.auth.config.auth_config import AuthConfig
@@ -69,8 +70,9 @@ class MockEnvironmentVariables(AbstractEnvironmentVariables):
         return None
 
 
-def mock_fetch_jwks_for_token_reader(token_reader: TokenReader):
+def mock_fetch_jwks_for_token_reader(token_reader: TokenReader) -> Any:
     """Helper to mock JWKS fetching for a token reader"""
+
     async def mock_fetch_jwks() -> None:
         # Create a mock KeySet that evaluates as truthy
         mock_keyset = MagicMock(spec=KeySet)
@@ -126,9 +128,12 @@ async def test_token_validation_rejects_wrong_issuer_and_audience() -> None:
         mock_fetch = mock_fetch_jwks_for_token_reader(token_reader)
 
         # Mock jwt.decode to return claims with wrong issuer and audience
-        with patch.object(
-            token_reader, "fetch_well_known_config_and_jwks_async", mock_fetch
-        ), patch("oidcauthlib.auth.token_reader.jwt.decode") as mock_decode:
+        with (
+            patch.object(
+                token_reader, "fetch_well_known_config_and_jwks_async", mock_fetch
+            ),
+            patch("oidcauthlib.auth.token_reader.jwt.decode") as mock_decode,
+        ):
             mock_verified = MagicMock()
             mock_verified.claims = {
                 "iss": "https://wrong-issuer.example.com",  # Wrong issuer
@@ -144,5 +149,3 @@ async def test_token_validation_rejects_wrong_issuer_and_audience() -> None:
 
             # Check error message mentions issuer/audience mismatch
             assert "do not match any configured auth provider" in str(exc_info.value)
-
-

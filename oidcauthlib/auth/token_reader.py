@@ -248,7 +248,7 @@ class TokenReader:
                     auth_config.issuer is not None and issuer == auth_config.issuer
                 )
                 audience_matches = audience == auth_config.audience
-                
+
                 if issuer_matches or audience_matches:
                     token_matches_config = True
                     logger.debug(
@@ -256,7 +256,7 @@ class TokenReader:
                         f"issuer_matches={issuer_matches}, audience_matches={audience_matches}"
                     )
                     break
-            
+
             if not token_matches_config:
                 logger.warning(
                     f"Token validation failed: issuer '{issuer}' and audience '{audience}' "
