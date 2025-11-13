@@ -5,20 +5,24 @@ from typing import (
     Protocol,
     runtime_checkable,
     cast,
+    Generic,
+    TypeVar,
 )
 
+# Type variable must be defined before use
+T = TypeVar("T")
 
 # Type definitions
 @runtime_checkable
-class ServiceFactory[T](Protocol):
-    def __call__(self, container: "SimpleContainer") -> T: ...
-
+class ServiceFactory(Protocol, Generic[T]):
     """
     Factory function type for creating services
 
     :param container: The DI container
     :return: An instance of type T
     """
+
+    def __call__(self, container: "SimpleContainer") -> T: ...
 
 
 @runtime_checkable

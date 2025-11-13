@@ -81,9 +81,10 @@ repos:
       - id: mypy
         args:
           - --strict
+          - --python-version=3.12
+          - --enable-incomplete-feature=NewGenericSyntax
           - --install-types
           - --non-interactive
-          - --python-version=3.12
           - --show-error-codes
         additional_dependencies:
           # Install the package itself
