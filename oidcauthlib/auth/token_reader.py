@@ -1,3 +1,4 @@
+import asyncio
 import datetime
 import json
 import logging
@@ -73,81 +74,98 @@ class TokenReader:
             Dict[str, Any]
         ] = []  # will load asynchronously later
         self.jwks: KeySet = KeySet(keys=[])  # Will be set by async fetch
+        # Cache for well-known configs keyed by URI to prevent repeated fetches
+        self.cached_well_known_configs: Dict[str, Dict[str, Any]] = {}
+
+        # Locks for preventing race conditions in concurrent environments
+        self._jwks_lock: asyncio.Lock = asyncio.Lock()  # Protects JWKS initialization
+        self._well_known_locks: Dict[str, asyncio.Lock] = {}  # Per-URI locks for discovery document fetching
+        self._well_known_locks_lock: asyncio.Lock = asyncio.Lock()  # Protects _well_known_locks dict access
 
     async def fetch_well_known_config_and_jwks_async(self) -> None:
         """
         Fetches the JWKS from the provided URI or from the well-known OpenID Connect configuration.
         This method will fetch the JWKS and store it in the `self.jwks` attribute for later use.
 
+        Uses a lock to prevent race conditions when multiple concurrent requests attempt to
+        initialize JWKS simultaneously.
         """
+        # Fast path: check without lock to avoid contention
         if len(self.jwks.keys) > 0:
             return  # If JWKS is already fetched, skip fetching again
 
-        logger.debug(f"Fetching well-known configurations and JWKS for id {self.uuid}.")
+        # Acquire lock to ensure only one coroutine performs initialization
+        async with self._jwks_lock:
+            # Double-check: another coroutine may have initialized while we waited for the lock
+            if len(self.jwks.keys) > 0:
+                logger.debug(f"JWKS already initialized by another coroutine for id {self.uuid}.")
+                return
 
-        self.well_known_configs = []  # Reset well-known configs before fetching
+            logger.debug(f"Fetching well-known configurations and JWKS for id {self.uuid}.")
 
-        keys: List[Dict[str, Any]] = []
-        for auth_config in [c for c in self.auth_configs if c.well_known_uri]:
-            if not auth_config.well_known_uri:
-                logger.warning(
-                    f"AuthConfig {auth_config} does not have a well-known URI, skipping JWKS fetch."
+            self.well_known_configs = []  # Reset well-known configs before fetching
+
+            keys: List[Dict[str, Any]] = []
+            for auth_config in [c for c in self.auth_configs if c.well_known_uri]:
+                if not auth_config.well_known_uri:
+                    logger.warning(
+                        f"AuthConfig {auth_config} does not have a well-known URI, skipping JWKS fetch."
+                    )
+                    continue
+
+                well_known_config: Dict[
+                    str, Any
+                ] = await self.fetch_well_known_config_async(
+                    well_known_uri=auth_config.well_known_uri
                 )
-                continue
 
-            well_known_config: Dict[
-                str, Any
-            ] = await self.fetch_well_known_config_async(
-                well_known_uri=auth_config.well_known_uri
-            )
-
-            jwks_uri = await self.get_jwks_uri_async(
-                well_known_config=well_known_config
-            )
-            if not jwks_uri:
-                logger.warning(
-                    f"AuthConfig {auth_config} does not have a JWKS URI, skipping JWKS fetch."
+                jwks_uri = await self.get_jwks_uri_async(
+                    well_known_config=well_known_config
                 )
-                continue
-
-            async with httpx.AsyncClient() as client:
-                try:
-                    logger.info(f"Fetching JWKS from {jwks_uri}")
-                    response = await client.get(jwks_uri)
-                    response.raise_for_status()
-                    jwks_data: Dict[str, Any] = response.json()
-                    for key in jwks_data.get("keys", []):
-                        kid = key.get("kid")
-                        # if there is no matching "kid" in keys then add it
-                        if not any([k.get("kid") == kid for k in keys]):
-                            keys.append(key)
-                        else:
-                            # Log warning if a duplicate kid is found
-                            logger.warning(
-                                f"Duplicate key ID '{kid}' found when fetching JWKS from {jwks_uri}. "
-                                f"This may indicate overlapping keys from different providers. "
-                                f"Skipping duplicate key from {auth_config.auth_provider}."
-                            )
-
-                    logger.info(
-                        f"Successfully fetched JWKS from {jwks_uri}, keys= {len(keys)}"
+                if not jwks_uri:
+                    logger.warning(
+                        f"AuthConfig {auth_config} does not have a JWKS URI, skipping JWKS fetch."
                     )
-                except httpx.HTTPStatusError as e:
-                    logger.exception(e)
-                    raise ValueError(
-                        f"Failed to fetch JWKS from {jwks_uri} with status {e.response.status_code} : {e}"
-                    )
-                except ConnectError as e:
-                    raise ConnectionError(
-                        f"Failed to connect to JWKS URI: {jwks_uri}: {e}"
-                    )
+                    continue
 
-        self.jwks = KeySet.import_key_set(
-            {
-                "keys": keys,
-            }
-        )
-        logger.debug(f"Fetched JWKS with {len(self.jwks.keys)} keys.")
+                async with httpx.AsyncClient() as client:
+                    try:
+                        logger.info(f"Fetching JWKS from {jwks_uri}")
+                        response = await client.get(jwks_uri)
+                        response.raise_for_status()
+                        jwks_data: Dict[str, Any] = response.json()
+                        for key in jwks_data.get("keys", []):
+                            kid = key.get("kid")
+                            # if there is no matching "kid" in keys then add it
+                            if not any([k.get("kid") == kid for k in keys]):
+                                keys.append(key)
+                            else:
+                                # Log warning if a duplicate kid is found
+                                logger.warning(
+                                    f"Duplicate key ID '{kid}' found when fetching JWKS from {jwks_uri}. "
+                                    f"This may indicate overlapping keys from different providers. "
+                                    f"Skipping duplicate key from {auth_config.auth_provider}."
+                                )
+
+                        logger.info(
+                            f"Successfully fetched JWKS from {jwks_uri}, keys= {len(keys)}"
+                        )
+                    except httpx.HTTPStatusError as e:
+                        logger.exception(e)
+                        raise ValueError(
+                            f"Failed to fetch JWKS from {jwks_uri} with status {e.response.status_code} : {e}"
+                        )
+                    except ConnectError as e:
+                        raise ConnectionError(
+                            f"Failed to connect to JWKS URI: {jwks_uri}: {e}"
+                        )
+
+            self.jwks = KeySet.import_key_set(
+                {
+                    "keys": keys,
+                }
+            )
+            logger.debug(f"Fetched JWKS with {len(self.jwks.keys)} keys.")
 
     @staticmethod
     def extract_token(*, authorization_header: str | None) -> Optional[str]:
@@ -338,12 +356,17 @@ class TokenReader:
                 token=token,
             ) from e
 
-    # noinspection PyMethodMayBeStatic
     async def fetch_well_known_config_async(
         self, *, well_known_uri: str
     ) -> Dict[str, Any]:
         """
         Fetches the OpenID Connect discovery document and returns its contents as a dict.
+        Uses instance-level caching to prevent repeated fetches for the same URI.
+
+        This method uses per-URI locking to prevent race conditions when multiple concurrent
+        requests attempt to fetch the same discovery document simultaneously. Only one coroutine
+        will perform the HTTP fetch per URI, while others wait for the result.
+
         Returns:
             dict: The parsed discovery document.
         Raises:
@@ -351,20 +374,47 @@ class TokenReader:
         """
         if not well_known_uri:
             raise ValueError("well_known_uri is not set")
-        async with httpx.AsyncClient() as client:
-            try:
-                logger.info(f"Fetching OIDC discovery document from {well_known_uri}")
-                response = await client.get(well_known_uri)
-                response.raise_for_status()
-                return cast(Dict[str, Any], response.json())
-            except httpx.HTTPStatusError as e:
-                raise ValueError(
-                    f"Failed to fetch OIDC discovery document from {well_known_uri} with status {e.response.status_code} : {e}"
-                )
-            except ConnectError as e:
-                raise ConnectionError(
-                    f"Failed to connect to OIDC discovery document: {well_known_uri}: {e}"
-                )
+
+        # Fast path: check cache without lock to avoid contention on cache hits
+        if well_known_uri in self.cached_well_known_configs:
+            logger.info(f"✓ Using cached OIDC discovery document for {well_known_uri}")
+            return self.cached_well_known_configs[well_known_uri]
+
+        # Get or create a lock for this specific URI
+        # This lock creation needs to be protected to avoid race conditions
+        async with self._well_known_locks_lock:
+            if well_known_uri not in self._well_known_locks:
+                self._well_known_locks[well_known_uri] = asyncio.Lock()
+            uri_lock = self._well_known_locks[well_known_uri]
+
+        # Acquire the URI-specific lock to ensure only one coroutine fetches this URI
+        async with uri_lock:
+            # Double-check: another coroutine may have fetched while we waited for the lock
+            if well_known_uri in self.cached_well_known_configs:
+                logger.info(f"✓ Using cached OIDC discovery document (fetched by another coroutine) for {well_known_uri}")
+                return self.cached_well_known_configs[well_known_uri]
+
+            logger.info(f"Cache miss for {well_known_uri}. Cache has {len(self.cached_well_known_configs)} entries.")
+
+            # Cache miss - fetch from remote (only one coroutine reaches here per URI)
+            async with httpx.AsyncClient() as client:
+                try:
+                    logger.info(f"Fetching OIDC discovery document from {well_known_uri}")
+                    response = await client.get(well_known_uri)
+                    response.raise_for_status()
+                    config = cast(Dict[str, Any], response.json())
+                    # Store in cache for future use
+                    self.cached_well_known_configs[well_known_uri] = config
+                    logger.info(f"Cached OIDC discovery document for {well_known_uri}")
+                    return config
+                except httpx.HTTPStatusError as e:
+                    raise ValueError(
+                        f"Failed to fetch OIDC discovery document from {well_known_uri} with status {e.response.status_code} : {e}"
+                    )
+                except ConnectError as e:
+                    raise ConnectionError(
+                        f"Failed to connect to OIDC discovery document: {well_known_uri}: {e}"
+                    )
 
     # noinspection PyMethodMayBeStatic
     async def get_jwks_uri_async(

@@ -1,28 +1,12 @@
-from typing import (
-    Any,
-    Dict,
-    Protocol,
-    runtime_checkable,
-    cast,
-)
+import threading
+from typing import Any, Dict, Callable, cast, TypeVar
 
+# Type variable must be defined before use
+T = TypeVar("T")
 
-# Type definitions
-@runtime_checkable
-class ServiceFactory[T](Protocol):
-    def __call__(self, container: "SimpleContainer") -> T: ...
-
-    """
-    Factory function type for creating services
-
-    :param container: The DI container
-    :return: An instance of type T
-    """
-
-
-@runtime_checkable
-class Injectable(Protocol):
-    """Marker protocol for injectable services"""
+# Factory function type for creating services
+# A callable that takes a SimpleContainer and returns an instance of type T
+ServiceFactory = Callable[["SimpleContainer"], T]
 
 
 class ContainerError(Exception):
@@ -37,6 +21,7 @@ class SimpleContainer:
     """Generic IoC Container"""
 
     _singletons: Dict[type[Any], Any] = {}  # Shared across all instances
+    _singleton_lock: threading.Lock = threading.Lock()  # Protects singleton instantiation
 
     def __init__(self) -> None:
         # Remove instance-level _singletons
@@ -63,27 +48,39 @@ class SimpleContainer:
         """
         Resolve a service instance
 
+        Uses double-checked locking pattern for singleton instantiation to prevent
+        race conditions in multi-threaded/concurrent environments.
+
         Args:
             service_type: The type of service to resolve
 
         Returns:
             An instance of the requested service
         """
-        # Check if it's a singleton and already instantiated
+        # Fast path: check if it's a singleton and already instantiated (without lock)
         if service_type in SimpleContainer._singletons:
             return cast(T, SimpleContainer._singletons[service_type])
 
         if service_type not in self._factories:
             raise ServiceNotFoundError(f"No factory registered for {service_type}")
 
-        factory = self._factories[service_type]
-        service: T = factory(self)
-
-        # If it's a singleton type, cache the instance
+        # Check if this is a singleton type
         if service_type in self._singleton_types:
-            SimpleContainer._singletons[service_type] = service
+            # Acquire lock for singleton instantiation
+            with SimpleContainer._singleton_lock:
+                # Double-check: another thread may have instantiated while we waited for the lock
+                if service_type in SimpleContainer._singletons:
+                    return cast(T, SimpleContainer._singletons[service_type])
 
-        return service
+                # Create and cache the singleton instance
+                factory = self._factories[service_type]
+                service: T = factory(self)
+                SimpleContainer._singletons[service_type] = service
+                return service
+        else:
+            # Transient service: create new instance without locking
+            factory = self._factories[service_type]
+            return cast(T, factory(self))
 
     def singleton[T](
         self, service_type: type[T], factory: ServiceFactory[T]
