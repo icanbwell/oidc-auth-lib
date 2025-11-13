@@ -1,33 +1,12 @@
 import threading
-from typing import (
-    Any,
-    Dict,
-    Protocol,
-    runtime_checkable,
-    cast,
-    Generic,
-    TypeVar,
-)
+from typing import Any, Dict, Callable, cast, TypeVar
 
 # Type variable must be defined before use
 T = TypeVar("T")
 
-# Type definitions
-@runtime_checkable
-class ServiceFactory(Protocol, Generic[T]):
-    """
-    Factory function type for creating services
-
-    :param container: The DI container
-    :return: An instance of type T
-    """
-
-    def __call__(self, container: "SimpleContainer") -> T: ...
-
-
-@runtime_checkable
-class Injectable(Protocol):
-    """Marker protocol for injectable services"""
+# Factory function type for creating services
+# A callable that takes a SimpleContainer and returns an instance of type T
+ServiceFactory = Callable[["SimpleContainer"], T]
 
 
 class ContainerError(Exception):
