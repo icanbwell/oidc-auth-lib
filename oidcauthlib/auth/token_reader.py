@@ -117,9 +117,17 @@ class TokenReader:
                     response.raise_for_status()
                     jwks_data: Dict[str, Any] = response.json()
                     for key in jwks_data.get("keys", []):
+                        kid = key.get("kid")
                         # if there is no matching "kid" in keys then add it
-                        if not any([k.get("kid") == key.get("kid") for k in keys]):
+                        if not any([k.get("kid") == kid for k in keys]):
                             keys.append(key)
+                        else:
+                            # Log warning if a duplicate kid is found
+                            logger.warning(
+                                f"Duplicate key ID '{kid}' found when fetching JWKS from {jwks_uri}. "
+                                f"This may indicate overlapping keys from different providers. "
+                                f"Skipping duplicate key from {auth_config.auth_provider}."
+                            )
 
                     logger.info(
                         f"Successfully fetched JWKS from {jwks_uri}, keys= {len(keys)}"
@@ -230,6 +238,52 @@ class TokenReader:
                 "client_id"
             )  # AWS Cognito does not have aud claim but has client_id
 
+            # Require audience to be present (either 'aud' or 'client_id')
+            if audience is None:
+                raise AuthorizationBearerTokenInvalidException(
+                    message="Token is missing 'aud' and 'client_id' claims",
+                    token=token,
+                )
+
+            # Validate that the token matches a configured provider securely.
+            # Require audience to match; if an issuer is configured for that provider, require the issuer to match as well.
+            token_matches_config = False
+            for auth_config in self.auth_configs:
+                audience_matches = audience == auth_config.audience
+                if not audience_matches:
+                    continue
+
+                # Check if both issuer and audience match this provider's configuration
+                if auth_config.issuer is not None:
+                    if issuer == auth_config.issuer:
+                        token_matches_config = True
+                        logger.debug(
+                            f"Token matched auth config: provider={auth_config.auth_provider}, "
+                            f"issuer_matches=True, audience_matches=True"
+                        )
+                        break
+                    else:
+                        # audience matched, but issuer did not; try the next provider
+                        continue
+
+                # No issuer configured for this provider; audience match is sufficient
+                token_matches_config = True
+                logger.debug(
+                    f"Token matched auth config: provider={auth_config.auth_provider}, "
+                    f"issuer_matches=False (not configured), audience_matches=True"
+                )
+                break
+
+            if not token_matches_config:
+                logger.warning(
+                    f"Token validation failed: issuer '{issuer}' and audience '{audience}' "
+                    f"do not match any configured auth provider"
+                )
+                raise AuthorizationBearerTokenInvalidException(
+                    message=f"Token issuer '{issuer}' and audience '{audience}' do not match any configured auth provider",
+                    token=token,
+                )
+
             exp = verified.claims.get("exp")
             now = time.time()
             # convert exp and now to ET (America/New_York) for logging
@@ -275,6 +329,9 @@ class TokenReader:
                 issuer=issuer,
                 audience=audience,
             ) from e
+        except AuthorizationBearerTokenInvalidException:
+            # Re-raise our custom validation exceptions without wrapping them
+            raise
         except Exception as e:
             raise AuthorizationBearerTokenInvalidException(
                 message=f"Invalid token provided. Exp: {exp_str}, Now: {now_str}. Please check the token:\n{token}.",
