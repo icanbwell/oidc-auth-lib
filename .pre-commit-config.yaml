@@ -50,19 +50,6 @@ repos:
         args: [ format ]
         require_serial: true
 
-      # MyPy for type checking
-      - id: mypy
-        name: mypy
-        language: system
-        types: [ python ]
-        entry: mypy
-        require_serial: true
-        args: [
-          --strict,
-          --python-version=3.12,
-          --show-error-codes,
-        ]
-
       # Bandit for security scanning
       - id: bandit
         name: bandit
@@ -87,6 +74,34 @@ repos:
       - id: python-check-mock-methods
       - id: python-no-eval
       - id: python-no-log-warn
+
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.11.2
+    hooks:
+      - id: mypy
+        args:
+          - --strict
+          - --install-types
+          - --non-interactive
+          - --python-version=3.12
+          - --show-error-codes
+        additional_dependencies:
+          # Install the package itself
+          - .
+          # Runtime dependencies from setup.py
+          - pydantic>=2.0,<3.0.0
+          - httpx>=0.27.2
+          - fastapi>=0.115.8
+          - starlette>=0.48.0
+          - pymongo[srv]>=4.15.3
+          - joserfc>=1.2.2
+          - authlib>=1.6.4
+          # Test dependencies
+          - pytest
+          # type stubs for untyped libraries
+          - types-Authlib
+          - types-requests
+          - types-urllib3
 
   # Optional: Secret scanning
   - repo: https://github.com/Yelp/detect-secrets
