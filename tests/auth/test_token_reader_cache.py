@@ -6,7 +6,7 @@ to prevent repeated HTTP requests to the identity provider.
 
 import pytest
 from unittest.mock import patch, AsyncMock, MagicMock
-from typing import List, Dict, Any
+from typing import List
 from oidcauthlib.auth.token_reader import TokenReader
 from oidcauthlib.auth.config.auth_config import AuthConfig
 from oidcauthlib.auth.config.auth_config_reader import AuthConfigReader
