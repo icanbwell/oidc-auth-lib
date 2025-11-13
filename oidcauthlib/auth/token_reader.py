@@ -349,7 +349,8 @@ class TokenReader:
         Returns:
             dict: The parsed discovery document.
         Raises:
-            ValueError: If the document cannot be fetched or parsed.
+            ValueError: If the document cannot be fetched, parsed, or if well_known_uri is not set.
+            ConnectionError: If the connection to the OIDC discovery endpoint fails.
         """
         if not well_known_uri:
             raise ValueError("well_known_uri is not set")
