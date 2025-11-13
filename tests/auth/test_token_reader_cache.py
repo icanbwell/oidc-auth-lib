@@ -12,9 +12,6 @@ from unittest.mock import patch, AsyncMock, MagicMock
 from oidcauthlib.auth.token_reader import TokenReader
 from oidcauthlib.auth.config.auth_config import AuthConfig
 from oidcauthlib.auth.config.auth_config_reader import AuthConfigReader
-from oidcauthlib.utilities.environment.abstract_environment_variables import (
-    AbstractEnvironmentVariables,
-)
 
 # Import the shared mock from the fixture/conftest
 from tests.auth.conftest import MockEnvironmentVariables
