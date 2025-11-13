@@ -1,3 +1,4 @@
+import asyncio
 import datetime
 import json
 import logging
@@ -75,6 +76,9 @@ class TokenReader:
         self.jwks: KeySet = KeySet(keys=[])  # Will be set by async fetch
         # Cache for well-known configs keyed by URI to prevent repeated fetches
         self.cached_well_known_configs: Dict[str, Dict[str, Any]] = {}
+        # Locks to prevent race conditions when fetching well-known configs
+        self._cache_locks: Dict[str, asyncio.Lock] = {}
+        self._cache_locks_lock: asyncio.Lock = asyncio.Lock()
 
     async def fetch_well_known_config_and_jwks_async(self) -> None:
         """
@@ -346,6 +350,7 @@ class TokenReader:
         """
         Fetches the OpenID Connect discovery document and returns its contents as a dict.
         Uses instance-level caching to prevent repeated fetches for the same URI.
+        Thread-safe for concurrent access via asyncio locks.
         Returns:
             dict: The parsed discovery document.
         Raises:
@@ -354,32 +359,40 @@ class TokenReader:
         if not well_known_uri:
             raise ValueError("well_known_uri is not set")
 
-        # Check cache first
-        if well_known_uri in self.cached_well_known_configs:
-            logger.info(f"✓ Using cached OIDC discovery document for {well_known_uri}")
-            return self.cached_well_known_configs[well_known_uri]
+        # Get or create a lock for this specific URI
+        async with self._cache_locks_lock:
+            if well_known_uri not in self._cache_locks:
+                self._cache_locks[well_known_uri] = asyncio.Lock()
+            uri_lock = self._cache_locks[well_known_uri]
 
-        logger.info(f"Cache miss for {well_known_uri}. Cache has {len(self.cached_well_known_configs)} entries.")
+        # Use the URI-specific lock to prevent concurrent fetches
+        async with uri_lock:
+            # Check cache again inside the lock (double-checked locking pattern)
+            if well_known_uri in self.cached_well_known_configs:
+                logger.info(f"✓ Using cached OIDC discovery document for {well_known_uri}")
+                return self.cached_well_known_configs[well_known_uri]
 
-        # Cache miss - fetch from remote
-        async with httpx.AsyncClient() as client:
-            try:
-                logger.info(f"Fetching OIDC discovery document from {well_known_uri}")
-                response = await client.get(well_known_uri)
-                response.raise_for_status()
-                config = cast(Dict[str, Any], response.json())
-                # Store in cache for future use
-                self.cached_well_known_configs[well_known_uri] = config
-                logger.info(f"Cached OIDC discovery document for {well_known_uri}")
-                return config
-            except httpx.HTTPStatusError as e:
-                raise ValueError(
-                    f"Failed to fetch OIDC discovery document from {well_known_uri} with status {e.response.status_code} : {e}"
-                )
-            except ConnectError as e:
-                raise ConnectionError(
-                    f"Failed to connect to OIDC discovery document: {well_known_uri}: {e}"
-                )
+            logger.info(f"Cache miss for {well_known_uri}. Cache has {len(self.cached_well_known_configs)} entries.")
+
+            # Cache miss - fetch from remote
+            async with httpx.AsyncClient() as client:
+                try:
+                    logger.info(f"Fetching OIDC discovery document from {well_known_uri}")
+                    response = await client.get(well_known_uri)
+                    response.raise_for_status()
+                    config = cast(Dict[str, Any], response.json())
+                    # Store in cache for future use
+                    self.cached_well_known_configs[well_known_uri] = config
+                    logger.info(f"Cached OIDC discovery document for {well_known_uri}")
+                    return config
+                except httpx.HTTPStatusError as e:
+                    raise ValueError(
+                        f"Failed to fetch OIDC discovery document from {well_known_uri} with status {e.response.status_code} : {e}"
+                    )
+                except ConnectError as e:
+                    raise ConnectionError(
+                        f"Failed to connect to OIDC discovery document: {well_known_uri}: {e}"
+                    )
 
     # noinspection PyMethodMayBeStatic
     async def get_jwks_uri_async(

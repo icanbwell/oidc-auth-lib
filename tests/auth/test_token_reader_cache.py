@@ -14,8 +14,58 @@ from oidcauthlib.utilities.environment.abstract_environment_variables import (
     AbstractEnvironmentVariables,
 )
 
-# Import the shared mock from the fixture/conftest
-from tests.auth.conftest import MockEnvironmentVariables
+
+class MockEnvironmentVariables(AbstractEnvironmentVariables):
+    """Mock environment variables for testing"""
+
+    def __init__(self, providers: List[str]) -> None:
+        self._providers = providers
+
+    @property
+    def auth_providers(self) -> List[str]:
+        return self._providers
+
+    @property
+    def oauth_cache(self) -> str:
+        return "memory"
+
+    @property
+    def mongo_uri(self) -> str | None:
+        return None
+
+    @property
+    def mongo_db_name(self) -> str | None:
+        return None
+
+    @property
+    def mongo_db_username(self) -> str | None:
+        return None
+
+    @property
+    def mongo_db_password(self) -> str | None:
+        return None
+
+    @property
+    def mongo_db_auth_cache_collection_name(self) -> str | None:
+        return None
+
+    @property
+    def mongo_db_cache_disable_delete(self) -> bool | None:
+        return None
+
+    @property
+    def oauth_referring_email(self) -> str | None:
+        return None
+
+    @property
+    def oauth_referring_subject(self) -> str | None:
+        return None
+
+    @property
+    def auth_redirect_uri(self) -> str | None:
+        return None
+
+
 @pytest.mark.asyncio
 async def test_fetch_well_known_config_caches_on_first_call() -> None:
     """
@@ -312,3 +362,69 @@ async def test_cache_initializes_empty() -> None:
         assert hasattr(token_reader, "cached_well_known_configs")
         assert isinstance(token_reader.cached_well_known_configs, dict)
         assert len(token_reader.cached_well_known_configs) == 0
+
+
+@pytest.mark.asyncio
+async def test_concurrent_fetches_prevent_race_conditions() -> None:
+    """
+    Test that concurrent fetches of the same well-known config do not cause
+    race conditions. Only ONE HTTP request should be made even when multiple
+    coroutines try to fetch simultaneously.
+    """
+    import asyncio
+
+    auth_config = AuthConfig(
+        auth_provider="TEST_PROVIDER",
+        audience="test-audience",
+        issuer="https://test-provider.example.com",
+        well_known_uri="https://test-provider.example.com/.well-known/openid-configuration",
+    )
+
+    env_vars = MockEnvironmentVariables(["TEST_PROVIDER"])
+    auth_config_reader = AuthConfigReader(environment_variables=env_vars)
+
+    with patch.object(
+        auth_config_reader,
+        "get_config_for_auth_provider",
+        return_value=auth_config,
+    ):
+        token_reader = TokenReader(auth_config_reader=auth_config_reader)
+
+        # Mock the HTTP client
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "issuer": "https://test-provider.example.com",
+            "jwks_uri": "https://test-provider.example.com/jwks",
+            "authorization_endpoint": "https://test-provider.example.com/authorize",
+        }
+        mock_response.raise_for_status = MagicMock()
+
+        mock_client = AsyncMock()
+        mock_client.get.return_value = mock_response
+        mock_client.__aenter__.return_value = mock_client
+        mock_client.__aexit__.return_value = None
+
+        with patch("httpx.AsyncClient", return_value=mock_client):
+            well_known_uri = (
+                "https://test-provider.example.com/.well-known/openid-configuration"
+            )
+
+            # Launch 10 concurrent requests to the same URI
+            tasks = [
+                token_reader.fetch_well_known_config_async(well_known_uri=well_known_uri)
+                for _ in range(10)
+            ]
+            results = await asyncio.gather(*tasks)
+
+            # Verify all results are identical
+            assert all(r == results[0] for r in results)
+
+            # THE KEY ASSERTION: Only ONE HTTP request should be made
+            # despite 10 concurrent calls, proving the lock works
+            assert (
+                mock_client.get.call_count == 1
+            ), f"Expected 1 HTTP call but got {mock_client.get.call_count}"
+
+            # Verify the config is cached
+            assert well_known_uri in token_reader.cached_well_known_configs
+
