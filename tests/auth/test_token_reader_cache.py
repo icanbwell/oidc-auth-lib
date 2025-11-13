@@ -9,7 +9,6 @@ Includes concurrent tests to verify race condition fixes.
 import asyncio
 import pytest
 from unittest.mock import patch, AsyncMock, MagicMock
-from typing import List
 from oidcauthlib.auth.token_reader import TokenReader
 from oidcauthlib.auth.config.auth_config import AuthConfig
 from oidcauthlib.auth.config.auth_config_reader import AuthConfigReader
