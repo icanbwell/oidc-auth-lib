@@ -97,7 +97,7 @@ class SimpleContainer:
         else:
             # Transient service: create new instance without locking
             factory = self._factories[service_type]
-            return factory(self)
+            return cast(T, factory(self))
 
     def singleton[T](
         self, service_type: type[T], factory: ServiceFactory[T]
