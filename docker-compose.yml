@@ -11,3 +11,14 @@ services:
     working_dir: /usr/src/oidcauthlib
     env_file:
       - docker.env
+    environment:
+      # Below we specify the client id, client secret and well-known URI for each client
+      # For list-like env vars, do NOT use quotes in the default value to avoid extra quotes in Python parsing
+      AUTH_PROVIDERS: ${AUTH_PROVIDERS:-client1,client3}
+      #      AUTH_PROVIDERS: "client1,client3,okta,clientsandbox,cognito"
+      # first client for testing
+      AUTH_ISSUER_CLIENT1: ${AUTH_ISSUER_CLIENT1:-http://keycloak:8080/realms/bwell-realm}
+      AUTH_AUDIENCE_CLIENT1: ${AUTH_AUDIENCE_CLIENT1:-client1}
+      AUTH_CLIENT_ID_CLIENT1: ${AUTH_CLIENT_ID_CLIENT1:-bwell-client-id}
+      AUTH_CLIENT_SECRET_CLIENT1: ${AUTH_CLIENT_SECRET_CLIENT1:-bwell-secret}
+      AUTH_WELL_KNOWN_URI_CLIENT1: ${AUTH_WELL_KNOWN_URI_CLIENT1:-http://keycloak:8080/realms/bwell-realm/.well-known/openid-configuration}

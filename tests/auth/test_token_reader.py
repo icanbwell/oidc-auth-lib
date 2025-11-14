@@ -1,5 +1,5 @@
 import pytest
-from typing import Any
+from typing import Any, override
 from oidcauthlib.auth.token_reader import TokenReader
 from oidcauthlib.auth.config.auth_config import AuthConfig
 from oidcauthlib.auth.config.auth_config_reader import AuthConfigReader
@@ -43,6 +43,18 @@ def create_jwt_pyjwt(private_bytes: bytes, kid: str, claims: dict[str, Any]) -> 
     return jwt.encode(claims, private_bytes, algorithm="RS256", headers={"kid": kid})
 
 
+class MyAuthConfigReader(AuthConfigReader):
+    def __init__(
+        self, environment_variables: MinimalEnv, auth_configs: list[AuthConfig]
+    ) -> None:
+        super().__init__(environment_variables=environment_variables)
+        self._auth_configs = auth_configs
+
+    @override
+    async def get_auth_configs_for_all_auth_providers(self) -> list[AuthConfig]:
+        return self._auth_configs
+
+
 @pytest.mark.asyncio
 @respx.mock
 async def test_token_reader_multiple_well_known_urls() -> None:
@@ -79,7 +91,9 @@ async def test_token_reader_multiple_well_known_urls() -> None:
             "provider2": auth_configs[1],
         },
     )
-    auth_config_reader = AuthConfigReader(environment_variables=env)
+    auth_config_reader = MyAuthConfigReader(
+        environment_variables=env, auth_configs=auth_configs
+    )
 
     respx.get("https://provider1/.well-known/openid-configuration").mock(
         return_value=Response(

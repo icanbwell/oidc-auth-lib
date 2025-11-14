@@ -3,13 +3,14 @@ import logging
 from oidcauthlib.auth.config.auth_config_reader import AuthConfigReader
 from oidcauthlib.auth.fastapi_auth_manager import FastAPIAuthManager
 from oidcauthlib.auth.token_reader import TokenReader
+from oidcauthlib.auth.well_known_config_manager import WellKnownConfigurationManager
 from oidcauthlib.container.simple_container import SimpleContainer
 from oidcauthlib.utilities.environment.environment_variables import EnvironmentVariables
 
 logger = logging.getLogger(__name__)
 
 
-class ContainerFactory:
+class OidcAuthLibContainerFactory:
     # noinspection PyMethodMayBeStatic
     def create_container_only(self) -> SimpleContainer:
         """
@@ -59,9 +60,16 @@ class ContainerFactory:
         )
 
         container.singleton(
+            WellKnownConfigurationManager,
+            lambda c: WellKnownConfigurationManager(
+                auth_config_reader=c.resolve(AuthConfigReader)
+            ),
+        )
+
+        container.singleton(
             TokenReader,
             lambda c: TokenReader(
-                auth_config_reader=c.resolve(AuthConfigReader),
+                well_known_manager=c.resolve(WellKnownConfigurationManager),
             ),
         )
         container.register(

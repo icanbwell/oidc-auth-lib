@@ -4,7 +4,7 @@ from typing import Annotated
 from fastapi import Depends
 
 from oidcauthlib.auth.fastapi_auth_manager import FastAPIAuthManager
-from oidcauthlib.container.container_factory import ContainerFactory
+from oidcauthlib.container.container_factory import OidcAuthLibContainerFactory
 from oidcauthlib.container.simple_container import SimpleContainer
 from oidcauthlib.auth.config.auth_config_reader import (
     AuthConfigReader,
@@ -20,13 +20,13 @@ logger = logging.getLogger(__name__)
 
 def get_container() -> SimpleContainer:
     """Create the container"""
-    return ContainerFactory().create_container()
+    return OidcAuthLibContainerFactory().create_container()
 
 
 @cached  # makes it singleton-like
 async def get_container_async() -> SimpleContainer:
     """Create the container"""
-    return ContainerFactory().create_container()
+    return OidcAuthLibContainerFactory().create_container()
 
 
 def get_auth_manager(

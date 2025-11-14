@@ -152,7 +152,9 @@ class Token(BaseModel):
         Returns:
             str: The subject of the token, typically the user ID or unique identifier.
         """
-        return self.claims.get("sub") if self.claims else None
+        return (
+            self.claims.get("email") or self.claims.get("sub") if self.claims else None
+        )
 
     @property
     def name(self) -> str | None:
