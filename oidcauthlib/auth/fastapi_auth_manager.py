@@ -61,7 +61,38 @@ class FastAPIAuthManager(AuthManager):
         logger.debug(f"OAuth client: {client.client_id} {masked_client_text}")
         token: dict[str, Any] = await client.authorize_access_token(request)  # type: ignore[no-untyped-call]
 
-        return token
+        return await self.process_token_async(
+            code=code,
+            state_decoded=state_decoded,
+            token_dict=token,
+            audience=audience,
+            issuer=issuer,
+            url=url,
+        )
+
+    # noinspection PyMethodMayBeStatic
+    async def process_token_async(
+        self,
+        *,
+        code: str | None,
+        state_decoded: Dict[str, Any],
+        token_dict: dict[str, Any],
+        audience: str | None,
+        issuer: str | None,
+        url: str | None,
+    ) -> Dict[str, Any]:
+        """
+        Process the token asynchronously.  Subclass can override this method to customize token processing.
+
+        :param code:
+        :param state_decoded:
+        :param token_dict:
+        :param audience:
+        :param issuer:
+        :param url:
+        :return:
+        """
+        return token_dict
 
     async def create_signout_url(self, request: Request) -> str:
         """
