@@ -15,6 +15,7 @@ from oidcauthlib.api_container import (
     get_auth_manager,
     get_auth_config_reader,
     get_environment_variables,
+    get_container,
 )
 from oidcauthlib.auth.auth_manager import AuthManager
 from oidcauthlib.auth.config.auth_config import AuthConfig
@@ -22,6 +23,7 @@ from oidcauthlib.auth.config.auth_config_reader import (
     AuthConfigReader,
 )
 from oidcauthlib.auth.fastapi_auth_manager import FastAPIAuthManager
+from oidcauthlib.container.simple_container import SimpleContainer
 from oidcauthlib.utilities.environment.environment_variables import EnvironmentVariables
 from oidcauthlib.utilities.logger.log_levels import SRC_LOG_LEVELS
 
@@ -170,18 +172,19 @@ class AuthRouter:
     async def auth_callback(
         self,
         request: Request,
-        auth_manager: Annotated[FastAPIAuthManager, Depends(get_auth_manager)],
+        container: Annotated[SimpleContainer, Depends(get_container)],
     ) -> Response:
         """
         Handle the authentication callback route.
         This route processes the response from the authorization server after the user has authenticated.
 
         :param request: The incoming request object.
-        :param auth_manager: The authentication manager instance.
+        :param container: The dependency injection container.
         :return: Response object containing the result of the authentication process.
         """
         logger.info(f"Received request for auth callback: {request.url}")
         try:
+            auth_manager: FastAPIAuthManager = container.resolve(FastAPIAuthManager)
             response: Response = await auth_manager.read_callback_response(
                 request=request,
             )
@@ -198,17 +201,20 @@ class AuthRouter:
     async def signout(
         self,
         request: Request,
-        auth_manager: Annotated[FastAPIAuthManager, Depends(get_auth_manager)],
+        container: Annotated[SimpleContainer, Depends(get_container)],
     ) -> Response:
         """
         Handle the signout route for authentication.
         This route logs out the user by clearing authentication tokens and optionally redirects to a confirmation page or login.
         Args:
             request (Request): The incoming request object.
-            auth_manager (AuthManager): The authentication manager instance.
+            container (SimpleContainer): The dependency injection container.
+        Returns:
+            Response: A response indicating the result of the signout operation.
         """
         logger.info(f"Received request for signout: {request.url}")
         try:
+            auth_manager: FastAPIAuthManager = container.resolve(FastAPIAuthManager)
             return await auth_manager.sign_out(request=request)
         except Exception as e:
             exc: str = traceback.format_exc()

@@ -10,6 +10,11 @@ from starlette.responses import JSONResponse, HTMLResponse, Response, RedirectRe
 
 from oidcauthlib.auth.auth_helper import AuthHelper
 from oidcauthlib.auth.auth_manager import AuthManager
+from oidcauthlib.auth.config.auth_config_reader import AuthConfigReader
+from oidcauthlib.auth.token_reader import TokenReader
+from oidcauthlib.utilities.environment.abstract_environment_variables import (
+    AbstractEnvironmentVariables,
+)
 
 from oidcauthlib.utilities.logger.log_levels import SRC_LOG_LEVELS
 
@@ -18,6 +23,30 @@ logger.setLevel(SRC_LOG_LEVELS["AUTH"])
 
 
 class FastAPIAuthManager(AuthManager):
+    def __init__(
+        self,
+        *,
+        environment_variables: AbstractEnvironmentVariables,
+        auth_config_reader: AuthConfigReader,
+        token_reader: TokenReader,
+    ) -> None:
+        """
+        Initialize the TokenStorageAuthManager with required components.
+        Args:
+            environment_variables (AbstractEnvironmentVariables): Environment variables handler.
+            auth_config_reader (AuthConfigReader): Reader for authentication configuration.
+            token_reader (TokenReader): Reader for decoding and validating tokens.
+        Raises:
+            ValueError: If token_exchange_manager is None.
+            TypeError: If token_exchange_manager is not an instance of TokenExchangeManager.
+        """
+        logger.debug(f"Initializing {self.__class__.__name__}")
+        super().__init__(
+            environment_variables=environment_variables,
+            auth_config_reader=auth_config_reader,
+            token_reader=token_reader,
+        )
+
     async def read_callback_response(self, *, request: Request) -> Response:
         """
         Handle the callback response from the OIDC provider after the user has authenticated.
@@ -95,6 +124,7 @@ class FastAPIAuthManager(AuthManager):
         :param url:
         :return: JSONResponse containing the token dictionary.
         """
+        logger.debug(f"Processing token: {code}")
         return JSONResponse(token_dict)
 
     async def create_signout_url(self, request: Request) -> str:
