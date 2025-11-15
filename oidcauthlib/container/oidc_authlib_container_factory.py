@@ -10,32 +10,7 @@ from oidcauthlib.utilities.environment.environment_variables import EnvironmentV
 logger = logging.getLogger(__name__)
 
 
-class ContainerFactory:
-    # noinspection PyMethodMayBeStatic
-    def create_container_only(self) -> SimpleContainer:
-        """
-        Initialize the DI container without registering services
-
-        :return:
-        """
-        logger.info("Initializing DI container")
-
-        container = SimpleContainer()
-
-        return container
-
-    def create_container(self) -> SimpleContainer:
-        """
-        Initialize the DI container and register services
-
-        :return:
-        """
-        logger.info("Initializing DI container")
-
-        container = SimpleContainer()
-
-        return self.register_services_in_container(container=container)
-
+class OidcAuthLibContainerFactory:
     @staticmethod
     def register_services_in_container(
         *, container: SimpleContainer

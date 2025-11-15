@@ -1,4 +1,6 @@
 import pytest
+
+from oidcauthlib.container.interfaces import IContainer
 from oidcauthlib.container.simple_container import SimpleContainer, ServiceNotFoundError
 
 
@@ -7,7 +9,7 @@ class Foo:
         self.value: int = value
 
 
-def foo_factory(container: SimpleContainer) -> Foo:
+def foo_factory(container: IContainer) -> Foo:
     return Foo(42)
 
 

@@ -11,19 +11,13 @@ from starlette.datastructures import URL
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
-from oidcauthlib.api_container import (
-    get_auth_manager,
-    get_auth_config_reader,
-    get_environment_variables,
-    get_container,
-)
 from oidcauthlib.auth.auth_manager import AuthManager
 from oidcauthlib.auth.config.auth_config import AuthConfig
 from oidcauthlib.auth.config.auth_config_reader import (
     AuthConfigReader,
 )
 from oidcauthlib.auth.fastapi_auth_manager import FastAPIAuthManager
-from oidcauthlib.container.simple_container import SimpleContainer
+from oidcauthlib.container.inject import Inject
 from oidcauthlib.utilities.environment.environment_variables import EnvironmentVariables
 from oidcauthlib.utilities.logger.log_levels import SRC_LOG_LEVELS
 
@@ -80,12 +74,12 @@ class AuthRouter:
     async def login(
         self,
         request: Request,
-        auth_manager: Annotated[AuthManager, Depends(get_auth_manager)],
+        auth_manager: Annotated[AuthManager, Depends(Inject(AuthManager))],
         auth_config_reader: Annotated[
-            AuthConfigReader, Depends(get_auth_config_reader)
+            AuthConfigReader, Depends(Inject(AuthConfigReader))
         ],
         environment_variables: Annotated[
-            EnvironmentVariables, Depends(get_environment_variables)
+            EnvironmentVariables, Depends(Inject(EnvironmentVariables))
         ],
         audience: str | None = None,
     ) -> Union[RedirectResponse, JSONResponse]:
@@ -172,20 +166,21 @@ class AuthRouter:
     async def auth_callback(
         self,
         request: Request,
-        container: Annotated[SimpleContainer, Depends(get_container)],
+        fast_api_auth_manager: Annotated[
+            FastAPIAuthManager, Depends(Inject(FastAPIAuthManager))
+        ],
     ) -> Response:
         """
         Handle the authentication callback route.
         This route processes the response from the authorization server after the user has authenticated.
 
         :param request: The incoming request object.
-        :param container: The dependency injection container.
+        :param fast_api_auth_manager: The FastAPI authentication manager instance.
         :return: Response object containing the result of the authentication process.
         """
         logger.info(f"Received request for auth callback: {request.url}")
         try:
-            auth_manager: FastAPIAuthManager = container.resolve(FastAPIAuthManager)
-            response: Response = await auth_manager.read_callback_response(
+            response: Response = await fast_api_auth_manager.read_callback_response(
                 request=request,
             )
             return response
@@ -201,21 +196,22 @@ class AuthRouter:
     async def signout(
         self,
         request: Request,
-        container: Annotated[SimpleContainer, Depends(get_container)],
+        fast_api_auth_manager: Annotated[
+            FastAPIAuthManager, Depends(Inject(FastAPIAuthManager))
+        ],
     ) -> Response:
         """
         Handle the signout route for authentication.
         This route logs out the user by clearing authentication tokens and optionally redirects to a confirmation page or login.
         Args:
             request (Request): The incoming request object.
-            container (SimpleContainer): The dependency injection container.
+            fast_api_auth_manager (FastAPIAuthManager): The FastAPI authentication manager instance.
         Returns:
             Response: A response indicating the result of the signout operation.
         """
         logger.info(f"Received request for signout: {request.url}")
         try:
-            auth_manager: FastAPIAuthManager = container.resolve(FastAPIAuthManager)
-            return await auth_manager.sign_out(request=request)
+            return await fast_api_auth_manager.sign_out(request=request)
         except Exception as e:
             exc: str = traceback.format_exc()
             logger.error(f"Error processing signout: {e}\n{exc}")

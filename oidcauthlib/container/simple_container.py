@@ -1,12 +1,7 @@
 import threading
-from typing import Any, Dict, Callable, cast, TypeVar
+from typing import Any, Dict, cast, override
 
-# Type variable must be defined before use
-T = TypeVar("T")
-
-# Factory function type for creating services
-# A callable that takes a SimpleContainer and returns an instance of type T
-ServiceFactory = Callable[["SimpleContainer"], T]
+from oidcauthlib.container.interfaces import IContainer, ServiceFactory
 
 
 class ContainerError(Exception):
@@ -17,7 +12,7 @@ class ServiceNotFoundError(ContainerError):
     """Raised when a service is not found"""
 
 
-class SimpleContainer:
+class SimpleContainer(IContainer):
     """Generic IoC Container"""
 
     _singletons: Dict[type[Any], Any] = {}  # Shared across all instances
@@ -30,6 +25,7 @@ class SimpleContainer:
         self._factories: Dict[type[Any], ServiceFactory[Any]] = {}
         self._singleton_types: set[type[Any]] = set()
 
+    @override
     def register[T](
         self, service_type: type[T], factory: ServiceFactory[T]
     ) -> "SimpleContainer":
@@ -46,6 +42,7 @@ class SimpleContainer:
         self._factories[service_type] = factory
         return self
 
+    @override
     def resolve[T](self, service_type: type[T]) -> T:
         """
         Resolve a service instance
@@ -84,6 +81,7 @@ class SimpleContainer:
             factory = self._factories[service_type]
             return cast(T, factory(self))
 
+    @override
     def singleton[T](
         self, service_type: type[T], factory: ServiceFactory[T]
     ) -> "SimpleContainer":
@@ -92,12 +90,13 @@ class SimpleContainer:
         self._singleton_types.add(service_type)
         return self
 
+    @override
     def transient[T](
         self, service_type: type[T], factory: ServiceFactory[T]
     ) -> "SimpleContainer":
         """Register a transient service"""
 
-        def create_new(container: SimpleContainer) -> T:
+        def create_new(container: IContainer) -> T:
             return factory(container)
 
         self.register(service_type, create_new)
