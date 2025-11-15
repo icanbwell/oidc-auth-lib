@@ -1,10 +1,13 @@
 import json
 import logging
+import traceback
 from typing import Any, Dict
 
 import httpx
 from authlib.integrations.starlette_client import StarletteOAuth2App
 from fastapi import Request
+from starlette.responses import JSONResponse, HTMLResponse, Response, RedirectResponse
+
 from oidcauthlib.auth.auth_helper import AuthHelper
 from oidcauthlib.auth.auth_manager import AuthManager
 
@@ -15,7 +18,7 @@ logger.setLevel(SRC_LOG_LEVELS["AUTH"])
 
 
 class FastAPIAuthManager(AuthManager):
-    async def read_callback_response(self, *, request: Request) -> dict[str, Any]:
+    async def read_callback_response(self, *, request: Request) -> Response:
         """
         Handle the callback response from the OIDC provider after the user has authenticated.
 
@@ -80,7 +83,7 @@ class FastAPIAuthManager(AuthManager):
         audience: str | None,
         issuer: str | None,
         url: str | None,
-    ) -> Dict[str, Any]:
+    ) -> Response:
         """
         Process the token asynchronously.  Subclass can override this method to customize token processing.
 
@@ -90,9 +93,9 @@ class FastAPIAuthManager(AuthManager):
         :param audience:
         :param issuer:
         :param url:
-        :return:
+        :return: JSONResponse containing the token dictionary.
         """
-        return token_dict
+        return JSONResponse(token_dict)
 
     async def create_signout_url(self, request: Request) -> str:
         """
@@ -174,3 +177,48 @@ class FastAPIAuthManager(AuthManager):
         logout_url = httpx.URL(end_session_endpoint).copy_merge_params(params)
         logger.info(f"Constructed signout URL: {logout_url}")
         return str(logout_url)
+
+    async def sign_out(
+        self,
+        *,
+        request: Request,
+    ) -> Response:
+        """
+        Handle the sign_out route for authentication.
+        This route logs out the user by clearing authentication tokens and optionally redirects to a confirmation page or login.
+        Args:
+            request (Request): The incoming request object.
+        """
+        logger.info(f"Received request for signout: {request.url}")
+        try:
+            sign_out_url = await self.create_signout_url(request=request)
+
+            await self.process_sign_out_async(
+                request=request,
+            )
+            # If sign_out_url is provided, redirect to it
+            if sign_out_url:
+                logger.info(f"Redirecting to sign_out URL: {sign_out_url}")
+                return RedirectResponse(sign_out_url, status_code=302)
+            # Otherwise, return a simple confirmation page
+            html_content = "<html><body><h2>Signed Out</h2><p>You have been signed out.</p></body></html>"
+            return HTMLResponse(content=html_content, status_code=200)
+        except Exception as e:
+            exc: str = traceback.format_exc()
+            logger.error(f"Error processing sign_out: {e}\n{exc}")
+            return JSONResponse(
+                content={"error": f"Error processing sign_out: {e}\n{exc}"},
+                status_code=500,
+            )
+
+    async def process_sign_out_async(
+        self,
+        *,
+        request: Request,
+    ) -> None:
+        """
+        Process the sign_out asynchronously.  Subclass can override this method to customize sign_out processing.
+
+        :param request:
+        """
+        pass
