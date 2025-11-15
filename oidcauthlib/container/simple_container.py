@@ -21,7 +21,9 @@ class SimpleContainer:
     """Generic IoC Container"""
 
     _singletons: Dict[type[Any], Any] = {}  # Shared across all instances
-    _singleton_lock: threading.Lock = threading.Lock()  # Protects singleton instantiation
+    _singleton_lock: threading.Lock = (
+        threading.Lock()
+    )  # Protects singleton instantiation
 
     def __init__(self) -> None:
         # Remove instance-level _singletons

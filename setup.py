@@ -9,13 +9,13 @@ from os import path, getcwd
 # noinspection SpellCheckingInspection
 package_name = "oidcauthlib"
 
-with open("README.md", "r") as fh:
+with open("README.md") as fh:
     long_description = fh.read()
 
 try:
     with open(path.join(getcwd(), "VERSION")) as version_file:
         version = version_file.read().strip()
-except IOError:
+except OSError:
     raise
 
 
@@ -31,7 +31,7 @@ def fix_setuptools() -> None:
 
         # noinspection PyUnusedLocal
         def violation(operation: Any, *args: Any, **_: Any) -> None:
-            print("SandboxViolation: %s" % (args,))
+            print("SandboxViolation: {}".format(args))
 
         DirectorySandbox._violation = violation
     except ImportError:
