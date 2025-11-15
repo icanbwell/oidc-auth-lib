@@ -3,7 +3,7 @@ from bson import ObjectId
 from oidcauthlib.utilities.environment.environment_variables import EnvironmentVariables
 from oidcauthlib.auth.config.auth_config_reader import AuthConfigReader
 from oidcauthlib.auth.config.auth_config import AuthConfig
-from typing import Any, List, Dict
+from typing import Any, List, Dict, override
 import pytest
 
 
@@ -25,6 +25,7 @@ class DummyEnvVars(EnvironmentVariables):
         self._configs: Dict[str, Any] = configs
 
     @property
+    @override
     def auth_providers(self) -> List[str]:
         return self._providers
 

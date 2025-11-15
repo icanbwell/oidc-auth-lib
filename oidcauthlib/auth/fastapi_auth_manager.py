@@ -44,7 +44,7 @@ class FastAPIAuthManager(AuthManager):
         url: str | None = state_decoded.get("url")
         logger.debug(f"URL retrieved: {url}")
         client: StarletteOAuth2App = self.oauth.create_client(audience)  # type: ignore[no-untyped-call]
-        token: dict[str, Any] = await client.authorize_access_token(request)
+        token: dict[str, Any] = await client.authorize_access_token(request)  # type: ignore[no-untyped-call]
 
         return token
 

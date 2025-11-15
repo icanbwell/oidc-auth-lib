@@ -1,7 +1,7 @@
 from oidcauthlib.auth.config.auth_config_reader import AuthConfigReader
 from oidcauthlib.auth.config.auth_config import AuthConfig
 import pytest
-from typing import Any, Dict, List
+from typing import Any, Dict, List, override
 
 from oidcauthlib.utilities.environment.environment_variables import EnvironmentVariables
 
@@ -12,38 +12,46 @@ class DummyEnvVars(EnvironmentVariables):
         self._configs: Dict[str, Any] = configs
 
     @property
-    def auth_providers(self) -> List[str]:
+    @override
+    def auth_providers(self) -> list[str] | None:
         return self._providers
 
     def get(self, key: str, default: Any = None) -> Any:
         return self._configs.get(key, default)
 
     @property
-    def auth_redirect_uri(self) -> str:
+    @override
+    def auth_redirect_uri(self) -> str | None:
         return ""
 
     @property
-    def mongo_db_auth_cache_collection_name(self) -> str:
+    @override
+    def mongo_db_auth_cache_collection_name(self) -> str | None:
         return ""
 
     @property
-    def mongo_db_cache_disable_delete(self) -> bool:
+    @override
+    def mongo_db_cache_disable_delete(self) -> bool | None:
         return False
 
     @property
-    def mongo_url(self) -> str:
+    @override
+    def mongo_uri(self) -> str | None:
         return ""
 
     @property
-    def mongo_db_name(self) -> str:
+    @override
+    def mongo_db_name(self) -> str | None:
         return ""
 
     @property
+    @override
     def oauth_cache(self) -> str:
         return ""
 
     @property
-    def oauth_referring_subject(self) -> str:
+    @override
+    def oauth_referring_subject(self) -> str | None:
         return ""
 
 

@@ -1,3 +1,4 @@
+from typing import override
 from oidcauthlib.auth.exceptions.authorization_needed_exception import (
     AuthorizationNeededException,
 )
@@ -12,6 +13,7 @@ class AuthorizationBearerTokenMissingException(AuthorizationNeededException):
     nature of the error.
     """
 
+    @override
     def __init__(self, *, message: str) -> None:
         """
         Initialize the AuthorizationNeededException with a message and an optional token cache item.

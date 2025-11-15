@@ -1,3 +1,4 @@
+from typing import override
 from oidcauthlib.auth.exceptions.authorization_needed_exception import (
     AuthorizationNeededException,
 )
@@ -15,6 +16,7 @@ class AuthorizationBearerTokenExpiredException(AuthorizationNeededException):
     authentication or authorization, and the existing token has expired.
     """
 
+    @override
     def __init__(
         self,
         *,
