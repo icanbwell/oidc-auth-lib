@@ -17,9 +17,7 @@ class Token(BaseModel):
     Represents a token with its associated properties.
     """
 
-    model_config = ConfigDict(
-        extra="forbid"  # Prevents any additional properties
-    )
+    model_config = ConfigDict(extra="forbid")  # Prevents any additional properties
     token: str = Field(...)
     """The token string."""
     expires: Optional[datetime] = Field(default=None)

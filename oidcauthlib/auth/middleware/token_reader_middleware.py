@@ -1,7 +1,7 @@
 import logging
 import typing
 import re
-from typing import Optional, Sequence, Pattern
+from typing import Optional, Sequence, Pattern, override
 
 from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -49,6 +49,7 @@ class TokenReaderMiddleware(BaseHTTPMiddleware):
     def _is_route_match(path: str, patterns: list[Pattern[str]]) -> bool:
         return any(p.match(path) for p in patterns)
 
+    @override
     async def dispatch(
         self,
         request: Request,

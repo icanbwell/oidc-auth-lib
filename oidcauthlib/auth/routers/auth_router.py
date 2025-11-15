@@ -1,8 +1,7 @@
 import logging
 import traceback
-
 from enum import Enum
-from typing import Any, Sequence, Annotated, Union, List, Optional
+from typing import Sequence, Annotated, Union, List, Optional
 
 from fastapi import APIRouter
 from fastapi import params
@@ -10,20 +9,15 @@ from fastapi.params import Depends
 from fastapi.responses import RedirectResponse
 from starlette.datastructures import URL
 from starlette.requests import Request
-from starlette.responses import JSONResponse, HTMLResponse, Response
+from starlette.responses import JSONResponse, Response
 
-from oidcauthlib.api_container import (
-    get_auth_manager,
-    get_auth_config_reader,
-    get_environment_variables,
-)
 from oidcauthlib.auth.auth_manager import AuthManager
 from oidcauthlib.auth.config.auth_config import AuthConfig
 from oidcauthlib.auth.config.auth_config_reader import (
     AuthConfigReader,
 )
-
 from oidcauthlib.auth.fastapi_auth_manager import FastAPIAuthManager
+from oidcauthlib.container.inject import Inject
 from oidcauthlib.utilities.environment.environment_variables import EnvironmentVariables
 from oidcauthlib.utilities.logger.log_levels import SRC_LOG_LEVELS
 
@@ -80,12 +74,12 @@ class AuthRouter:
     async def login(
         self,
         request: Request,
-        auth_manager: Annotated[AuthManager, Depends(get_auth_manager)],
+        auth_manager: Annotated[AuthManager, Depends(Inject(AuthManager))],
         auth_config_reader: Annotated[
-            AuthConfigReader, Depends(get_auth_config_reader)
+            AuthConfigReader, Depends(Inject(AuthConfigReader))
         ],
         environment_variables: Annotated[
-            EnvironmentVariables, Depends(get_environment_variables)
+            EnvironmentVariables, Depends(Inject(EnvironmentVariables))
         ],
         audience: str | None = None,
     ) -> Union[RedirectResponse, JSONResponse]:
@@ -172,14 +166,24 @@ class AuthRouter:
     async def auth_callback(
         self,
         request: Request,
-        auth_manager: Annotated[FastAPIAuthManager, Depends(get_auth_manager)],
-    ) -> Union[JSONResponse, HTMLResponse]:
+        fast_api_auth_manager: Annotated[
+            FastAPIAuthManager, Depends(Inject(FastAPIAuthManager))
+        ],
+    ) -> Response:
+        """
+        Handle the authentication callback route.
+        This route processes the response from the authorization server after the user has authenticated.
+
+        :param request: The incoming request object.
+        :param fast_api_auth_manager: The FastAPI authentication manager instance.
+        :return: Response object containing the result of the authentication process.
+        """
         logger.info(f"Received request for auth callback: {request.url}")
         try:
-            content: dict[str, Any] = await auth_manager.read_callback_response(
+            response: Response = await fast_api_auth_manager.read_callback_response(
                 request=request,
             )
-            return JSONResponse(content)
+            return response
         except Exception as e:
             exc: str = traceback.format_exc()
             logger.error(f"Error processing auth callback: {e}\n{exc}")
@@ -192,25 +196,22 @@ class AuthRouter:
     async def signout(
         self,
         request: Request,
-        auth_manager: Annotated[FastAPIAuthManager, Depends(get_auth_manager)],
+        fast_api_auth_manager: Annotated[
+            FastAPIAuthManager, Depends(Inject(FastAPIAuthManager))
+        ],
     ) -> Response:
         """
         Handle the signout route for authentication.
         This route logs out the user by clearing authentication tokens and optionally redirects to a confirmation page or login.
         Args:
             request (Request): The incoming request object.
-            auth_manager (AuthManager): The authentication manager instance.
+            fast_api_auth_manager (FastAPIAuthManager): The FastAPI authentication manager instance.
+        Returns:
+            Response: A response indicating the result of the signout operation.
         """
         logger.info(f"Received request for signout: {request.url}")
         try:
-            signout_url = await auth_manager.create_signout_url(request=request)
-            # If signout_url is provided, redirect to it
-            if signout_url:
-                logger.info(f"Redirecting to signout URL: {signout_url}")
-                return RedirectResponse(signout_url, status_code=302)
-            # Otherwise, return a simple confirmation page
-            html_content = "<html><body><h2>Signed Out</h2><p>You have been signed out.</p></body></html>"
-            return HTMLResponse(content=html_content, status_code=200)
+            return await fast_api_auth_manager.sign_out(request=request)
         except Exception as e:
             exc: str = traceback.format_exc()
             logger.error(f"Error processing signout: {e}\n{exc}")

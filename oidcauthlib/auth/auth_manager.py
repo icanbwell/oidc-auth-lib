@@ -151,7 +151,7 @@ class AuthManager:
             str: The authorization URL to redirect the user to for authentication.
         """
         # default to first audience
-        client: StarletteOAuth2App = self.oauth.create_client(audience)  # type: ignore[no-untyped-call]
+        client: StarletteOAuth2App = self.create_oauth_client(audience=audience)
         if client is None:
             raise ValueError(f"Client for audience {audience} not found")
         state_content: Dict[str, str | None] = {
@@ -175,13 +175,16 @@ class AuthManager:
             f"Creating authorization URL for audience {audience} with state {state_content} and encoded state {state}"
         )
 
-        rv: Dict[str, Any] = await client.create_authorization_url(
+        rv: Dict[str, Any] = await client.create_authorization_url(  # type: ignore[no-untyped-call]
             redirect_uri=redirect_uri, state=state
         )
         logger.debug(f"Authorization URL created: {rv}")
         # request is only needed if we are using the session to store the state
-        await client.save_authorize_data(request=None, redirect_uri=redirect_uri, **rv)
+        await client.save_authorize_data(request=None, redirect_uri=redirect_uri, **rv)  # type: ignore[no-untyped-call]
         return cast(str, rv["url"])
+
+    def create_oauth_client(self, *, audience: str) -> StarletteOAuth2App:
+        return cast(StarletteOAuth2App, self.oauth.create_client(audience))  # type: ignore[no-untyped-call]
 
     @staticmethod
     async def login_and_get_token_with_username_password_async(

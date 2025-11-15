@@ -6,7 +6,7 @@ could be incorrectly validated when multiple providers are configured.
 
 import pytest
 from unittest.mock import patch, MagicMock
-from typing import List, Any
+from typing import List, Any, override
 from joserfc.jwk import KeySet
 from oidcauthlib.auth.token_reader import TokenReader
 from oidcauthlib.auth.config.auth_config import AuthConfig
@@ -26,46 +26,57 @@ class MockEnvironmentVariables(AbstractEnvironmentVariables):
         self._providers = providers
 
     @property
+    @override
     def auth_providers(self) -> List[str]:
         return self._providers
 
     @property
+    @override
     def oauth_cache(self) -> str:
         return "memory"
 
     @property
+    @override
     def mongo_uri(self) -> str | None:
         return None
 
     @property
+    @override
     def mongo_db_name(self) -> str | None:
         return None
 
     @property
+    @override
     def mongo_db_username(self) -> str | None:
         return None
 
     @property
+    @override
     def mongo_db_password(self) -> str | None:
         return None
 
     @property
+    @override
     def mongo_db_auth_cache_collection_name(self) -> str | None:
         return None
 
     @property
+    @override
     def mongo_db_cache_disable_delete(self) -> bool | None:
         return None
 
     @property
+    @override
     def oauth_referring_email(self) -> str | None:
         return None
 
     @property
+    @override
     def oauth_referring_subject(self) -> str | None:
         return None
 
     @property
+    @override
     def auth_redirect_uri(self) -> str | None:
         return None
 
@@ -116,9 +127,9 @@ async def test_token_validation_rejects_wrong_issuer_and_audience() -> None:
     with patch.object(
         auth_config_reader,
         "get_config_for_auth_provider",
-        side_effect=lambda auth_provider: auth_config_1
-        if auth_provider == "PROVIDER1"
-        else auth_config_2,
+        side_effect=lambda auth_provider: (
+            auth_config_1 if auth_provider == "PROVIDER1" else auth_config_2
+        ),
     ):
         # Create token reader
         token_reader = TokenReader(

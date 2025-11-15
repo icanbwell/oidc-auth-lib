@@ -9,9 +9,7 @@ class AuthInformation(BaseModel):
     Represents the information about the authenticated user or client.
     """
 
-    model_config = ConfigDict(
-        extra="forbid"  # Prevents any additional properties
-    )
+    model_config = ConfigDict(extra="forbid")  # Prevents any additional properties
 
     redirect_uri: Optional[str] = None
     """The URI to redirect to after authentication, if applicable."""

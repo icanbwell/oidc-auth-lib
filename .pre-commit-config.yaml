@@ -2,8 +2,9 @@ exclude: (^.idea/|^docsrc|^docs)
 
 repos:
   # Pre-commit hooks for basic checks
+  # https://gatlenculp.medium.com/effortless-code-quality-the-ultimate-pre-commit-hooks-guide-for-2025-57ca501d9835
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v5.0.0
+    rev: v6.0.0
     hooks:
       # File and formatting checks
       - id: end-of-file-fixer
@@ -27,9 +28,15 @@ repos:
       # Dependency and import checks
       - id: check-ast
       - id: check-added-large-files
+        args: [ "--maxkb=100000" ] # Example: sets max file size to 100MB
       - id: check-json
       - id: check-toml
       - id: check-yaml
+
+  - repo: https://github.com/asottile/pyupgrade
+    rev: v3.21.0
+    hooks:
+      - id: pyupgrade
 
   # Local hooks for Ruff (using local installation)
   - repo: local
@@ -39,7 +46,7 @@ repos:
         entry: ruff
         language: system
         types: [ python ]
-        args: [ check, --fix, --show-fixes ]
+        args: [ check, --fix, --show-fixes, --target-version=py312 ]
         require_serial: true
 
       - id: ruff-format
@@ -49,6 +56,36 @@ repos:
         types: [ python ]
         args: [ format ]
         require_serial: true
+
+      # MyPy for type checking
+      # https://mypy.readthedocs.io/en/stable/error_code_list2.html#error-codes-optional
+      - id: mypy
+        name: mypy
+        language: system
+        types: [ python ]
+        entry: mypy
+        require_serial: true
+        args: [
+          --explicit-package-bases,
+          --strict,
+          --python-version=3.12,
+          --show-error-codes,
+          --enable-error-code=unused-awaitable,
+          --disallow-any-generics,
+          --disallow-untyped-defs,
+          --warn-redundant-casts,
+          --strict-equality,
+          --disallow-untyped-calls,
+          --warn-return-any,
+          --disallow-any-unimported,
+          --report-deprecated-as-note,
+          --enable-error-code=possibly-undefined,
+          --enable-error-code=truthy-bool,
+          --enable-error-code=ignore-without-code,
+          --enable-error-code=unused-ignore,
+          --enable-error-code=explicit-override,
+          --enable-error-code=exhaustive-match
+        ]
 
       # Bandit for security scanning
       - id: bandit
@@ -75,39 +112,25 @@ repos:
       - id: python-no-eval
       - id: python-no-log-warn
 
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.11.2
-    hooks:
-      - id: mypy
-        args:
-          - --strict
-          - --python-version=3.12
-          - --enable-incomplete-feature=NewGenericSyntax
-          - --install-types
-          - --non-interactive
-          - --show-error-codes
-        additional_dependencies:
-          # Install the package itself
-          - .
-          # Runtime dependencies from setup.py
-          - pydantic>=2.0,<3.0.0
-          - httpx>=0.27.2
-          - fastapi>=0.115.8
-          - starlette>=0.48.0
-          - pymongo[srv]>=4.15.3
-          - joserfc>=1.2.2
-          - authlib>=1.6.4
-          # Test dependencies
-          - pytest
-          # type stubs for untyped libraries
-          - types-Authlib
-          - types-requests
-          - types-urllib3
-
   # Optional: Secret scanning
   - repo: https://github.com/Yelp/detect-secrets
     rev: v1.4.0
     hooks:
       - id: detect-secrets
         args: [ 'scan' ]
-        exclude: .*/tests/.*
+        exclude: >
+          (?x)^(
+            tests/.*|
+            docker-compose.*\.yml|
+            .helm/.*|
+            scripts/.*
+          )$
+
+  - repo: https://github.com/python-jsonschema/check-jsonschema
+    rev: 0.34.1
+    hooks:
+      - id: check-github-workflows
+        name: github-actions · Validate gh workflow files
+        args: ["--verbose"]
+      - id: check-taskfile
+        name: "taskfile · Validate Task configuration"

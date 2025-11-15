@@ -9,13 +9,13 @@ from os import path, getcwd
 # noinspection SpellCheckingInspection
 package_name = "oidcauthlib"
 
-with open("README.md", "r") as fh:
+with open("README.md") as fh:
     long_description = fh.read()
 
 try:
     with open(path.join(getcwd(), "VERSION")) as version_file:
         version = version_file.read().strip()
-except IOError:
+except OSError:
     raise
 
 
@@ -31,7 +31,7 @@ def fix_setuptools() -> None:
 
         # noinspection PyUnusedLocal
         def violation(operation: Any, *args: Any, **_: Any) -> None:
-            print("SandboxViolation: %s" % (args,))
+            print("SandboxViolation: {}".format(args))
 
         DirectorySandbox._violation = violation
     except ImportError:
@@ -62,7 +62,7 @@ setup(
         "pydantic>=2.0,<3.0.0",
         "pymongo[srv]>=4.15.3",
         "fastapi>=0.115.8",
-        "starlette>=0.48.0",
+        "starlette>=0.49.1",
     ],
     classifiers=[
         "Development Status :: 4 - Beta",
@@ -70,7 +70,7 @@ setup(
         "License :: OSI Approved :: Apache Software License",
         "Operating System :: OS Independent",
     ],
-    python_requires=">=3.10",
+    python_requires=">=3.12",
     dependency_links=[],
     include_package_data=True,
     zip_safe=False,

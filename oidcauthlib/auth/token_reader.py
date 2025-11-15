@@ -79,8 +79,12 @@ class TokenReader:
 
         # Locks for preventing race conditions in concurrent environments
         self._jwks_lock: asyncio.Lock = asyncio.Lock()  # Protects JWKS initialization
-        self._well_known_locks: Dict[str, asyncio.Lock] = {}  # Per-URI locks for discovery document fetching
-        self._well_known_locks_lock: asyncio.Lock = asyncio.Lock()  # Protects _well_known_locks dict access
+        self._well_known_locks: Dict[
+            str, asyncio.Lock
+        ] = {}  # Per-URI locks for discovery document fetching
+        self._well_known_locks_lock: asyncio.Lock = (
+            asyncio.Lock()
+        )  # Protects _well_known_locks dict access
 
     async def fetch_well_known_config_and_jwks_async(self) -> None:
         """
@@ -98,10 +102,14 @@ class TokenReader:
         async with self._jwks_lock:
             # Double-check: another coroutine may have initialized while we waited for the lock
             if len(self.jwks.keys) > 0:
-                logger.debug(f"JWKS already initialized by another coroutine for id {self.uuid}.")
+                logger.debug(
+                    f"JWKS already initialized by another coroutine for id {self.uuid}."
+                )
                 return
 
-            logger.debug(f"Fetching well-known configurations and JWKS for id {self.uuid}.")
+            logger.debug(
+                f"Fetching well-known configurations and JWKS for id {self.uuid}."
+            )
 
             self.well_known_configs = []  # Reset well-known configs before fetching
 
@@ -391,15 +399,21 @@ class TokenReader:
         async with uri_lock:
             # Double-check: another coroutine may have fetched while we waited for the lock
             if well_known_uri in self.cached_well_known_configs:
-                logger.info(f"✓ Using cached OIDC discovery document (fetched by another coroutine) for {well_known_uri}")
+                logger.info(
+                    f"✓ Using cached OIDC discovery document (fetched by another coroutine) for {well_known_uri}"
+                )
                 return self.cached_well_known_configs[well_known_uri]
 
-            logger.info(f"Cache miss for {well_known_uri}. Cache has {len(self.cached_well_known_configs)} entries.")
+            logger.info(
+                f"Cache miss for {well_known_uri}. Cache has {len(self.cached_well_known_configs)} entries."
+            )
 
             # Cache miss - fetch from remote (only one coroutine reaches here per URI)
             async with httpx.AsyncClient() as client:
                 try:
-                    logger.info(f"Fetching OIDC discovery document from {well_known_uri}")
+                    logger.info(
+                        f"Fetching OIDC discovery document from {well_known_uri}"
+                    )
                     response = await client.get(well_known_uri)
                     response.raise_for_status()
                     config = cast(Dict[str, Any], response.json())

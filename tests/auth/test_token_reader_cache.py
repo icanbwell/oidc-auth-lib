@@ -15,6 +15,8 @@ from oidcauthlib.auth.config.auth_config_reader import AuthConfigReader
 
 # Import the shared mock from the fixture/conftest
 from tests.auth.conftest import MockEnvironmentVariables
+
+
 @pytest.mark.asyncio
 async def test_fetch_well_known_config_caches_on_first_call() -> None:
     """
@@ -268,7 +270,9 @@ async def test_cache_prevents_repeated_http_requests_in_production_scenario() ->
             # Simulate 100 CONCURRENT requests (like in production with high traffic)
             # Using asyncio.gather to launch all requests truly concurrently
             tasks = [
-                token_reader.fetch_well_known_config_async(well_known_uri=well_known_uri)
+                token_reader.fetch_well_known_config_async(
+                    well_known_uri=well_known_uri
+                )
                 for _ in range(100)
             ]
             results = await asyncio.gather(*tasks)
@@ -278,9 +282,9 @@ async def test_cache_prevents_repeated_http_requests_in_production_scenario() ->
 
             # THE KEY ASSERTION: HTTP should only be called ONCE despite 100 concurrent calls
             # This verifies the race condition fix is working
-            assert (
-                mock_client.get.call_count == 1
-            ), f"Expected 1 HTTP call but got {mock_client.get.call_count} (race condition present!)"
+            assert mock_client.get.call_count == 1, (
+                f"Expected 1 HTTP call but got {mock_client.get.call_count} (race condition present!)"
+            )
 
             # Verify the config is cached
             assert well_known_uri in token_reader.cached_well_known_configs
@@ -375,9 +379,15 @@ async def test_concurrent_well_known_config_requests_use_cache_multiple_uris() -
             # Each URI should only be fetched ONCE despite 30 concurrent requests
             tasks = []
             for _ in range(30):
-                tasks.append(token_reader.fetch_well_known_config_async(well_known_uri=uri1))
-                tasks.append(token_reader.fetch_well_known_config_async(well_known_uri=uri2))
-                tasks.append(token_reader.fetch_well_known_config_async(well_known_uri=uri3))
+                tasks.append(
+                    token_reader.fetch_well_known_config_async(well_known_uri=uri1)
+                )
+                tasks.append(
+                    token_reader.fetch_well_known_config_async(well_known_uri=uri2)
+                )
+                tasks.append(
+                    token_reader.fetch_well_known_config_async(well_known_uri=uri3)
+                )
 
             results = await asyncio.gather(*tasks)
 
@@ -396,9 +406,18 @@ async def test_concurrent_well_known_config_requests_use_cache_multiple_uris() -
             assert uri3 in token_reader.cached_well_known_configs
 
             # Verify cached values are correct
-            assert token_reader.cached_well_known_configs[uri1]["issuer"] == "https://provider1.example.com"
-            assert token_reader.cached_well_known_configs[uri2]["issuer"] == "https://provider2.example.com"
-            assert token_reader.cached_well_known_configs[uri3]["issuer"] == "https://provider3.example.com"
+            assert (
+                token_reader.cached_well_known_configs[uri1]["issuer"]
+                == "https://provider1.example.com"
+            )
+            assert (
+                token_reader.cached_well_known_configs[uri2]["issuer"]
+                == "https://provider2.example.com"
+            )
+            assert (
+                token_reader.cached_well_known_configs[uri3]["issuer"]
+                == "https://provider3.example.com"
+            )
 
 
 @pytest.mark.asyncio
@@ -465,8 +484,7 @@ async def test_concurrent_jwks_initialization() -> None:
         with patch("httpx.AsyncClient", return_value=mock_client):
             # Launch 50 concurrent JWKS initialization requests
             tasks = [
-                token_reader.fetch_well_known_config_and_jwks_async()
-                for _ in range(50)
+                token_reader.fetch_well_known_config_and_jwks_async() for _ in range(50)
             ]
             await asyncio.gather(*tasks)
 
@@ -520,11 +538,15 @@ async def test_concurrent_access_with_cache_miss_and_hits() -> None:
         mock_client.__aexit__.return_value = None
 
         with patch("httpx.AsyncClient", return_value=mock_client):
-            well_known_uri = "https://test-provider.example.com/.well-known/openid-configuration"
+            well_known_uri = (
+                "https://test-provider.example.com/.well-known/openid-configuration"
+            )
 
             # First wave: 50 concurrent requests (all cache miss)
             tasks_wave1 = [
-                token_reader.fetch_well_known_config_async(well_known_uri=well_known_uri)
+                token_reader.fetch_well_known_config_async(
+                    well_known_uri=well_known_uri
+                )
                 for _ in range(50)
             ]
             results_wave1 = await asyncio.gather(*tasks_wave1)
@@ -534,7 +556,9 @@ async def test_concurrent_access_with_cache_miss_and_hits() -> None:
 
             # Second wave: Another 50 concurrent requests (all cache hit)
             tasks_wave2 = [
-                token_reader.fetch_well_known_config_async(well_known_uri=well_known_uri)
+                token_reader.fetch_well_known_config_async(
+                    well_known_uri=well_known_uri
+                )
                 for _ in range(50)
             ]
             results_wave2 = await asyncio.gather(*tasks_wave2)

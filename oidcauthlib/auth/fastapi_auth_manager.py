@@ -1,12 +1,20 @@
 import json
 import logging
+import traceback
 from typing import Any, Dict
 
 import httpx
 from authlib.integrations.starlette_client import StarletteOAuth2App
 from fastapi import Request
+from starlette.responses import JSONResponse, HTMLResponse, Response, RedirectResponse
+
 from oidcauthlib.auth.auth_helper import AuthHelper
 from oidcauthlib.auth.auth_manager import AuthManager
+from oidcauthlib.auth.config.auth_config_reader import AuthConfigReader
+from oidcauthlib.auth.token_reader import TokenReader
+from oidcauthlib.utilities.environment.abstract_environment_variables import (
+    AbstractEnvironmentVariables,
+)
 
 from oidcauthlib.utilities.logger.log_levels import SRC_LOG_LEVELS
 
@@ -15,7 +23,31 @@ logger.setLevel(SRC_LOG_LEVELS["AUTH"])
 
 
 class FastAPIAuthManager(AuthManager):
-    async def read_callback_response(self, *, request: Request) -> dict[str, Any]:
+    def __init__(
+        self,
+        *,
+        environment_variables: AbstractEnvironmentVariables,
+        auth_config_reader: AuthConfigReader,
+        token_reader: TokenReader,
+    ) -> None:
+        """
+        Initialize the TokenStorageAuthManager with required components.
+        Args:
+            environment_variables (AbstractEnvironmentVariables): Environment variables handler.
+            auth_config_reader (AuthConfigReader): Reader for authentication configuration.
+            token_reader (TokenReader): Reader for decoding and validating tokens.
+        Raises:
+            ValueError: If token_exchange_manager is None.
+            TypeError: If token_exchange_manager is not an instance of TokenExchangeManager.
+        """
+        logger.debug(f"Initializing {self.__class__.__name__}")
+        super().__init__(
+            environment_variables=environment_variables,
+            auth_config_reader=auth_config_reader,
+            token_reader=token_reader,
+        )
+
+    async def read_callback_response(self, *, request: Request) -> Response:
         """
         Handle the callback response from the OIDC provider after the user has authenticated.
 
@@ -43,10 +75,57 @@ class FastAPIAuthManager(AuthManager):
         logger.debug(f"Issuer retrieved: {issuer}")
         url: str | None = state_decoded.get("url")
         logger.debug(f"URL retrieved: {url}")
-        client: StarletteOAuth2App = self.oauth.create_client(audience)  # type: ignore[no-untyped-call]
-        token: dict[str, Any] = await client.authorize_access_token(request)
+        logger.debug(f"Creating OAuth2 client for audience: {audience}")
+        if audience is None:
+            raise ValueError("Audience must be provided in the callback")
+        client: StarletteOAuth2App = self.create_oauth_client(audience=audience)
+        masked_client_text: str
+        if client.client_secret is None:
+            masked_client_text = "None"
+        elif client.client_secret == "":
+            masked_client_text = "empty"
+        elif len(client.client_secret) > 3:
+            masked_client_text = (
+                f"{client.client_secret[:3]}{'X' * len(client.client_secret[3:])}"
+            )
+        else:
+            masked_client_text = "XXX"
+        logger.debug(f"OAuth client: {client.client_id} {masked_client_text}")
+        token: dict[str, Any] = await client.authorize_access_token(request)  # type: ignore[no-untyped-call]
 
-        return token
+        return await self.process_token_async(
+            code=code,
+            state_decoded=state_decoded,
+            token_dict=token,
+            audience=audience,
+            issuer=issuer,
+            url=url,
+        )
+
+    # noinspection PyMethodMayBeStatic
+    async def process_token_async(
+        self,
+        *,
+        code: str | None,
+        state_decoded: Dict[str, Any],
+        token_dict: dict[str, Any],
+        audience: str | None,
+        issuer: str | None,
+        url: str | None,
+    ) -> Response:
+        """
+        Process the token asynchronously.  Subclass can override this method to customize token processing.
+
+        :param code:
+        :param state_decoded:
+        :param token_dict:
+        :param audience:
+        :param issuer:
+        :param url:
+        :return: JSONResponse containing the token dictionary.
+        """
+        logger.debug(f"Processing token: {code}")
+        return JSONResponse(token_dict)
 
     async def create_signout_url(self, request: Request) -> str:
         """
@@ -128,3 +207,48 @@ class FastAPIAuthManager(AuthManager):
         logout_url = httpx.URL(end_session_endpoint).copy_merge_params(params)
         logger.info(f"Constructed signout URL: {logout_url}")
         return str(logout_url)
+
+    async def sign_out(
+        self,
+        *,
+        request: Request,
+    ) -> Response:
+        """
+        Handle the sign_out route for authentication.
+        This route logs out the user by clearing authentication tokens and optionally redirects to a confirmation page or login.
+        Args:
+            request (Request): The incoming request object.
+        """
+        logger.info(f"Received request for signout: {request.url}")
+        try:
+            sign_out_url = await self.create_signout_url(request=request)
+
+            await self.process_sign_out_async(
+                request=request,
+            )
+            # If sign_out_url is provided, redirect to it
+            if sign_out_url:
+                logger.info(f"Redirecting to sign_out URL: {sign_out_url}")
+                return RedirectResponse(sign_out_url, status_code=302)
+            # Otherwise, return a simple confirmation page
+            html_content = "<html><body><h2>Signed Out</h2><p>You have been signed out.</p></body></html>"
+            return HTMLResponse(content=html_content, status_code=200)
+        except Exception as e:
+            exc: str = traceback.format_exc()
+            logger.error(f"Error processing sign_out: {e}\n{exc}")
+            return JSONResponse(
+                content={"error": f"Error processing sign_out: {e}\n{exc}"},
+                status_code=500,
+            )
+
+    async def process_sign_out_async(
+        self,
+        *,
+        request: Request,
+    ) -> None:
+        """
+        Process the sign_out asynchronously.  Subclass can override this method to customize sign_out processing.
+
+        :param request:
+        """
+        pass

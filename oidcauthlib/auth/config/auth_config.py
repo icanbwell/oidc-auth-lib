@@ -7,9 +7,7 @@ class AuthConfig(BaseModel):
     Represent the configuration for an auth provider.  Usually read from environment variables.
     """
 
-    model_config = ConfigDict(
-        extra="forbid"  # Prevents any additional properties
-    )
+    model_config = ConfigDict(extra="forbid")  # Prevents any additional properties
 
     auth_provider: str
     """The name of the auth provider, typically used to identify the provider in logs and error messages."""

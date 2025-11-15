@@ -32,10 +32,8 @@ setup-pre-commit:
 	chmod +x ./.git/hooks/pre-commit
 
 .PHONY:run-pre-commit
-run-pre-commit:
-	pre-commit run --all-files || true
-	pre-commit run --all-files
-
+run-pre-commit: setup-pre-commit
+	./.git/hooks/pre-commit
 
 .PHONY:update
 update: down Pipfile.lock setup-pre-commit  ## Updates all the packages using Pipfile

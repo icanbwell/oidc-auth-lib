@@ -1,6 +1,7 @@
 import logging
 import uuid
 from datetime import datetime, timezone
+from typing import override
 
 from bson import ObjectId
 
@@ -68,12 +69,14 @@ class OAuthMongoCache(OAuthCache):
             )
 
     @property
+    @override
     def id(self) -> uuid.UUID:
         """
         Get the unique identifier for this cache instance.
         """
         return self.id_
 
+    @override
     async def delete(self, key: str) -> None:
         """
         Delete a cache entry.
@@ -92,7 +95,7 @@ class OAuthMongoCache(OAuthCache):
         disable_delete: bool | None = (
             self.environment_variables.mongo_db_cache_disable_delete
         )
-        if cache_item is not None and cache_item.id:
+        if cache_item is not None and cache_item.id is not None:
             # delete the cache item if it exists
             logger.debug(f" ====== Deleting {cache_item.id} =====")
             if disable_delete:
@@ -111,6 +114,7 @@ class OAuthMongoCache(OAuthCache):
                     document_id=cache_item.id,
                 )
 
+    @override
     async def get(self, key: str, default: str | None = None) -> str | None:
         """
         Retrieve a value from the cache.
@@ -132,6 +136,7 @@ class OAuthMongoCache(OAuthCache):
         )
         return cache_item.value if cache_item is not None else default
 
+    @override
     async def set(self, key: str, value: str, expires: int | None = None) -> None:
         """
         Set a value in the cache with optional expiration.
