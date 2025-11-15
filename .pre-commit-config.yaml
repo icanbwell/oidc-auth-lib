@@ -130,7 +130,7 @@ repos:
     rev: 0.34.1
     hooks:
       - id: check-github-workflows
-        name: github-actions · Validate gh workflow files"
+        name: github-actions · Validate gh workflow files
         args: ["--verbose"]
       - id: check-taskfile
         name: "taskfile · Validate Task configuration"
