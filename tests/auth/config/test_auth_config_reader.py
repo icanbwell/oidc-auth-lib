@@ -1,19 +1,19 @@
 from oidcauthlib.auth.config.auth_config_reader import AuthConfigReader
 from oidcauthlib.auth.config.auth_config import AuthConfig
 import pytest
-from typing import Any, Dict, List, override
+from typing import Any, Dict, List, override, Optional
 
 from oidcauthlib.utilities.environment.environment_variables import EnvironmentVariables
 
 
 class DummyEnvVars(EnvironmentVariables):
-    def __init__(self, providers: List[str], configs: Dict[str, Any]) -> None:
-        self._providers: List[str] = providers
-        self._configs: Dict[str, Any] = configs
+    def __init__(self, providers: list[str], configs: dict[str, Any]) -> None:
+        self._providers: Optional[list[str]] = providers
+        self._configs: dict[str, Any] = configs
 
     @property
     @override
-    def auth_providers(self) -> list[str] | None:
+    def auth_providers(self) -> Optional[list[str]]:
         return self._providers
 
     def get(self, key: str, default: Any = None) -> Any:
