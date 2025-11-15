@@ -43,7 +43,22 @@ class FastAPIAuthManager(AuthManager):
         logger.debug(f"Issuer retrieved: {issuer}")
         url: str | None = state_decoded.get("url")
         logger.debug(f"URL retrieved: {url}")
-        client: StarletteOAuth2App = self.oauth.create_client(audience)  # type: ignore[no-untyped-call]
+        logger.debug(f"Creating OAuth2 client for audience: {audience}")
+        if audience is None:
+            raise ValueError("Audience must be provided in the callback")
+        client: StarletteOAuth2App = self.create_oauth_client(audience=audience)
+        masked_client_text: str
+        if client.client_secret is None:
+            masked_client_text = "None"
+        elif client.client_secret == "":
+            masked_client_text = "empty"
+        elif len(client.client_secret) > 3:
+            masked_client_text = (
+                f"{client.client_secret[:3]}{'X' * len(client.client_secret[3:])}"
+            )
+        else:
+            masked_client_text = "XXX"
+        logger.debug(f"OAuth client: {client.client_id} {masked_client_text}")
         token: dict[str, Any] = await client.authorize_access_token(request)  # type: ignore[no-untyped-call]
 
         return token

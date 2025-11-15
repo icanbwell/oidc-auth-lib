@@ -151,7 +151,7 @@ class AuthManager:
             str: The authorization URL to redirect the user to for authentication.
         """
         # default to first audience
-        client: StarletteOAuth2App = await self.create_oauth_client(audience=audience)
+        client: StarletteOAuth2App = self.create_oauth_client(audience=audience)
         if client is None:
             raise ValueError(f"Client for audience {audience} not found")
         state_content: Dict[str, str | None] = {
@@ -183,7 +183,7 @@ class AuthManager:
         await client.save_authorize_data(request=None, redirect_uri=redirect_uri, **rv)  # type: ignore[no-untyped-call]
         return cast(str, rv["url"])
 
-    async def create_oauth_client(self, *, audience: str) -> StarletteOAuth2App:
+    def create_oauth_client(self, *, audience: str) -> StarletteOAuth2App:
         return cast(StarletteOAuth2App, self.oauth.create_client(audience))  # type: ignore[no-untyped-call]
 
     @staticmethod
