@@ -94,13 +94,28 @@ class SimpleContainer(IContainer):
     def transient[T](
         self, service_type: type[T], factory: ServiceFactory[T]
     ) -> "SimpleContainer":
-        """Register a transient service"""
-
-        def create_new(container: IContainer) -> T:
-            return factory(container)
-
-        self.register(service_type, create_new)
+        """Register a transient service (new instance every time)"""
+        self._factories[service_type] = factory
+        # Explicitly ensure it's not in singleton or scoped types
+        self._singleton_types.discard(service_type)
+        self._scoped_types.discard(service_type)
         return self
+
+    def scoped[T](
+        self, service_type: type[T], factory: ServiceFactory[T]
+    ) -> "SimpleContainer":
+        """Register a scoped service (one instance per container/request)"""
+        self._factories[service_type] = factory
+        self._scoped_types.add(service_type)
+        self._singleton_types.discard(service_type)  # Ensure not in singleton
+        return self
+
+    def create_scope(self) -> "SimpleContainer":
+        """
+        Create a child container that inherits all registrations but has its own scope.
+        Useful for request-scoped services in web applications.
+        """
+        return SimpleContainer(parent=self)
 
     @classmethod
     def clear_singletons(cls) -> None:

@@ -35,3 +35,12 @@ class IContainer(IResolvable, Protocol):
     def transient[T](self, service_type: type[T], factory: "ServiceFactory[T]") -> Self:
         """Register a transient service."""
         ...
+
+    def scoped[T](self, service_type: type[T], factory: "ServiceFactory[T]") -> Self:
+        """Register a scoped service (one instance per container/request)."""
+        ...
+
+    def create_scope(self) -> Self:
+        """Create a child container for scoped services."""
+        ...
+
