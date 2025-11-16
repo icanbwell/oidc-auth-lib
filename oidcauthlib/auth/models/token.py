@@ -18,16 +18,25 @@ class Token(BaseModel):
     """
 
     model_config = ConfigDict(extra="forbid")  # Prevents any additional properties
-    token: str = Field(...)
-    """The token string."""
-    expires: Optional[datetime] = Field(default=None)
-    """The expiration time of the token."""
-    issued: Optional[datetime] = Field(default=None)
-    """The time when the token was issued."""
-    claims: Optional[dict[str, Any]] = Field(default=None)
-    """Additional claims associated with the token."""
-    issuer: Optional[str] = Field(default=None)
-    """The issuer of the token, typically the authorization server."""
+    token: str = Field(
+        ..., description="The raw encoded token string (e.g., JWS compact form)."
+    )
+    expires: Optional[datetime] = Field(
+        default=None,
+        description="The expiration time of the token (exp claim) as a timezone-aware datetime if provided.",
+    )
+    issued: Optional[datetime] = Field(
+        default=None,
+        description="The time when the token was issued (iat claim) as a timezone-aware datetime if provided.",
+    )
+    claims: Optional[dict[str, Any]] = Field(
+        default=None,
+        description="Decoded claims extracted from the token payload without signature verification.",
+    )
+    issuer: Optional[str] = Field(
+        default=None,
+        description="The issuer of the token (iss claim), typically the authorization server base URL.",
+    )
 
     def is_valid(self) -> bool:
         """

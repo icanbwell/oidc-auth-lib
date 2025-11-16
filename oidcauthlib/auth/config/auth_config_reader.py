@@ -83,8 +83,14 @@ class AuthConfigReader:
             raise ValueError(
                 f"AUTH_AUDIENCE_{auth_provider} environment variable must be set"
             )
+        friendly_name: str | None = os.getenv(f"AUTH_FRIENDLY_NAME_{auth_provider}")
+        if not friendly_name:
+            # if no friendly name is set, use the auth_provider as the friendly name
+            friendly_name = auth_provider
+
         return AuthConfig(
             auth_provider=auth_provider,
+            friendly_name=friendly_name,
             audience=audience,
             issuer=issuer,
             client_id=auth_client_id,

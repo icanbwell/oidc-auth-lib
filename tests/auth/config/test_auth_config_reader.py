@@ -64,6 +64,7 @@ def test_get_auth_configs_for_all_auth_providers() -> None:
     def dummy_get_config_for_auth_provider(auth_provider: str) -> AuthConfig:
         return AuthConfig(
             auth_provider=auth_provider,
+            friendly_name=auth_provider,
             audience="aud",
             issuer="iss",
             client_id="cid",

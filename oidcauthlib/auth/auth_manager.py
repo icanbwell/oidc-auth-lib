@@ -103,7 +103,7 @@ class AuthManager:
         if self.redirect_uri is None:
             raise ValueError("AUTH_REDIRECT_URI environment variable must be set")
         # https://docs.authlib.org/en/latest/client/frameworks.html#frameworks-clients
-        self.oauth: OAuth = OAuth(cache=self.cache)  # type: ignore[no-untyped-call]
+        self._oauth: OAuth = OAuth(cache=self.cache)  # type: ignore[no-untyped-call]
         # read AUTH_PROVIDERS comma separated list from the environment variable and register the OIDC provider for each provider
         self.auth_configs: List[AuthConfig] = (
             self.auth_config_reader.get_auth_configs_for_all_auth_providers()
@@ -111,8 +111,8 @@ class AuthManager:
 
         auth_config: AuthConfig
         for auth_config in self.auth_configs:
-            self.oauth.register(
-                name=auth_config.auth_provider,
+            self._oauth.register(
+                name=auth_config.auth_provider.lower(),
                 client_id=auth_config.client_id,
                 client_secret=auth_config.client_secret,
                 server_metadata_url=auth_config.well_known_uri,
@@ -187,7 +187,9 @@ class AuthManager:
         return cast(str, rv["url"])
 
     def create_oauth_client(self, *, name: str) -> StarletteOAuth2App:
-        return cast(StarletteOAuth2App, self.oauth.create_client(name=name))  # type: ignore[no-untyped-call]
+        if not name:
+            raise ValueError("name must not be empty")
+        return cast(StarletteOAuth2App, self._oauth.create_client(name=name.lower()))  # type: ignore[no-untyped-call]
 
     @staticmethod
     async def login_and_get_token_with_username_password_async(

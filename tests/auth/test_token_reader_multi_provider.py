@@ -104,6 +104,7 @@ async def test_token_validation_rejects_wrong_issuer_and_audience() -> None:
     # Setup two auth configs
     auth_config_1 = AuthConfig(
         auth_provider="PROVIDER1",
+        friendly_name="Test Provider1",
         audience="audience1",
         issuer="https://provider1.example.com",
         client_id="client1",
@@ -112,6 +113,7 @@ async def test_token_validation_rejects_wrong_issuer_and_audience() -> None:
     )
     auth_config_2 = AuthConfig(
         auth_provider="PROVIDER2",
+        friendly_name="Test Provider2",
         audience="audience2",
         issuer="https://provider2.example.com",
         client_id="client2",
