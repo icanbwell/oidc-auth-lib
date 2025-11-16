@@ -21,6 +21,9 @@ from oidcauthlib.auth.exceptions.authorization_needed_exception import (
     AuthorizationNeededException,
 )
 from oidcauthlib.auth.token_reader import TokenReader
+from oidcauthlib.auth.well_known_configuration.well_known_configuration_manager import (
+    WellKnownConfigurationManager,
+)
 from oidcauthlib.utilities.environment.abstract_environment_variables import (
     AbstractEnvironmentVariables,
 )
@@ -47,6 +50,7 @@ class AuthManager:
         environment_variables: AbstractEnvironmentVariables,
         auth_config_reader: AuthConfigReader,
         token_reader: TokenReader,
+        well_known_configuration_manager: WellKnownConfigurationManager,
     ) -> None:
         """
         Initialize the AuthManager with the necessary configuration for OIDC PKCE.
@@ -87,6 +91,17 @@ class AuthManager:
         if not isinstance(self.token_reader, TokenReader):
             raise TypeError("token_reader must be an instance of TokenReader")
 
+        self.well_known_configuration_manager: WellKnownConfigurationManager = (
+            well_known_configuration_manager
+        )
+        if self.well_known_configuration_manager is None:
+            raise ValueError("well_known_configuration_manager must not be None")
+        if not isinstance(
+            self.well_known_configuration_manager, WellKnownConfigurationManager
+        ):
+            raise TypeError(
+                "well_known_configuration_manager must be an instance of WellKnownConfigurationManager"
+            )
         oauth_cache_type = environment_variables.oauth_cache
         self.cache: OAuthCache = (
             OAuthMemoryCache()
@@ -108,13 +123,22 @@ class AuthManager:
             self.auth_config_reader.get_auth_configs_for_all_auth_providers()
         )
 
+    async def ensure_initialized_async(self) -> None:
         auth_config: AuthConfig
         for auth_config in self.auth_configs:
+            server_metadata: (
+                dict[str, Any] | None
+            ) = await self.well_known_configuration_manager.get_async(
+                auth_config=auth_config
+            )
             self._oauth.register(
                 name=auth_config.auth_provider.lower(),
                 client_id=auth_config.client_id,
                 client_secret=auth_config.client_secret,
-                server_metadata_url=auth_config.well_known_uri,
+                server_metadata_url=auth_config.well_known_uri
+                if server_metadata is None
+                else None,
+                server_metadata=server_metadata,
                 client_kwargs={
                     "scope": "openid email",
                     "code_challenge_method": "S256",
@@ -154,7 +178,7 @@ class AuthManager:
             str: The authorization URL to redirect the user to for authentication.
         """
         # default to first audience
-        client: StarletteOAuth2App = self.create_oauth_client(name=auth_provider)
+        client: StarletteOAuth2App = await self.create_oauth_client(name=auth_provider)
         if client is None:
             raise ValueError(f"Client for audience {audience} not found")
         state_content: Dict[str, str | None] = {
@@ -182,9 +206,10 @@ class AuthManager:
         await client.save_authorize_data(request=None, redirect_uri=redirect_uri, **rv)  # type: ignore[no-untyped-call]
         return cast(str, rv["url"])
 
-    def create_oauth_client(self, *, name: str) -> StarletteOAuth2App:
+    async def create_oauth_client(self, *, name: str) -> StarletteOAuth2App:
         if not name:
             raise ValueError("name must not be empty")
+        await self.ensure_initialized_async()
         return cast(StarletteOAuth2App, self._oauth.create_client(name=name.lower()))  # type: ignore[no-untyped-call]
 
     @staticmethod

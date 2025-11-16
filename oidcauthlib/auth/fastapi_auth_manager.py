@@ -50,17 +50,8 @@ class FastAPIAuthManager(AuthManager):
             environment_variables=environment_variables,
             auth_config_reader=auth_config_reader,
             token_reader=token_reader,
+            well_known_configuration_manager=well_known_configuration_manager,
         )
-        self.well_known_configuration_manager: WellKnownConfigurationManager = (
-            well_known_configuration_manager
-        )
-        if not isinstance(
-            self.well_known_configuration_manager,
-            WellKnownConfigurationManager,
-        ):
-            raise TypeError(
-                "well_known_configuration_manager must be an instance of WellKnownConfigurationManager"
-            )
 
     async def read_callback_response(self, *, request: Request) -> Response:
         """
@@ -94,7 +85,7 @@ class FastAPIAuthManager(AuthManager):
         )
         if auth_config is None:
             raise ValueError(f"No AuthConfig found for auth provider: {auth_provider}")
-        client: StarletteOAuth2App = self.create_oauth_client(name=auth_provider)
+        client: StarletteOAuth2App = await self.create_oauth_client(name=auth_provider)
         # create masked client secret for logging
         masked_client_text: str
         if client.client_secret is None:
