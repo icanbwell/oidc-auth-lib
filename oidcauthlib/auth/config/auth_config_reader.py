@@ -56,6 +56,7 @@ class AuthConfigReader:
         if existing is not None:
             logger.debug(
                 f"Returning cached auth configs for {len(existing)} provider(s)"
+                + f" ({', '.join(ac.auth_provider for ac in existing)})"
             )
             return existing
         # Double-checked locking to ensure only one thread performs initialization
@@ -84,7 +85,10 @@ class AuthConfigReader:
                     logger.warning(f"No config found for provider: {auth_provider}")
             # Assign atomically while still under lock
             self._auth_configs = auth_configs
-            logger.info(f"Loaded {len(auth_configs)} auth config(s) successfully")
+            logger.info(
+                f"Loaded {len(auth_configs)} auth config(s) successfully"
+                + f" ({', '.join(ac.auth_provider for ac in auth_configs)})"
+            )
             return auth_configs
 
     def get_config_for_auth_provider(self, *, auth_provider: str) -> AuthConfig | None:
@@ -98,7 +102,7 @@ class AuthConfigReader:
         """
         logger.debug(f"Getting config for auth provider: {auth_provider}")
         for auth_config in self.get_auth_configs_for_all_auth_providers():
-            if auth_config.auth_provider == auth_provider:
+            if auth_config.auth_provider.lower() == auth_provider.lower():
                 logger.debug(f"Found config for auth provider: {auth_provider}")
                 return auth_config
         logger.warning(f"No config found for auth provider: {auth_provider}")
@@ -120,45 +124,49 @@ class AuthConfigReader:
             logger.error("auth_provider must not be None")
             raise ValueError("auth_provider must not be None")
         # environment variables are case-insensitive, but we standardize to upper case
-        auth_provider = auth_provider.upper()
-        logger.debug(f"Standardized auth provider name to: {auth_provider}")
+        auth_provider_upper: str = auth_provider.upper()
+        logger.debug(f"Standardized auth provider name to: {auth_provider_upper}")
         # read client_id and client_secret from the environment variables
-        auth_client_id: str | None = os.getenv(f"AUTH_CLIENT_ID_{auth_provider}")
+        auth_client_id: str | None = os.getenv(f"AUTH_CLIENT_ID_{auth_provider_upper}")
         if auth_client_id is None:
             logger.error(
-                f"AUTH_CLIENT_ID_{auth_provider} environment variable is not set"
+                f"AUTH_CLIENT_ID_{auth_provider_upper} environment variable is not set"
             )
             raise ValueError(
-                f"AUTH_CLIENT_ID_{auth_provider} environment variable must be set"
+                f"AUTH_CLIENT_ID_{auth_provider_upper} environment variable must be set"
             )
         auth_client_secret: str | None = os.getenv(
-            f"AUTH_CLIENT_SECRET_{auth_provider}"
+            f"AUTH_CLIENT_SECRET_{auth_provider_upper}"
         )
         if auth_client_secret:
-            logger.debug(f"Found client secret for provider: {auth_provider}")
+            logger.debug(f"Found client secret for provider: {auth_provider_upper}")
         else:
-            logger.debug(f"No client secret found for provider: {auth_provider}")
+            logger.debug(f"No client secret found for provider: {auth_provider_upper}")
         auth_well_known_uri: str | None = os.getenv(
-            f"AUTH_WELL_KNOWN_URI_{auth_provider}"
+            f"AUTH_WELL_KNOWN_URI_{auth_provider_upper}"
         )
         if auth_well_known_uri is None:
             logger.error(
-                f"AUTH_WELL_KNOWN_URI_{auth_provider} environment variable is not set"
+                f"AUTH_WELL_KNOWN_URI_{auth_provider_upper} environment variable is not set"
             )
             raise ValueError(
-                f"AUTH_WELL_KNOWN_URI_{auth_provider} environment variable must be set"
+                f"AUTH_WELL_KNOWN_URI_{auth_provider_upper} environment variable must be set"
             )
-        issuer: str | None = os.getenv(f"AUTH_ISSUER_{auth_provider}")
-        logger.debug(f"Issuer for {auth_provider}: {issuer if issuer else 'not set'}")
-        audience: str | None = os.getenv(f"AUTH_AUDIENCE_{auth_provider}")
+        issuer: str | None = os.getenv(f"AUTH_ISSUER_{auth_provider_upper}")
+        logger.debug(
+            f"Issuer for {auth_provider_upper}: {issuer if issuer else 'not set'}"
+        )
+        audience: str | None = os.getenv(f"AUTH_AUDIENCE_{auth_provider_upper}")
         if audience is None:
             logger.error(
-                f"AUTH_AUDIENCE_{auth_provider} environment variable is not set"
+                f"AUTH_AUDIENCE_{auth_provider_upper} environment variable is not set"
             )
             raise ValueError(
-                f"AUTH_AUDIENCE_{auth_provider} environment variable must be set"
+                f"AUTH_AUDIENCE_{auth_provider_upper} environment variable must be set"
             )
-        friendly_name: str | None = os.getenv(f"AUTH_FRIENDLY_NAME_{auth_provider}")
+        friendly_name: str | None = os.getenv(
+            f"AUTH_FRIENDLY_NAME_{auth_provider_upper}"
+        )
         if not friendly_name:
             # if no friendly name is set, use the auth_provider as the friendly name
             friendly_name = auth_provider
