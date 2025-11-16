@@ -195,3 +195,16 @@ class Token(BaseModel):
         if isinstance(aud, list):
             return aud
         return aud if isinstance(aud, str) else None
+
+    @property
+    def client_id(self) -> str | None:
+        """
+        Get the client ID associated with the token.
+        Returns:
+            str: The client ID associated with the token.
+        """
+        return (
+            (self.claims.get("cid") or self.claims.get("client_id"))
+            if self.claims
+            else None
+        )
