@@ -36,10 +36,10 @@ async def test_get_async_caches_on_first_call() -> None:
             well_known_uri=uri,
         )
         result = await cache.read_async(auth_config=auth_config)
-
+        assert result is not None
         assert result["issuer"] == "https://provider.example.com"
         assert result["jwks_uri"] == "https://provider.example.com/jwks"
-        assert uri in cache.cache
+        assert uri in cache._cache
         assert cache.size() == 1
         mock_client.get.assert_called_once_with(uri)
 
@@ -62,9 +62,17 @@ async def test_get_async_uses_cache_on_subsequent_calls() -> None:
     mock_client.__aexit__.return_value = None
 
     with patch("httpx.AsyncClient", return_value=mock_client):
-        r1 = await cache.read_async(well_known_uri=uri)
-        r2 = await cache.read_async(well_known_uri=uri)
-        r3 = await cache.read_async(well_known_uri=uri)
+        auth_config: AuthConfig = AuthConfig(
+            auth_provider="TEST_PROVIDER",
+            friendly_name="Test Provider",
+            audience="test_audience",
+            issuer="https://provider.example.com",
+            client_id="test_client_id",
+            well_known_uri=uri,
+        )
+        r1 = await cache.read_async(auth_config=auth_config)
+        r2 = await cache.read_async(auth_config=auth_config)
+        r3 = await cache.read_async(auth_config=auth_config)
 
         assert r1 == r2 == r3
         assert mock_client.get.call_count == 1
@@ -89,7 +97,15 @@ async def test_get_async_concurrent_single_fetch() -> None:
     mock_client.__aexit__.return_value = None
 
     with patch("httpx.AsyncClient", return_value=mock_client):
-        tasks = [cache.read_async(well_known_uri=uri) for _ in range(50)]
+        auth_config: AuthConfig = AuthConfig(
+            auth_provider="TEST_PROVIDER",
+            friendly_name="Test Provider",
+            audience="test_audience",
+            issuer="https://provider.example.com",
+            client_id="test_client_id",
+            well_known_uri=uri,
+        )
+        tasks = [cache.read_async(auth_config=auth_config) for _ in range(50)]
         results = await asyncio.gather(*tasks)
 
         assert all(r == results[0] for r in results)
@@ -127,14 +143,31 @@ async def test_get_async_multiple_uris_concurrent() -> None:
 
     with patch("httpx.AsyncClient", return_value=mock_client):
         tasks = []
+
         for _ in range(30):
-            tasks.append(cache.read_async(well_known_uri=uri1))
-            tasks.append(cache.read_async(well_known_uri=uri2))
+            auth_config1: AuthConfig = AuthConfig(
+                auth_provider="TEST_PROVIDER",
+                friendly_name="Test Provider",
+                audience="test_audience",
+                issuer="https://provider.example.com",
+                client_id="test_client_id",
+                well_known_uri=uri1,
+            )
+            auth_config2: AuthConfig = AuthConfig(
+                auth_provider="TEST_PROVIDER",
+                friendly_name="Test Provider",
+                audience="test_audience",
+                issuer="https://provider.example.com",
+                client_id="test_client_id",
+                well_known_uri=uri2,
+            )
+            tasks.append(cache.read_async(auth_config=auth_config1))
+            tasks.append(cache.read_async(auth_config=auth_config2))
         results = await asyncio.gather(*tasks)
 
         assert len(results) == 60
         assert cache.size() == 2
-        assert uri1 in cache.cache and uri2 in cache.cache
+        assert uri1 in cache._cache and uri2 in cache._cache
         assert mock_client.get.call_count == 2, (
             f"Expected 2 HTTP calls, got {mock_client.get.call_count}"
         )
@@ -158,12 +191,20 @@ async def test_clear_resets_cache() -> None:
     mock_client.__aexit__.return_value = None
 
     with patch("httpx.AsyncClient", return_value=mock_client):
-        await cache.read_async(well_known_uri=uri)
+        auth_config: AuthConfig = AuthConfig(
+            auth_provider="TEST_PROVIDER",
+            friendly_name="Test Provider",
+            audience="test_audience",
+            issuer="https://provider.example.com",
+            client_id="test_client_id",
+            well_known_uri=uri,
+        )
+        await cache.read_async(auth_config=auth_config)
 
         assert cache.size() == 1
         cache.clear()
         assert cache.size() == 0
 
         # Fetch again after clear triggers new HTTP call
-        await cache.read_async(well_known_uri=uri)
+        await cache.read_async(auth_config=auth_config)
         assert mock_client.get.call_count == 2
