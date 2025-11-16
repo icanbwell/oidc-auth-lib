@@ -106,6 +106,7 @@ class WellKnownConfigurationCache:
                     )
                     response = await client.get(well_known_uri)
                     response.raise_for_status()
+                    # Format: https://docs.authlib.org/en/latest/oauth/oidc/discovery.html#openid-connect-discovery
                     config = cast(Dict[str, Any], response.json())
                     self._cache[well_known_uri] = config
                     await self.read_jwks_async(
