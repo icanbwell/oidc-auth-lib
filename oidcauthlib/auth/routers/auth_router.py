@@ -143,10 +143,8 @@ class AuthRouter:
 
             url = await auth_manager.create_authorization_url(
                 auth_provider=auth_config.auth_provider,
-                client_id=auth_config.client_id,
                 redirect_uri=str(redirect_uri1),
                 audience=my_audience,
-                issuer=issuer,
                 url=str(request.url),
                 referring_email=environment_variables.oauth_referring_email,
                 referring_subject=environment_variables.oauth_referring_subject,

@@ -12,6 +12,7 @@ def test_auth_config_creation() -> None:
         client_id="cid",
         client_secret="secret",  # pragma: allowlist secret
         well_known_uri="uri",
+        scope="openid profile email",
     )
     assert config.auth_provider == "test"
     assert config.audience == "aud"

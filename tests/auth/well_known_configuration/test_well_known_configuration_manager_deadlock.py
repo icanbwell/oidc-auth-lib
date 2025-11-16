@@ -47,6 +47,7 @@ async def test_concurrent_initialization_no_deadlock() -> None:
             issuer="https://provider1.example.com",
             client_id="client1",
             well_known_uri=uri1,
+            scope="openid profile email",
         ),
         AuthConfig(
             auth_provider="PROVIDER2",
@@ -55,6 +56,7 @@ async def test_concurrent_initialization_no_deadlock() -> None:
             issuer="https://provider2.example.com",
             client_id="client2",
             well_known_uri=uri2,
+            scope="openid profile email",
         ),
     ]
 
@@ -119,6 +121,7 @@ async def test_get_async_during_initialization_no_deadlock() -> None:
         issuer="https://provider.example.com",
         client_id="client",
         well_known_uri=uri,
+        scope="openid profile email",
     )
 
     with respx.mock:
@@ -171,6 +174,7 @@ async def test_initialization_failure_retries() -> None:
         issuer="https://provider.example.com",
         client_id="client",
         well_known_uri=uri,
+        scope="openid profile email",
     )
 
     call_count = 0
@@ -234,6 +238,7 @@ async def test_refresh_under_concurrent_load_no_deadlock() -> None:
         issuer="https://provider.example.com",
         client_id="client",
         well_known_uri=uri,
+        scope="openid profile email",
     )
 
     with respx.mock:
@@ -292,6 +297,7 @@ async def test_concurrent_refresh_operations() -> None:
         issuer="https://provider.example.com",
         client_id="client",
         well_known_uri=uri,
+        scope="openid profile email",
     )
 
     refresh_count = 0

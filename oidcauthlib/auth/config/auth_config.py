@@ -37,3 +37,8 @@ class AuthConfig(BaseModel):
         default=None,
         description="The URI to the well-known configuration of the auth provider, used to discover endpoints and other metadata.",
     )
+
+    scope: str = Field(
+        ...,
+        description="The scopes requested for the auth provider, typically a space-separated list of scopes.",
+    )

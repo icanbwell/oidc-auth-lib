@@ -34,6 +34,7 @@ async def test_get_async_caches_on_first_call() -> None:
             issuer="https://provider.example.com",
             client_id="test_client_id",
             well_known_uri=uri,
+            scope="openid profile email",
         )
         result = await cache.read_async(auth_config=auth_config)
         assert result is not None
@@ -72,6 +73,7 @@ async def test_get_async_uses_cache_on_subsequent_calls() -> None:
             issuer="https://provider.example.com",
             client_id="test_client_id",
             well_known_uri=uri,
+            scope="openid profile email",
         )
         r1 = await cache.read_async(auth_config=auth_config)
         r2 = await cache.read_async(auth_config=auth_config)
@@ -109,6 +111,7 @@ async def test_get_async_concurrent_single_fetch() -> None:
             issuer="https://provider.example.com",
             client_id="test_client_id",
             well_known_uri=uri,
+            scope="openid profile email",
         )
         tasks = [cache.read_async(auth_config=auth_config) for _ in range(50)]
         results = await asyncio.gather(*tasks)
@@ -160,6 +163,7 @@ async def test_get_async_multiple_uris_concurrent() -> None:
                 issuer="https://provider.example.com",
                 client_id="test_client_id",
                 well_known_uri=uri1,
+                scope="openid profile email",
             )
             auth_config2: AuthConfig = AuthConfig(
                 auth_provider="TEST_PROVIDER",
@@ -168,6 +172,7 @@ async def test_get_async_multiple_uris_concurrent() -> None:
                 issuer="https://provider.example.com",
                 client_id="test_client_id",
                 well_known_uri=uri2,
+                scope="openid profile email",
             )
             tasks.append(cache.read_async(auth_config=auth_config1))
             tasks.append(cache.read_async(auth_config=auth_config2))
@@ -213,6 +218,7 @@ async def test_clear_resets_cache() -> None:
             issuer="https://provider.example.com",
             client_id="test_client_id",
             well_known_uri=uri,
+            scope="openid profile email",
         )
         await cache.read_async(auth_config=auth_config)
 

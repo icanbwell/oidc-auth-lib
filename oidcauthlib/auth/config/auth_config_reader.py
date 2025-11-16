@@ -176,6 +176,10 @@ class AuthConfigReader:
         else:
             logger.debug(f"Friendly name for {auth_provider}: {friendly_name}")
 
+        scope: str | None = os.getenv(f"AUTH_SCOPE_{auth_provider_upper}")
+        if not scope:
+            scope = "openid profile email"
+
         logger.info(f"Successfully read config for auth provider: {auth_provider}")
         return AuthConfig(
             auth_provider=auth_provider,
@@ -185,6 +189,7 @@ class AuthConfigReader:
             client_id=auth_client_id,
             client_secret=auth_client_secret,
             well_known_uri=auth_well_known_uri,
+            scope=scope,
         )
 
     def get_audience_for_provider(self, *, auth_provider: str) -> str:

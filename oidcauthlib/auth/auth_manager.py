@@ -150,7 +150,7 @@ class AuthManager:
                 # else None,
                 # server_metadata=server_metadata,
                 client_kwargs={
-                    "scope": "openid email",
+                    "scope": auth_config.scope,
                     "code_challenge_method": "S256",
                     "transport": LoggingTransport(httpx.AsyncHTTPTransport()),
                 },
@@ -160,10 +160,8 @@ class AuthManager:
         self,
         *,
         auth_provider: str,
-        client_id: str,
         redirect_uri: str,
         audience: str,
-        issuer: str,
         url: str | None,
         referring_email: str | None,
         referring_subject: str | None,
@@ -176,11 +174,9 @@ class AuthManager:
         which is used to identify the tool that initiated the authentication process.
         Args:
             auth_provider (str): The name of the OIDC provider.
-            client_id (str): The client ID of the OIDC provider.
             redirect_uri (str): The redirect URI to which the OIDC provider will send the user
                 after authentication.
             audience (str): The audience we need to get a token for.
-            issuer (str): The issuer of the OIDC provider, used to validate the token.
             url (str): The URL of the tool that has requested this.
             referring_email (str): The email of the user who initiated the request.
             referring_subject (str): The subject of the user who initiated the request.

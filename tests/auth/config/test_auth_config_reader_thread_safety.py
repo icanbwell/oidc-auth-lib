@@ -74,6 +74,7 @@ class CountingAuthConfigReader(AuthConfigReader):
             client_id=f"cid-{auth_provider}",
             client_secret=None,
             well_known_uri=f"https://well-known/{auth_provider}",
+            scope="openid profile email",
         )
 
     def calls(self, provider: str) -> int:
