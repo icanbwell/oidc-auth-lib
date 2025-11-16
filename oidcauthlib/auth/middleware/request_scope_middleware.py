@@ -10,7 +10,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
 
-from oidcauthlib.container.simple_container import SimpleContainer
+from oidcauthlib.container.container_registry import ContainerRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +50,7 @@ class RequestScopeMiddleware(BaseHTTPMiddleware):
         request.state.request_id = request_id
 
         # Begin request scope
-        SimpleContainer.begin_request_scope(request_id)
+        ContainerRegistry.begin_request_scope(request_id)
         logger.info(
             f"→ {request.method} {request.url.path} (request_id={request_id[:8]}...)"
         )
@@ -80,5 +80,5 @@ class RequestScopeMiddleware(BaseHTTPMiddleware):
 
         finally:
             # Always clean up request scope
-            SimpleContainer.end_request_scope()
+            ContainerRegistry.end_request_scope()
             logger.debug(f"Request scope cleaned up (request_id={request_id[:8]}...)")

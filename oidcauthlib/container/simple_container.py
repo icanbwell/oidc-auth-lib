@@ -38,11 +38,15 @@ class RequestScopeNotActiveError(ContainerError):
 
 # Store a mapping of request_id -> instances
 _request_scope_storage: ContextVar[Dict[str, Dict[type[Any], Any]] | None] = ContextVar(
-    "request_scope_storage"
+    "request_scope_storage",
+    default=None,  # ADDED default to avoid initial LookupError
 )
 
 # Store current request ID
-_current_request_id: ContextVar[str | None] = ContextVar("current_request_id")
+_current_request_id: ContextVar[str | None] = ContextVar(
+    "current_request_id",
+    default=None,  # ADDED default to avoid initial LookupError
+)
 
 
 class SimpleContainer(IContainer):
