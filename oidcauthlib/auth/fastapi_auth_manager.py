@@ -71,14 +71,20 @@ class FastAPIAuthManager(AuthManager):
         logger.debug(f"Audience retrieved: {audience}")
         issuer: str | None = state_decoded.get("issuer")
         if issuer is None:
-            raise ValueError("Issuer must be provided in the callback")
+            raise ValueError("Issuer must be provided in the state")
         logger.debug(f"Issuer retrieved: {issuer}")
         url: str | None = state_decoded.get("url")
         logger.debug(f"URL retrieved: {url}")
         logger.debug(f"Creating OAuth2 client for audience: {audience}")
         if audience is None:
-            raise ValueError("Audience must be provided in the callback")
-        client: StarletteOAuth2App = self.create_oauth_client(audience=audience)
+            raise ValueError("Audience must be provided in the state")
+        client_id: str | None = state_decoded.get("client_id")
+        if client_id is None:
+            raise ValueError("Client ID must be provided in the state")
+        auth_provider: str | None = state_decoded.get("auth_provider")
+        if auth_provider is None:
+            raise ValueError("Auth provider must be provided in the state")
+        client: StarletteOAuth2App = self.create_oauth_client(name=auth_provider)
         masked_client_text: str
         if client.client_secret is None:
             masked_client_text = "None"
@@ -90,8 +96,10 @@ class FastAPIAuthManager(AuthManager):
             )
         else:
             masked_client_text = "XXX"
-        logger.debug(f"OAuth client: {client.client_id} {masked_client_text}")
-        token: dict[str, Any] = await client.authorize_access_token(request)  # type: ignore[no-untyped-call]
+        logger.debug(
+            f"OAuth client: {auth_provider} {client.client_id} {masked_client_text}"
+        )
+        token: dict[str, Any] = await client.authorize_access_token(request=request)  # type: ignore[no-untyped-call]
 
         return await self.process_token_async(
             code=code,

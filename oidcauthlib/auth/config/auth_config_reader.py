@@ -63,6 +63,10 @@ class AuthConfigReader:
         auth_provider = auth_provider.upper()
         # read client_id and client_secret from the environment variables
         auth_client_id: str | None = os.getenv(f"AUTH_CLIENT_ID_{auth_provider}")
+        if auth_client_id is None:
+            raise ValueError(
+                f"AUTH_CLIENT_ID_{auth_provider} environment variable must be set"
+            )
         auth_client_secret: str | None = os.getenv(
             f"AUTH_CLIENT_SECRET_{auth_provider}"
         )

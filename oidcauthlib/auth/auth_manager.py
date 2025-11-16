@@ -105,14 +105,14 @@ class AuthManager:
         # https://docs.authlib.org/en/latest/client/frameworks.html#frameworks-clients
         self.oauth: OAuth = OAuth(cache=self.cache)  # type: ignore[no-untyped-call]
         # read AUTH_PROVIDERS comma separated list from the environment variable and register the OIDC provider for each provider
-        auth_configs: List[AuthConfig] = (
+        self.auth_configs: List[AuthConfig] = (
             self.auth_config_reader.get_auth_configs_for_all_auth_providers()
         )
 
         auth_config: AuthConfig
-        for auth_config in auth_configs:
+        for auth_config in self.auth_configs:
             self.oauth.register(
-                name=auth_config.audience,
+                name=auth_config.auth_provider,
                 client_id=auth_config.client_id,
                 client_secret=auth_config.client_secret,
                 server_metadata_url=auth_config.well_known_uri,
@@ -126,6 +126,8 @@ class AuthManager:
     async def create_authorization_url(
         self,
         *,
+        auth_provider: str,
+        client_id: str,
         redirect_uri: str,
         audience: str,
         issuer: str,
@@ -140,6 +142,8 @@ class AuthManager:
         including the redirect URI and state. The state is encoded to include the tool name,
         which is used to identify the tool that initiated the authentication process.
         Args:
+            auth_provider (str): The name of the OIDC provider.
+            client_id (str): The client ID of the OIDC provider.
             redirect_uri (str): The redirect URI to which the OIDC provider will send the user
                 after authentication.
             audience (str): The audience we need to get a token for.
@@ -151,14 +155,13 @@ class AuthManager:
             str: The authorization URL to redirect the user to for authentication.
         """
         # default to first audience
-        client: StarletteOAuth2App = self.create_oauth_client(audience=audience)
+        client: StarletteOAuth2App = self.create_oauth_client(name=auth_provider)
         if client is None:
             raise ValueError(f"Client for audience {audience} not found")
         state_content: Dict[str, str | None] = {
+            "client_id": client_id,
             "audience": audience,
-            "auth_provider": self.auth_config_reader.get_provider_for_audience(
-                audience=audience
-            ),
+            "auth_provider": auth_provider,
             "issuer": issuer,
             "referring_email": referring_email,
             "referring_subject": referring_subject,
@@ -183,8 +186,8 @@ class AuthManager:
         await client.save_authorize_data(request=None, redirect_uri=redirect_uri, **rv)  # type: ignore[no-untyped-call]
         return cast(str, rv["url"])
 
-    def create_oauth_client(self, *, audience: str) -> StarletteOAuth2App:
-        return cast(StarletteOAuth2App, self.oauth.create_client(audience))  # type: ignore[no-untyped-call]
+    def create_oauth_client(self, *, name: str) -> StarletteOAuth2App:
+        return cast(StarletteOAuth2App, self.oauth.create_client(name=name))  # type: ignore[no-untyped-call]
 
     @staticmethod
     async def login_and_get_token_with_username_password_async(

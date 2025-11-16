@@ -66,7 +66,7 @@ def test_get_auth_configs_for_all_auth_providers() -> None:
             auth_provider=auth_provider,
             audience="aud",
             issuer="iss",
-            client_id=None,
+            client_id="cid",
             client_secret=None,
             well_known_uri=None,
         )

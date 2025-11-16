@@ -15,7 +15,7 @@ class AuthConfig(BaseModel):
     """The audience for the auth provider, typically the API or service that the token is intended for."""
     issuer: Optional[str] = None
     """The issuer of the token, typically the URL of the auth provider."""
-    client_id: Optional[str] = None
+    client_id: str
     """The client ID for the auth provider, used to identify the application making the request."""
     client_secret: Optional[str] = None
     """The client secret for the auth provider, used to authenticate the application making the request."""

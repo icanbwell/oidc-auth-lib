@@ -26,6 +26,7 @@ async def test_fetch_well_known_config_caches_on_first_call() -> None:
     auth_config = AuthConfig(
         auth_provider="TEST_PROVIDER",
         audience="test-audience",
+        client_id="test-client-id",
         issuer="https://test-provider.example.com",
         well_known_uri="https://test-provider.example.com/.well-known/openid-configuration",
     )
@@ -91,6 +92,7 @@ async def test_fetch_well_known_config_uses_cache_on_subsequent_calls() -> None:
     auth_config = AuthConfig(
         auth_provider="TEST_PROVIDER",
         audience="test-audience",
+        client_id="test-client-id",
         issuer="https://test-provider.example.com",
         well_known_uri="https://test-provider.example.com/.well-known/openid-configuration",
     )
@@ -154,6 +156,7 @@ async def test_fetch_well_known_config_caches_multiple_uris_independently() -> N
     auth_config = AuthConfig(
         auth_provider="TEST_PROVIDER",
         audience="test-audience",
+        client_id="test-client-id",
         issuer="https://test-provider.example.com",
         well_known_uri="https://test-provider.example.com/.well-known/openid-configuration",
     )
@@ -235,6 +238,7 @@ async def test_cache_prevents_repeated_http_requests_in_production_scenario() ->
     auth_config = AuthConfig(
         auth_provider="COGNITO",
         audience="test-client-id",
+        client_id="test-client-id",
         issuer="https://cognito-idp.us-east-1.amazonaws.com/us-east-1_TEST",
         well_known_uri="https://cognito-idp.us-east-1.amazonaws.com/us-east-1_TEST/.well-known/openid-configuration",
     )
@@ -299,6 +303,7 @@ async def test_cache_initializes_empty() -> None:
     auth_config = AuthConfig(
         auth_provider="TEST_PROVIDER",
         audience="test-audience",
+        client_id="test-client-id",
         issuer="https://test-provider.example.com",
         well_known_uri="https://test-provider.example.com/.well-known/openid-configuration",
     )
@@ -330,6 +335,7 @@ async def test_concurrent_well_known_config_requests_use_cache_multiple_uris() -
     auth_config = AuthConfig(
         auth_provider="TEST_PROVIDER",
         audience="test-audience",
+        client_id="test-client-id",
         issuer="https://test-provider.example.com",
         well_known_uri="https://test-provider.example.com/.well-known/openid-configuration",
     )
@@ -432,6 +438,7 @@ async def test_concurrent_jwks_initialization() -> None:
     auth_config = AuthConfig(
         auth_provider="TEST_PROVIDER",
         audience="test-audience",
+        client_id="test-client-id",
         issuer="https://test-provider.example.com",
         well_known_uri="https://test-provider.example.com/.well-known/openid-configuration",
     )
@@ -511,6 +518,7 @@ async def test_concurrent_access_with_cache_miss_and_hits() -> None:
     auth_config = AuthConfig(
         auth_provider="TEST_PROVIDER",
         audience="test-audience",
+        client_id="test-client-id",
         issuer="https://test-provider.example.com",
         well_known_uri="https://test-provider.example.com/.well-known/openid-configuration",
     )
