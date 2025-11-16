@@ -46,7 +46,7 @@ class WellKnownConfigurationCache:
         self.client_key_sets: list[
             ClientKeySet
         ] = []  # will be loaded asynchronously later
-        self._jwks: KeySet = KeySet.import_key_set({"keys": []})
+        self._jwks: KeySet = KeySet(keys=[])
         self._loaded: bool = False
         self._locks: Dict[str, asyncio.Lock] = {}
         self._locks_lock: asyncio.Lock = asyncio.Lock()  # protects _locks dict mutation
@@ -166,22 +166,26 @@ class WellKnownConfigurationCache:
                 logger.info(
                     f"Successfully fetched JWKS from {jwks_uri}, keys= {len(keys)}"
                 )
-                self.client_key_sets.append(
-                    ClientKeySet(
-                        auth_config=auth_config,
-                        well_known_config=well_known_config,
-                        jwks=KeySet.import_key_set({"keys": keys}),
-                        kids=[
-                            cast(str, key.get("kid")) for key in keys if key.get("kid")
-                        ],
+                if len(keys) > 0:
+                    self.client_key_sets.append(
+                        ClientKeySet(
+                            auth_config=auth_config,
+                            well_known_config=well_known_config,
+                            jwks=KeySet.import_key_set({"keys": keys}),
+                            kids=[
+                                cast(str, key.get("kid"))
+                                for key in keys
+                                if key.get("kid")
+                            ],
+                        )
                     )
-                )
-                existing_kids = {key.kid for key in self._jwks}
-                new_keys = [key for key in keys if key.get("kid") not in existing_kids]
-                self._jwks = KeySet.import_key_set(
-                    {"keys": new_keys + [ek.as_dict() for ek in self._jwks]}
-                )
-
+                    existing_kids = {key.kid for key in self._jwks}
+                    new_keys = [
+                        key for key in keys if key.get("kid") not in existing_kids
+                    ]
+                    self._jwks = KeySet.import_key_set(
+                        {"keys": new_keys + [ek.as_dict() for ek in self._jwks]}
+                    )
             except httpx.HTTPStatusError as e:
                 logger.exception(e)
                 raise ValueError(

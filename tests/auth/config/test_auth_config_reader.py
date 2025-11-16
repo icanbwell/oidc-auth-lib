@@ -61,7 +61,7 @@ def test_get_auth_configs_for_all_auth_providers() -> None:
     env: DummyEnvVars = DummyEnvVars(providers, configs)
     reader: AuthConfigReader = AuthConfigReader(environment_variables=env)
 
-    def dummy_get_config_for_auth_provider(auth_provider: str) -> AuthConfig:
+    def dummy_read_config_for_auth_provider(auth_provider: str) -> AuthConfig:
         return AuthConfig(
             auth_provider=auth_provider,
             friendly_name=auth_provider,
@@ -72,7 +72,9 @@ def test_get_auth_configs_for_all_auth_providers() -> None:
             well_known_uri=None,
         )
 
-    setattr(reader, "get_config_for_auth_provider", dummy_get_config_for_auth_provider)
+    setattr(
+        reader, "read_config_for_auth_provider", dummy_read_config_for_auth_provider
+    )
     configs_list: List[AuthConfig] = reader.get_auth_configs_for_all_auth_providers()
     assert len(configs_list) == 2
     assert configs_list[0].auth_provider == "a"
