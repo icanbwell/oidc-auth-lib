@@ -10,8 +10,12 @@ from starlette.responses import JSONResponse, HTMLResponse, Response, RedirectRe
 
 from oidcauthlib.auth.auth_helper import AuthHelper
 from oidcauthlib.auth.auth_manager import AuthManager
+from oidcauthlib.auth.config.auth_config import AuthConfig
 from oidcauthlib.auth.config.auth_config_reader import AuthConfigReader
 from oidcauthlib.auth.token_reader import TokenReader
+from oidcauthlib.auth.well_known_configuration.well_known_configuration_manager import (
+    WellKnownConfigurationManager,
+)
 from oidcauthlib.utilities.environment.abstract_environment_variables import (
     AbstractEnvironmentVariables,
 )
@@ -29,6 +33,7 @@ class FastAPIAuthManager(AuthManager):
         environment_variables: AbstractEnvironmentVariables,
         auth_config_reader: AuthConfigReader,
         token_reader: TokenReader,
+        well_known_configuration_manager: WellKnownConfigurationManager,
     ) -> None:
         """
         Initialize the TokenStorageAuthManager with required components.
@@ -45,6 +50,7 @@ class FastAPIAuthManager(AuthManager):
             environment_variables=environment_variables,
             auth_config_reader=auth_config_reader,
             token_reader=token_reader,
+            well_known_configuration_manager=well_known_configuration_manager,
         )
 
     async def read_callback_response(self, *, request: Request) -> Response:
@@ -67,18 +73,20 @@ class FastAPIAuthManager(AuthManager):
         state_decoded: Dict[str, Any] = AuthHelper.decode_state(state)
         logger.debug(f"State decoded: {state_decoded}")
         logger.debug(f"Code received: {code}")
-        audience: str | None = state_decoded.get("audience")
-        logger.debug(f"Audience retrieved: {audience}")
-        issuer: str | None = state_decoded.get("issuer")
-        if issuer is None:
-            raise ValueError("Issuer must be provided in the callback")
-        logger.debug(f"Issuer retrieved: {issuer}")
         url: str | None = state_decoded.get("url")
         logger.debug(f"URL retrieved: {url}")
-        logger.debug(f"Creating OAuth2 client for audience: {audience}")
-        if audience is None:
-            raise ValueError("Audience must be provided in the callback")
-        client: StarletteOAuth2App = self.create_oauth_client(audience=audience)
+        auth_provider: str | None = state_decoded.get("auth_provider")
+        if auth_provider is None:
+            raise ValueError("Auth provider must be provided in the state")
+
+        # now find the AuthConfig for this
+        auth_config: AuthConfig | None = self.get_auth_config_for_auth_provider(
+            auth_provider=auth_provider
+        )
+        if auth_config is None:
+            raise ValueError(f"No AuthConfig found for auth provider: {auth_provider}")
+        client: StarletteOAuth2App = await self.create_oauth_client(name=auth_provider)
+        # create masked client secret for logging
         masked_client_text: str
         if client.client_secret is None:
             masked_client_text = "None"
@@ -90,15 +98,16 @@ class FastAPIAuthManager(AuthManager):
             )
         else:
             masked_client_text = "XXX"
-        logger.debug(f"OAuth client: {client.client_id} {masked_client_text}")
-        token: dict[str, Any] = await client.authorize_access_token(request)  # type: ignore[no-untyped-call]
+        logger.debug(
+            f"OAuth client: {auth_provider} {client.client_id} {masked_client_text}"
+        )
+        token: dict[str, Any] = await client.authorize_access_token(request=request)  # type: ignore[no-untyped-call]
 
         return await self.process_token_async(
             code=code,
             state_decoded=state_decoded,
             token_dict=token,
-            audience=audience,
-            issuer=issuer,
+            auth_config=auth_config,
             url=url,
         )
 
@@ -109,8 +118,7 @@ class FastAPIAuthManager(AuthManager):
         code: str | None,
         state_decoded: Dict[str, Any],
         token_dict: dict[str, Any],
-        audience: str | None,
-        issuer: str | None,
+        auth_config: AuthConfig,
         url: str | None,
     ) -> Response:
         """
@@ -119,8 +127,7 @@ class FastAPIAuthManager(AuthManager):
         :param code:
         :param state_decoded:
         :param token_dict:
-        :param audience:
-        :param issuer:
+        :param auth_config:
         :param url:
         :return: JSONResponse containing the token dictionary.
         """
@@ -171,10 +178,16 @@ class FastAPIAuthManager(AuthManager):
         end_session_endpoint = None
         if auth_config.well_known_uri:
             try:
-                async with httpx.AsyncClient(timeout=5) as async_client:
-                    resp = await async_client.get(auth_config.well_known_uri)
-                resp.raise_for_status()
-                end_session_endpoint = resp.json().get("end_session_endpoint")
+                well_known_config: (
+                    dict[str, Any] | None
+                ) = await self.well_known_configuration_manager.get_async(
+                    auth_config=auth_config
+                )
+                end_session_endpoint = (
+                    well_known_config.get("end_session_endpoint")
+                    if well_known_config
+                    else None
+                )
             except Exception as e:
                 logger.warning(f"Could not discover end_session_endpoint: {e}")
         if not end_session_endpoint and auth_config.issuer:

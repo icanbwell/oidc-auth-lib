@@ -24,14 +24,16 @@ class IContainer(IResolvable, Protocol):
     _factories: dict[type[Any], Any]
     _singleton_types: set[type[Any]]
 
-    def register[T](self, service_type: type[T], factory: "ServiceFactory[T]") -> Self:
-        """Register a service factory."""
-        ...
-
     def singleton[T](self, service_type: type[T], factory: "ServiceFactory[T]") -> Self:
-        """Register a singleton instance."""
+        """Register a singleton instance.  Created once, cached, shared across all requests."""
         ...
 
-    def transient[T](self, service_type: type[T], factory: "ServiceFactory[T]") -> Self:
-        """Register a transient service."""
+    def factory[T](self, service_type: type[T], factory: "ServiceFactory[T]") -> Self:
+        """Register a factory service. Created every time, never cached"""
+        ...
+
+    def request_scoped[T](
+        self, service_type: type[T], factory: ServiceFactory[T]
+    ) -> Self:
+        """Register a request-scoped service. Created once per request, cached within request"""
         ...

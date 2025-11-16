@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
 from oidcauthlib.container.interfaces import IContainer
+from oidcauthlib.container.simple_container import SimpleContainer
 
 
 class ContainerRegistry:
@@ -51,3 +52,11 @@ class ContainerRegistry:
         """Reset to default container."""
         with cls._lock:
             cls._current_container = cls._default_container
+
+    @staticmethod
+    def begin_request_scope(request_id: str | None = None) -> str:
+        return SimpleContainer.begin_request_scope(request_id=request_id)
+
+    @staticmethod
+    def end_request_scope() -> None:
+        SimpleContainer.end_request_scope()

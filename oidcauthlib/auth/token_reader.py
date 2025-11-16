@@ -1,4 +1,3 @@
-import asyncio
 import datetime
 import json
 import logging
@@ -7,8 +6,6 @@ import uuid
 from typing import Optional, Any, Dict, List, cast
 from uuid import UUID
 
-import httpx
-from httpx import ConnectError
 from joserfc import jwt, jws
 from joserfc.errors import ExpiredTokenError
 from joserfc.jwk import KeySet
@@ -31,6 +28,9 @@ from oidcauthlib.auth.exceptions.authorization_bearer_token_missing_exception im
 )
 from oidcauthlib.auth.models.token import Token
 from oidcauthlib.utilities.logger.log_levels import SRC_LOG_LEVELS
+from oidcauthlib.auth.well_known_configuration.well_known_configuration_manager import (
+    WellKnownConfigurationManager,
+)
 
 logger = logging.getLogger(__name__)
 logger.setLevel(SRC_LOG_LEVELS["AUTH"])
@@ -46,6 +46,7 @@ class TokenReader:
         *,
         algorithms: Optional[list[str]] = None,
         auth_config_reader: AuthConfigReader,
+        well_known_config_manager: WellKnownConfigurationManager,
     ):
         """
         Initializes the TokenReader with the JWKS URI or Well-Known URI, issuer, audience, and algorithms.
@@ -70,110 +71,16 @@ class TokenReader:
         if not self.auth_configs:
             raise ValueError("At least one AuthConfig must be provided")
 
-        self.well_known_configs: List[
-            Dict[str, Any]
-        ] = []  # will load asynchronously later
-        self.jwks: KeySet = KeySet(keys=[])  # Will be set by async fetch
-        # Cache for well-known configs keyed by URI to prevent repeated fetches
-        self.cached_well_known_configs: Dict[str, Dict[str, Any]] = {}
-
-        # Locks for preventing race conditions in concurrent environments
-        self._jwks_lock: asyncio.Lock = asyncio.Lock()  # Protects JWKS initialization
-        self._well_known_locks: Dict[
-            str, asyncio.Lock
-        ] = {}  # Per-URI locks for discovery document fetching
-        self._well_known_locks_lock: asyncio.Lock = (
-            asyncio.Lock()
-        )  # Protects _well_known_locks dict access
-
-    async def fetch_well_known_config_and_jwks_async(self) -> None:
-        """
-        Fetches the JWKS from the provided URI or from the well-known OpenID Connect configuration.
-        This method will fetch the JWKS and store it in the `self.jwks` attribute for later use.
-
-        Uses a lock to prevent race conditions when multiple concurrent requests attempt to
-        initialize JWKS simultaneously.
-        """
-        # Fast path: check without lock to avoid contention
-        if len(self.jwks.keys) > 0:
-            return  # If JWKS is already fetched, skip fetching again
-
-        # Acquire lock to ensure only one coroutine performs initialization
-        async with self._jwks_lock:
-            # Double-check: another coroutine may have initialized while we waited for the lock
-            if len(self.jwks.keys) > 0:
-                logger.debug(
-                    f"JWKS already initialized by another coroutine for id {self.uuid}."
-                )
-                return
-
-            logger.debug(
-                f"Fetching well-known configurations and JWKS for id {self.uuid}."
+        # Initialize new manager (replaces inline JWKS + well-known handling)
+        self._well_known_config_manager: WellKnownConfigurationManager = (
+            well_known_config_manager
+        )
+        if not isinstance(
+            self._well_known_config_manager, WellKnownConfigurationManager
+        ):
+            raise TypeError(
+                "well_known_config_manager must be an instance of WellKnownConfigurationManager"
             )
-
-            self.well_known_configs = []  # Reset well-known configs before fetching
-
-            keys: List[Dict[str, Any]] = []
-            for auth_config in [c for c in self.auth_configs if c.well_known_uri]:
-                if not auth_config.well_known_uri:
-                    logger.warning(
-                        f"AuthConfig {auth_config} does not have a well-known URI, skipping JWKS fetch."
-                    )
-                    continue
-
-                well_known_config: Dict[
-                    str, Any
-                ] = await self.fetch_well_known_config_async(
-                    well_known_uri=auth_config.well_known_uri
-                )
-
-                jwks_uri = await self.get_jwks_uri_async(
-                    well_known_config=well_known_config
-                )
-                if not jwks_uri:
-                    logger.warning(
-                        f"AuthConfig {auth_config} does not have a JWKS URI, skipping JWKS fetch."
-                    )
-                    continue
-
-                async with httpx.AsyncClient() as client:
-                    try:
-                        logger.info(f"Fetching JWKS from {jwks_uri}")
-                        response = await client.get(jwks_uri)
-                        response.raise_for_status()
-                        jwks_data: Dict[str, Any] = response.json()
-                        for key in jwks_data.get("keys", []):
-                            kid = key.get("kid")
-                            # if there is no matching "kid" in keys then add it
-                            if not any([k.get("kid") == kid for k in keys]):
-                                keys.append(key)
-                            else:
-                                # Log warning if a duplicate kid is found
-                                logger.warning(
-                                    f"Duplicate key ID '{kid}' found when fetching JWKS from {jwks_uri}. "
-                                    f"This may indicate overlapping keys from different providers. "
-                                    f"Skipping duplicate key from {auth_config.auth_provider}."
-                                )
-
-                        logger.info(
-                            f"Successfully fetched JWKS from {jwks_uri}, keys= {len(keys)}"
-                        )
-                    except httpx.HTTPStatusError as e:
-                        logger.exception(e)
-                        raise ValueError(
-                            f"Failed to fetch JWKS from {jwks_uri} with status {e.response.status_code} : {e}"
-                        )
-                    except ConnectError as e:
-                        raise ConnectionError(
-                            f"Failed to connect to JWKS URI: {jwks_uri}: {e}"
-                        )
-
-            self.jwks = KeySet.import_key_set(
-                {
-                    "keys": keys,
-                }
-            )
-            logger.debug(f"Fetched JWKS with {len(self.jwks.keys)} keys.")
 
     @staticmethod
     def extract_token(*, authorization_header: str | None) -> Optional[str]:
@@ -211,11 +118,11 @@ class TokenReader:
             )
             return None
         if verify_signature:
-            await self.fetch_well_known_config_and_jwks_async()
-            if not self.jwks:
-                raise RuntimeError("JWKS must be fetched before decoding tokens")
+            jwks: KeySet = await self._well_known_config_manager.get_jwks_async()
+            if not jwks:
+                raise RuntimeError("JWKS must be fetched before verifying tokens")
             try:
-                decoded = jwt.decode(token, self.jwks, algorithms=self.algorithms)
+                decoded = jwt.decode(token, jwks, algorithms=self.algorithms)
                 return decoded.claims
             except Exception as e:
                 logger.exception(f"Failed to decode token: {e}")
@@ -248,9 +155,8 @@ class TokenReader:
         """
         if not token:
             raise ValueError("Token must not be empty")
-        await self.fetch_well_known_config_and_jwks_async()
-        if not self.jwks:
-            raise RuntimeError("JWKS must be fetched before verifying tokens")
+
+        jwks: KeySet = await self._well_known_config_manager.get_jwks_async()
 
         exp_str: str = "None"
         now_str: str = "None"
@@ -258,7 +164,7 @@ class TokenReader:
         audience: Optional[str] = None
         try:
             # Validate the token
-            verified = jwt.decode(token, self.jwks, algorithms=self.algorithms)
+            verified = jwt.decode(token, jwks, algorithms=self.algorithms)
             issuer = verified.claims.get("iss")
             audience = verified.claims.get("aud") or verified.claims.get(
                 "client_id"
@@ -364,72 +270,6 @@ class TokenReader:
                 token=token,
             ) from e
 
-    async def fetch_well_known_config_async(
-        self, *, well_known_uri: str
-    ) -> Dict[str, Any]:
-        """
-        Fetches the OpenID Connect discovery document and returns its contents as a dict.
-        Uses instance-level caching to prevent repeated fetches for the same URI.
-
-        This method uses per-URI locking to prevent race conditions when multiple concurrent
-        requests attempt to fetch the same discovery document simultaneously. Only one coroutine
-        will perform the HTTP fetch per URI, while others wait for the result.
-
-        Returns:
-            dict: The parsed discovery document.
-        Raises:
-            ValueError: If the document cannot be fetched or parsed.
-        """
-        if not well_known_uri:
-            raise ValueError("well_known_uri is not set")
-
-        # Fast path: check cache without lock to avoid contention on cache hits
-        if well_known_uri in self.cached_well_known_configs:
-            logger.info(f"✓ Using cached OIDC discovery document for {well_known_uri}")
-            return self.cached_well_known_configs[well_known_uri]
-
-        # Get or create a lock for this specific URI
-        # This lock creation needs to be protected to avoid race conditions
-        async with self._well_known_locks_lock:
-            if well_known_uri not in self._well_known_locks:
-                self._well_known_locks[well_known_uri] = asyncio.Lock()
-            uri_lock = self._well_known_locks[well_known_uri]
-
-        # Acquire the URI-specific lock to ensure only one coroutine fetches this URI
-        async with uri_lock:
-            # Double-check: another coroutine may have fetched while we waited for the lock
-            if well_known_uri in self.cached_well_known_configs:
-                logger.info(
-                    f"✓ Using cached OIDC discovery document (fetched by another coroutine) for {well_known_uri}"
-                )
-                return self.cached_well_known_configs[well_known_uri]
-
-            logger.info(
-                f"Cache miss for {well_known_uri}. Cache has {len(self.cached_well_known_configs)} entries."
-            )
-
-            # Cache miss - fetch from remote (only one coroutine reaches here per URI)
-            async with httpx.AsyncClient() as client:
-                try:
-                    logger.info(
-                        f"Fetching OIDC discovery document from {well_known_uri}"
-                    )
-                    response = await client.get(well_known_uri)
-                    response.raise_for_status()
-                    config = cast(Dict[str, Any], response.json())
-                    # Store in cache for future use
-                    self.cached_well_known_configs[well_known_uri] = config
-                    logger.info(f"Cached OIDC discovery document for {well_known_uri}")
-                    return config
-                except httpx.HTTPStatusError as e:
-                    raise ValueError(
-                        f"Failed to fetch OIDC discovery document from {well_known_uri} with status {e.response.status_code} : {e}"
-                    )
-                except ConnectError as e:
-                    raise ConnectionError(
-                        f"Failed to connect to OIDC discovery document: {well_known_uri}: {e}"
-                    )
-
     # noinspection PyMethodMayBeStatic
     async def get_jwks_uri_async(
         self, *, well_known_config: Dict[str, Any]
@@ -463,11 +303,9 @@ class TokenReader:
         """
         if not token:
             raise ValueError("Token must not be empty")
-        await self.fetch_well_known_config_and_jwks_async()
-        if not self.jwks:
-            raise RuntimeError("JWKS must be fetched before verifying tokens")
+        jwks: KeySet = await self._well_known_config_manager.get_jwks_async()
         try:
-            claims = jwt.decode(token, self.jwks, algorithms=self.algorithms).claims
+            claims = jwt.decode(token, jwks, algorithms=self.algorithms).claims
             return claims.get("email") or claims.get("sub")
         except Exception as e:
             logger.exception(f"Failed to extract subject from token: {e}")
@@ -485,11 +323,9 @@ class TokenReader:
         """
         if not token:
             raise ValueError("Token must not be empty")
-        await self.fetch_well_known_config_and_jwks_async()
-        if not self.jwks:
-            raise RuntimeError("JWKS must be fetched before verifying tokens")
+        jwks: KeySet = await self._well_known_config_manager.get_jwks_async()
         try:
-            claims = jwt.decode(token, self.jwks, algorithms=self.algorithms).claims
+            claims = jwt.decode(token, jwks, algorithms=self.algorithms).claims
             exp = claims.get("exp")
             if exp:
                 return datetime.datetime.fromtimestamp(exp, tz=ZoneInfo("UTC"))
@@ -508,11 +344,9 @@ class TokenReader:
         """
         if not token:
             raise ValueError("Token must not be empty")
-        await self.fetch_well_known_config_and_jwks_async()
-        if not self.jwks:
-            raise RuntimeError("JWKS must be fetched before verifying tokens")
+        jwks: KeySet = await self._well_known_config_manager.get_jwks_async()
         try:
-            claims = jwt.decode(token, self.jwks, algorithms=self.algorithms).claims
+            claims = jwt.decode(token, jwks, algorithms=self.algorithms).claims
             return claims.get("iss")
         except Exception as e:
             logger.exception(f"Failed to extract issuer from token: {e}")
@@ -528,11 +362,9 @@ class TokenReader:
         """
         if not token:
             raise ValueError("Token must not be empty")
-        await self.fetch_well_known_config_and_jwks_async()
-        if not self.jwks:
-            raise RuntimeError("JWKS must be fetched before verifying tokens")
+        jwks: KeySet = await self._well_known_config_manager.get_jwks_async()
         try:
-            claims = jwt.decode(token, self.jwks, algorithms=self.algorithms).claims
+            claims = jwt.decode(token, jwks, algorithms=self.algorithms).claims
             return claims.get("aud") or claims.get(
                 "client_id"
             )  # AWS Cognito does not have aud claim but has client_id
@@ -552,11 +384,9 @@ class TokenReader:
         """
         if not token:
             raise ValueError("Token must not be empty")
-        await self.fetch_well_known_config_and_jwks_async()
-        if not self.jwks:
-            raise RuntimeError("JWKS must be fetched before verifying tokens")
+        jwks: KeySet = await self._well_known_config_manager.get_jwks_async()
         try:
-            claims = jwt.decode(token, self.jwks, algorithms=self.algorithms).claims
+            claims = jwt.decode(token, jwks, algorithms=self.algorithms).claims
             iat = claims.get("iat")
             if iat:
                 return datetime.datetime.fromtimestamp(iat, tz=ZoneInfo("UTC"))
@@ -574,10 +404,9 @@ class TokenReader:
             bool: True if the token is valid, False otherwise.
         """
         assert access_token, "Access token must not be empty"
-        await self.fetch_well_known_config_and_jwks_async()
-        assert self.jwks, "JWKS must be fetched before verifying tokens"
+        jwks: KeySet = await self._well_known_config_manager.get_jwks_async()
         try:
-            verified = jwt.decode(access_token, self.jwks, algorithms=self.algorithms)
+            verified = jwt.decode(access_token, jwks, algorithms=self.algorithms)
             exp = verified.claims.get("exp")
             now = time.time()
             if exp and exp < now:

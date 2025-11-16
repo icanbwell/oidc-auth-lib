@@ -8,7 +8,6 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response, JSONResponse
 from starlette.types import ASGIApp
 
-from oidcauthlib.auth.config.auth_config_reader import AuthConfigReader
 from oidcauthlib.auth.models.token import Token
 from oidcauthlib.auth.token_reader import TokenReader
 
@@ -29,15 +28,15 @@ class TokenReaderMiddleware(BaseHTTPMiddleware):
     def __init__(
         self,
         app: ASGIApp,
-        auth_config_reader: AuthConfigReader,
-        algorithms: Optional[list[str]] = None,
+        token_reader: TokenReader,
         require_token_routes: Optional[Sequence[str]] = None,
         optional_token_routes: Optional[Sequence[str]] = None,
     ):
         super().__init__(app)
-        self.token_reader = TokenReader(
-            auth_config_reader=auth_config_reader, algorithms=algorithms
-        )
+        self.token_reader: TokenReader = token_reader
+        if token_reader is None:
+            raise ValueError("token_reader must be provided and cannot be None")
+
         self.require_token_patterns: list[Pattern[str]] = [
             re.compile(p) for p in (require_token_routes or [])
         ]

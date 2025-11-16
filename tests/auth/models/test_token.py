@@ -25,6 +25,7 @@ def test_token_is_valid_no_expiry() -> None:
 def test_auth_config_creation() -> None:
     config: AuthConfig = AuthConfig(
         auth_provider="test",
+        friendly_name="Test Provider",
         audience="aud",
         issuer="issuer",
         client_id="cid",

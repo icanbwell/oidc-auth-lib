@@ -6,6 +6,7 @@ from oidcauthlib.auth.config.auth_config import AuthConfig
 def test_auth_config_creation() -> None:
     config: AuthConfig = AuthConfig(
         auth_provider="test",
+        friendly_name="Test Provider",
         audience="aud",
         issuer="issuer",
         client_id="cid",
