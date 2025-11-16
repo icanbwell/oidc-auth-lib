@@ -164,7 +164,7 @@ class FastAPIAuthManager(AuthManager):
         )
         if not auth_provider:
             raise ValueError(f"No auth provider found for audience: {audience}")
-        auth_config = self.auth_config_reader.get_config_for_auth_provider(
+        auth_config = self.auth_config_reader.read_config_for_auth_provider(
             auth_provider=auth_provider
         )
         if not auth_config:

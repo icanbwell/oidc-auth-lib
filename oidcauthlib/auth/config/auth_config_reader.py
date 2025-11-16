@@ -39,7 +39,7 @@ class AuthConfigReader:
             raise ValueError("auth_providers environment variable must be set")
         auth_configs: list[AuthConfig] = []
         for auth_provider in auth_providers:
-            auth_config: AuthConfig | None = self.get_config_for_auth_provider(
+            auth_config: AuthConfig | None = self.read_config_for_auth_provider(
                 auth_provider=auth_provider,
             )
             if auth_config is not None:
@@ -47,7 +47,7 @@ class AuthConfigReader:
         return auth_configs
 
     # noinspection PyMethodMayBeStatic
-    def get_config_for_auth_provider(self, *, auth_provider: str) -> AuthConfig | None:
+    def read_config_for_auth_provider(self, *, auth_provider: str) -> AuthConfig | None:
         """
         Get the authentication configuration for a specific audience.
 
@@ -108,7 +108,7 @@ class AuthConfigReader:
         Returns:
             str: The audience for the specified auth provider.
         """
-        auth_config: AuthConfig | None = self.get_config_for_auth_provider(
+        auth_config: AuthConfig | None = self.read_config_for_auth_provider(
             auth_provider=auth_provider
         )
         if auth_config is None:
@@ -128,6 +128,22 @@ class AuthConfigReader:
         auth_configs: list[AuthConfig] = self.get_auth_configs_for_all_auth_providers()
         for auth_config in auth_configs:
             if auth_config.audience == audience:
+                return auth_config.auth_provider
+        return None
+
+    def get_provider_for_client_id(self, *, client_id: str) -> str | None:
+        """
+        Get the auth provider for a specific audience.
+
+        Args:
+            client_id (str): The client id for which to retrieve the auth provider.
+
+        Returns:
+            str | None: The auth provider if found, otherwise None.
+        """
+        auth_configs: list[AuthConfig] = self.get_auth_configs_for_all_auth_providers()
+        for auth_config in auth_configs:
+            if auth_config.client_id == client_id:
                 return auth_config.auth_provider
         return None
 
@@ -155,4 +171,4 @@ class AuthConfigReader:
         first_provider: str | None = self.get_first_provider()
         if first_provider is None:
             return None
-        return self.get_config_for_auth_provider(auth_provider=first_provider)
+        return self.read_config_for_auth_provider(auth_provider=first_provider)

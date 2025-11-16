@@ -119,7 +119,7 @@ class AuthRouter:
                 if provider_for_audience is None:
                     raise ValueError(f"No provider found for audience: {audience}")
 
-                auth_config = auth_config_reader.get_config_for_auth_provider(
+                auth_config = auth_config_reader.read_config_for_auth_provider(
                     auth_provider=provider_for_audience
                 )
                 if auth_config is None:
