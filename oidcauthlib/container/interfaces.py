@@ -37,3 +37,12 @@ class IContainer(IResolvable, Protocol):
     ) -> Self:
         """Register a request-scoped service. Created once per request, cached within request"""
         ...
+
+    @property
+    def container_source(self) -> str:
+        """Get the underlying container source."""
+        ...
+
+    def clear_singletons(self) -> None:
+        """Clear all singleton instances from the container."""
+        ...

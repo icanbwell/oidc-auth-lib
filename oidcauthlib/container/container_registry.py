@@ -22,6 +22,10 @@ class ContainerRegistry:
             cls._default_container = container
             if cls._current_container is None:
                 cls._current_container = container
+            else:
+                raise RuntimeError(
+                    f"There is already a current container set: {cls._current_container.container_source}.  Use override() to change it temporarily."
+                )
 
     @classmethod
     def get_current(cls) -> IContainer:
@@ -40,6 +44,8 @@ class ContainerRegistry:
         with cls._lock:
             old_container = cls._current_container
             cls._current_container = container
+            # clear all the singletons in the new container to ensure a fresh state
+            container.clear_singletons()
 
         try:
             yield container

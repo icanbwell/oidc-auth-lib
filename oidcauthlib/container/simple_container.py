@@ -65,11 +65,22 @@ class SimpleContainer(IContainer):
     # Reentrant lock prevents deadlock when singleton factories resolve other singletons
     _singleton_lock: threading.RLock = threading.RLock()
 
-    def __init__(self) -> None:
+    def __init__(self, *, source: str = "unknown") -> None:
+        """
+        Initialize the SimpleContainer.
+        :param source: A string identifying the source of this container (for logging/debugging)
+        """
         self._factories: Dict[type[Any], ServiceFactory[Any]] = {}
         self._singleton_types: set[type[Any]] = set()
         self._request_scoped_types: set[type[Any]] = set()  # NEW
+        self._source: str = source
         logger.debug("SimpleContainer initialized (thread=%s)", threading.get_ident())
+
+    @override
+    @property
+    def container_source(self) -> str:
+        """Get the underlying container source."""
+        return self._source
 
     @override
     def factory[T](
@@ -118,9 +129,11 @@ class SimpleContainer(IContainer):
         )
 
         # Fast path: check if it's a singleton and already instantiated (without lock)
-        if service_type in SimpleContainer._singletons:
+        # Use .get() to avoid membership/subscript race if another thread deletes entry during re-registration
+        instance = SimpleContainer._singletons.get(service_type)
+        if instance is not None:
             logger.debug("Returning cached singleton for '%s'", service_name)
-            return cast(T, SimpleContainer._singletons[service_type])
+            return cast(T, instance)
 
         if service_type not in self._factories:
             logger.error("Service '%s' not found during resolve", service_name)
@@ -131,11 +144,12 @@ class SimpleContainer(IContainer):
             logger.debug("Attempting singleton instantiation for '%s'", service_name)
             with SimpleContainer._singleton_lock:
                 # Double-check: another thread may have instantiated while we waited for the lock
-                if service_type in SimpleContainer._singletons:
+                instance2 = SimpleContainer._singletons.get(service_type)
+                if instance2 is not None:
                     logger.debug(
                         "Returning cached singleton for '%s' after lock", service_name
                     )
-                    return cast(T, SimpleContainer._singletons[service_type])
+                    return cast(T, instance2)
 
                 # Create and cache the singleton instance
                 logger.info(
@@ -237,8 +251,17 @@ class SimpleContainer(IContainer):
         Created once and shared across all requests.
         Thread-safe instantiation with double-checked locking.
         """
-        self._factories[service_type] = factory
-        self._singleton_types.add(service_type)
+        # Wrap mutations + instance invalidation under lock to avoid races with resolve() fast path
+        with SimpleContainer._singleton_lock:
+            self._factories[service_type] = factory
+            self._singleton_types.add(service_type)
+            # clear any cached singleton instance to allow re-registration
+            if service_type in SimpleContainer._singletons:
+                del SimpleContainer._singletons[service_type]
+                logger.debug(
+                    "Cleared existing singleton instance for '%s' due to re-registration",
+                    _safe_type_name(service_type),
+                )
         logger.debug("Registered singleton service '%s'", _safe_type_name(service_type))
         return self
 
@@ -419,17 +442,18 @@ class SimpleContainer(IContainer):
         """
         return _current_request_id.get(None) is not None
 
-    @classmethod
-    def clear_singletons(cls) -> None:
+    @override
+    def clear_singletons(self) -> None:
         """
         Clear all singleton instances from the container.
 
         This does NOT clear request-scoped instances.
         Use end_request_scope() to clean up request-scoped instances.
         """
-        count = len(SimpleContainer._singletons)
-        logger.debug("Clearing %d singleton instances", count)
-        SimpleContainer._singletons.clear()
+        with SimpleContainer._singleton_lock:
+            count = len(SimpleContainer._singletons)
+            logger.debug("Clearing %d singleton instances", count)
+            SimpleContainer._singletons.clear()
 
     # noinspection PyMethodMayBeStatic
     def _validate_request_scope_active(self, *, service_name: str) -> None:
