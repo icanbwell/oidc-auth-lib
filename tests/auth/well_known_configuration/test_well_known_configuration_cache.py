@@ -1,6 +1,6 @@
 import asyncio
-from unittest.mock import patch, AsyncMock, MagicMock
-
+import respx
+import httpx
 import pytest
 
 from oidcauthlib.auth.config.auth_config import AuthConfig
@@ -14,19 +14,19 @@ async def test_get_async_caches_on_first_call() -> None:
     cache = WellKnownConfigurationCache()
     uri = "https://provider.example.com/.well-known/openid-configuration"
 
-    mock_response = MagicMock()
-    mock_response.json.return_value = {
-        "issuer": "https://provider.example.com",
-        "jwks_uri": "https://provider.example.com/jwks",
-    }
-    mock_response.raise_for_status = MagicMock()
-
-    mock_client = AsyncMock()
-    mock_client.get.return_value = mock_response
-    mock_client.__aenter__.return_value = mock_client
-    mock_client.__aexit__.return_value = None
-
-    with patch("httpx.AsyncClient", return_value=mock_client):
+    with respx.mock(assert_all_called=True) as respx_mock:
+        route = respx_mock.get(uri).mock(
+            return_value=httpx.Response(
+                200,
+                json={
+                    "issuer": "https://provider.example.com",
+                    "jwks_uri": "https://provider.example.com/jwks",
+                },
+            )
+        )
+        jwks_route = respx_mock.get("https://provider.example.com/jwks").mock(
+            return_value=httpx.Response(200, json={"keys": []})
+        )
         auth_config: AuthConfig = AuthConfig(
             auth_provider="TEST_PROVIDER",
             friendly_name="Test Provider",
@@ -41,7 +41,10 @@ async def test_get_async_caches_on_first_call() -> None:
         assert result["jwks_uri"] == "https://provider.example.com/jwks"
         assert uri in cache._cache
         assert cache.size() == 1
-        mock_client.get.assert_called_once_with(uri)
+        assert route.called
+        assert route.call_count == 1
+        assert jwks_route.called
+        assert jwks_route.call_count == 1
 
 
 @pytest.mark.asyncio
@@ -49,19 +52,19 @@ async def test_get_async_uses_cache_on_subsequent_calls() -> None:
     cache = WellKnownConfigurationCache()
     uri = "https://provider.example.com/.well-known/openid-configuration"
 
-    mock_response = MagicMock()
-    mock_response.json.return_value = {
-        "issuer": "https://provider.example.com",
-        "jwks_uri": "https://provider.example.com/jwks",
-    }
-    mock_response.raise_for_status = MagicMock()
-
-    mock_client = AsyncMock()
-    mock_client.get.return_value = mock_response
-    mock_client.__aenter__.return_value = mock_client
-    mock_client.__aexit__.return_value = None
-
-    with patch("httpx.AsyncClient", return_value=mock_client):
+    with respx.mock(assert_all_called=True) as respx_mock:
+        route = respx_mock.get(uri).mock(
+            return_value=httpx.Response(
+                200,
+                json={
+                    "issuer": "https://provider.example.com",
+                    "jwks_uri": "https://provider.example.com/jwks",
+                },
+            )
+        )
+        jwks_route = respx_mock.get("https://provider.example.com/jwks").mock(
+            return_value=httpx.Response(200, json={"keys": []})
+        )
         auth_config: AuthConfig = AuthConfig(
             auth_provider="TEST_PROVIDER",
             friendly_name="Test Provider",
@@ -75,7 +78,9 @@ async def test_get_async_uses_cache_on_subsequent_calls() -> None:
         r3 = await cache.read_async(auth_config=auth_config)
 
         assert r1 == r2 == r3
-        assert mock_client.get.call_count == 1
+        assert route.call_count == 1
+        assert jwks_route.called
+        assert jwks_route.call_count == 1
         assert cache.size() == 1
 
 
@@ -84,19 +89,19 @@ async def test_get_async_concurrent_single_fetch() -> None:
     cache = WellKnownConfigurationCache()
     uri = "https://provider.example.com/.well-known/openid-configuration"
 
-    mock_response = MagicMock()
-    mock_response.json.return_value = {
-        "issuer": "https://provider.example.com",
-        "jwks_uri": "https://provider.example.com/jwks",
-    }
-    mock_response.raise_for_status = MagicMock()
-
-    mock_client = AsyncMock()
-    mock_client.get.return_value = mock_response
-    mock_client.__aenter__.return_value = mock_client
-    mock_client.__aexit__.return_value = None
-
-    with patch("httpx.AsyncClient", return_value=mock_client):
+    with respx.mock(assert_all_called=True) as respx_mock:
+        route = respx_mock.get(uri).mock(
+            return_value=httpx.Response(
+                200,
+                json={
+                    "issuer": "https://provider.example.com",
+                    "jwks_uri": "https://provider.example.com/jwks",
+                },
+            )
+        )
+        jwks_route = respx_mock.get("https://provider.example.com/jwks").mock(
+            return_value=httpx.Response(200, json={"keys": []})
+        )
         auth_config: AuthConfig = AuthConfig(
             auth_provider="TEST_PROVIDER",
             friendly_name="Test Provider",
@@ -109,9 +114,9 @@ async def test_get_async_concurrent_single_fetch() -> None:
         results = await asyncio.gather(*tasks)
 
         assert all(r == results[0] for r in results)
-        assert mock_client.get.call_count == 1, (
-            f"Expected 1 HTTP call, got {mock_client.get.call_count}"
-        )
+        assert route.call_count == 1, f"Expected 1 HTTP call, got {route.call_count}"
+        assert jwks_route.called
+        assert jwks_route.call_count == 1
         assert cache.size() == 1
 
 
@@ -121,29 +126,32 @@ async def test_get_async_multiple_uris_concurrent() -> None:
     uri1 = "https://provider1.example.com/.well-known/openid-configuration"
     uri2 = "https://provider2.example.com/.well-known/openid-configuration"
 
-    def mock_get_response(url: str) -> MagicMock:
-        mock_response = MagicMock()
-        if "provider1" in url:
-            mock_response.json.return_value = {
-                "issuer": "https://provider1.example.com",
-                "jwks_uri": "https://provider1.example.com/jwks",
-            }
-        else:
-            mock_response.json.return_value = {
-                "issuer": "https://provider2.example.com",
-                "jwks_uri": "https://provider2.example.com/jwks",
-            }
-        mock_response.raise_for_status = MagicMock()
-        return mock_response
-
-    mock_client = AsyncMock()
-    mock_client.get.side_effect = lambda url: mock_get_response(url)
-    mock_client.__aenter__.return_value = mock_client
-    mock_client.__aexit__.return_value = None
-
-    with patch("httpx.AsyncClient", return_value=mock_client):
+    with respx.mock(assert_all_called=True) as respx_mock:
+        route1 = respx_mock.get(uri1).mock(
+            return_value=httpx.Response(
+                200,
+                json={
+                    "issuer": "https://provider1.example.com",
+                    "jwks_uri": "https://provider1.example.com/jwks",
+                },
+            )
+        )
+        route2 = respx_mock.get(uri2).mock(
+            return_value=httpx.Response(
+                200,
+                json={
+                    "issuer": "https://provider2.example.com",
+                    "jwks_uri": "https://provider2.example.com/jwks",
+                },
+            )
+        )
+        jwks_route1 = respx_mock.get("https://provider1.example.com/jwks").mock(
+            return_value=httpx.Response(200, json={"keys": []})
+        )
+        jwks_route2 = respx_mock.get("https://provider2.example.com/jwks").mock(
+            return_value=httpx.Response(200, json={"keys": []})
+        )
         tasks = []
-
         for _ in range(30):
             auth_config1: AuthConfig = AuthConfig(
                 auth_provider="TEST_PROVIDER",
@@ -168,9 +176,16 @@ async def test_get_async_multiple_uris_concurrent() -> None:
         assert len(results) == 60
         assert cache.size() == 2
         assert uri1 in cache._cache and uri2 in cache._cache
-        assert mock_client.get.call_count == 2, (
-            f"Expected 2 HTTP calls, got {mock_client.get.call_count}"
+        assert route1.call_count == 1, (
+            f"Expected 1 HTTP call for uri1, got {route1.call_count}"
         )
+        assert route2.call_count == 1, (
+            f"Expected 1 HTTP call for uri2, got {route2.call_count}"
+        )
+        assert jwks_route1.called
+        assert jwks_route1.call_count == 1
+        assert jwks_route2.called
+        assert jwks_route2.call_count == 1
 
 
 @pytest.mark.asyncio
@@ -178,19 +193,19 @@ async def test_clear_resets_cache() -> None:
     cache = WellKnownConfigurationCache()
     uri = "https://provider.example.com/.well-known/openid-configuration"
 
-    mock_response = MagicMock()
-    mock_response.json.return_value = {
-        "issuer": "https://provider.example.com",
-        "jwks_uri": "https://provider.example.com/jwks",
-    }
-    mock_response.raise_for_status = MagicMock()
-
-    mock_client = AsyncMock()
-    mock_client.get.return_value = mock_response
-    mock_client.__aenter__.return_value = mock_client
-    mock_client.__aexit__.return_value = None
-
-    with patch("httpx.AsyncClient", return_value=mock_client):
+    with respx.mock(assert_all_called=False) as respx_mock:
+        route = respx_mock.get(uri).mock(
+            return_value=httpx.Response(
+                200,
+                json={
+                    "issuer": "https://provider.example.com",
+                    "jwks_uri": "https://provider.example.com/jwks",
+                },
+            )
+        )
+        jwks_route = respx_mock.get("https://provider.example.com/jwks").mock(
+            return_value=httpx.Response(200, json={"keys": []})
+        )
         auth_config: AuthConfig = AuthConfig(
             auth_provider="TEST_PROVIDER",
             friendly_name="Test Provider",
@@ -207,4 +222,5 @@ async def test_clear_resets_cache() -> None:
 
         # Fetch again after clear triggers new HTTP call
         await cache.read_async(auth_config=auth_config)
-        assert mock_client.get.call_count == 2
+        assert route.call_count == 2
+        assert jwks_route.call_count == 2
