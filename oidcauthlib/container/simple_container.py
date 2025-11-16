@@ -28,6 +28,10 @@ class ServiceNotFoundError(ContainerError):
     """Raised when a service is not found"""
 
 
+class RequestScopeNotActiveError(ContainerError):
+    """Raised when trying to resolve request-scoped service outside request context"""
+
+
 # ============================================================================
 # REQUEST SCOPE STORAGE (NEW)
 # ============================================================================
@@ -143,6 +147,7 @@ class SimpleContainer(IContainer):
 
         # NEW: Check if this is a request-scoped type
         if service_type in self._request_scoped_types:
+            self._validate_request_scope_active(service_name=service_name)
             return self._resolve_request_scoped(service_type, service_name)
 
         # Transient service: create new instance without locking
@@ -154,7 +159,6 @@ class SimpleContainer(IContainer):
         factory = self._factories[service_type]
         return cast(T, factory(self))
 
-    # NEW METHOD
     def _resolve_request_scoped[T](self, service_type: type[T], service_name: str) -> T:
         """
         Resolve request-scoped service with proper per-request isolation.
@@ -170,7 +174,8 @@ class SimpleContainer(IContainer):
             ContainerError: If no request scope is active
         """
         # Get current request ID
-        request_id = _current_request_id.get(None)
+        # Get current request ID (we know it exists from validation)
+        request_id = _current_request_id.get()
         if request_id is None:
             raise ContainerError(
                 f"Cannot resolve request-scoped service '{service_name}' "
@@ -259,15 +264,31 @@ class SimpleContainer(IContainer):
                     well_known_config_manager=c.resolve(WellKnownConfigurationManager),
                 ),
             )
+        Raises:
+            RequestScopeNotActiveError: When resolving if middleware is not installed
         """
+        if not callable(factory):
+            raise ValueError(f"Factory for {service_type} must be callable")
+
         self._factories[service_type] = factory
         self._request_scoped_types.add(service_type)
-        logger.debug(
-            "Registered request-scoped service '%s'", _safe_type_name(service_type)
-        )
-        return self
 
-    # NEW STATIC METHODS
+        # CHANGED: Updated log message
+        logger.debug(
+            "Registered request-scoped service '%s' "
+            "(requires RequestScopeMiddleware to be installed)",  # NEW
+            _safe_type_name(service_type),
+        )
+
+        # NEW: Optional warning if no request scope is active during registration
+        if not self.is_request_scope_active():
+            logger.warning(
+                "Registered request-scoped service '%s' but no request scope is currently active. "
+                "Ensure RequestScopeMiddleware is installed before handling requests.",
+                _safe_type_name(service_type),
+            )
+
+        return self
 
     @staticmethod
     def begin_request_scope(request_id: str | None = None) -> str:
@@ -293,6 +314,17 @@ class SimpleContainer(IContainer):
         """
         if request_id is None:
             request_id = str(uuid4())
+
+        # NEW: Check if a request scope is already active
+        existing_request_id = _current_request_id.get()
+        if existing_request_id is not None:
+            logger.warning(
+                "Beginning new request scope (request_id=%s...) "
+                "but another request scope is already active (request_id=%s...). "
+                "This may indicate nested requests or missing end_request_scope() call.",
+                request_id[:8],
+                existing_request_id[:8],
+            )
 
         # Initialize storage if needed
         all_storage = _request_scope_storage.get(None)
@@ -329,13 +361,18 @@ class SimpleContainer(IContainer):
             finally:
                 SimpleContainer.end_request_scope()
         """
-        request_id = _current_request_id.get(None)
+        request_id = _current_request_id.get()
         if request_id is None:
-            logger.warning("No active request scope to end")
+            # CHANGED: More detailed warning message
+            logger.warning(
+                "Attempted to end request scope but no request scope is active. "
+                "This may indicate a missing begin_request_scope() call or "
+                "duplicate end_request_scope() calls."
+            )
             return
 
         # Clean up storage for this request
-        all_storage = _request_scope_storage.get(None)
+        all_storage = _request_scope_storage.get()
         if all_storage and request_id in all_storage:
             instance_count = len(all_storage[request_id])
             del all_storage[request_id]
@@ -346,6 +383,13 @@ class SimpleContainer(IContainer):
                 threading.get_ident(),
                 instance_count,
                 len(all_storage),
+            )
+        else:
+            # NEW: Warning if storage not found
+            logger.warning(
+                "Ending request scope (request_id=%s...) but no storage found. "
+                "This may indicate the request scope was already cleaned up.",
+                request_id[:8],
             )
 
         # Clear current request ID
@@ -382,3 +426,59 @@ class SimpleContainer(IContainer):
         count = len(SimpleContainer._singletons)
         logger.debug("Clearing %d singleton instances", count)
         SimpleContainer._singletons.clear()
+
+    # noinspection PyMethodMayBeStatic
+    def _validate_request_scope_active(self, *, service_name: str) -> None:
+        """
+        Validate that request scope is active before resolving request-scoped service.
+
+        Args:
+            service_name: Name of the service being resolved (for error message)
+
+        Raises:
+            RequestScopeNotActiveError: If no request scope is active
+        """
+        request_id = _current_request_id.get()
+
+        if request_id is None:
+            error_msg = (
+                f"Cannot resolve request-scoped service '{service_name}' "
+                f"outside of a request context.\n\n"
+                f"This service was registered with container.request_scoped() "
+                f"but no request scope is currently active.\n\n"
+                f"Solutions:\n"
+                f"1. Ensure RequestScopeMiddleware is installed:\n"
+                f"   app.add_middleware(RequestScopeMiddleware)\n\n"
+                f"2. Or manually manage request scope:\n"
+                f"   SimpleContainer.begin_request_scope()\n"
+                f"   try:\n"
+                f"       service = container.resolve({service_name})\n"
+                f"   finally:\n"
+                f"       SimpleContainer.end_request_scope()\n\n"
+                f"3. Or change the service registration to singleton or factory scope."
+            )
+            logger.error(
+                "Request scope validation failed for '%s': no active request scope",
+                service_name,
+            )
+            raise RequestScopeNotActiveError(error_msg)
+
+        # Also validate that storage is initialized
+        all_storage = _request_scope_storage.get()
+        if all_storage is None:
+            error_msg = (
+                f"Request scope storage not initialized for '{service_name}'.\n"
+                f"Request ID is set ({request_id[:8]}...) but storage is None.\n"
+                f"This indicates a bug in request scope management."
+            )
+            logger.error(
+                "Request scope validation failed for '%s': storage not initialized",
+                service_name,
+            )
+            raise RequestScopeNotActiveError(error_msg)
+
+        logger.debug(
+            "Request scope validation passed for '%s' (request=%s)",
+            service_name,
+            request_id[:8],
+        )
