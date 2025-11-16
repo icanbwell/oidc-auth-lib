@@ -53,6 +53,8 @@ pytest-cov = ">=6.1.1"
 types-Authlib = ">=1.6.5"
 # respx is needed for mocking HTTPX requests in tests
 respx = ">=0.22.0"
+# mongomock is needed for mocking MongoDB in tests
+mongomock = ">=4.3.0"
 
 # These dependencies are required for pipenv-setup.  They conflict with ones above, so we install these
 # only when running pipenv-setup

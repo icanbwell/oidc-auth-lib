@@ -6,7 +6,7 @@ import pytest
 from unittest.mock import AsyncMock, Mock, patch
 from bson import ObjectId
 from pymongo.results import InsertOneResult, UpdateResult, DeleteResult
-from typing import Any, Optional
+from typing import Optional, Any
 
 from oidcauthlib.auth.repository.mongo.mongo_repository import AsyncMongoRepository
 from oidcauthlib.auth.models.base_db_model import BaseDbModel
