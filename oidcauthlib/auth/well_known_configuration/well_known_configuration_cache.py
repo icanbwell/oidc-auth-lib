@@ -201,6 +201,9 @@ class WellKnownConfigurationCache:
     def clear(self) -> None:
         """Clear all cached discovery documents (useful for tests)."""
         self._cache.clear()
+        self.client_key_sets.clear()
+        self._jwks = KeySet(keys=[])
+        self._loaded = False
 
     def get_client_key_set_for_kid(self, *, kid: str | None) -> ClientKeySet | None:
         """
