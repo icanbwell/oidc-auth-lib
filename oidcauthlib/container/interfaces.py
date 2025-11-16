@@ -43,4 +43,3 @@ class IContainer(IResolvable, Protocol):
     def create_scope(self) -> Self:
         """Create a child container for scoped services."""
         ...
-

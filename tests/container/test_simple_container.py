@@ -156,4 +156,3 @@ def test_mixed_lifetimes() -> None:
     s3_a = scope1.resolve(Service3)
     s3_b = scope1.resolve(Service3)
     assert s3_a is not s3_b
-

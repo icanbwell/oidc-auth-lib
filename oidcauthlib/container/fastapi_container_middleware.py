@@ -43,4 +43,3 @@ class ContainerScopeMiddleware(BaseHTTPMiddleware):
         finally:
             # Clean up the scoped container after the request
             ContainerRegistry.clear_scoped()
-

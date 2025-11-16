@@ -1,6 +1,5 @@
 """Tests for ContainerRegistry with request-scoped containers."""
 
-
 from oidcauthlib.container.container_registry import ContainerRegistry
 from oidcauthlib.container.simple_container import SimpleContainer
 
@@ -84,4 +83,3 @@ def test_scoped_container_isolation() -> None:
 
     # Clean up
     ContainerRegistry.clear_scoped()
-
