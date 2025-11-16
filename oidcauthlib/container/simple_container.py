@@ -65,7 +65,7 @@ class SimpleContainer(IContainer):
     # Reentrant lock prevents deadlock when singleton factories resolve other singletons
     _singleton_lock: threading.RLock = threading.RLock()
 
-    def __init__(self, *, source: str) -> None:
+    def __init__(self, *, source: str = "unknown") -> None:
         """
         Initialize the SimpleContainer.
         :param source: A string identifying the source of this container (for logging/debugging)
