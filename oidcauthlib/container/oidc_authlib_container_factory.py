@@ -52,14 +52,14 @@ class OidcAuthLibContainerFactory:
             ),
         )
 
-        container.register(
+        container.singleton(
             TokenReader,
             lambda c: TokenReader(
                 auth_config_reader=c.resolve(AuthConfigReader),
                 well_known_config_manager=c.resolve(WellKnownConfigurationManager),
             ),
         )
-        container.register(
+        container.singleton(
             FastAPIAuthManager,
             lambda c: FastAPIAuthManager(
                 environment_variables=c.resolve(EnvironmentVariables),
@@ -71,7 +71,7 @@ class OidcAuthLibContainerFactory:
             ),
         )
 
-        container.register(
+        container.singleton(
             AuthManager,
             lambda c: AuthManager(
                 auth_config_reader=c.resolve(AuthConfigReader),

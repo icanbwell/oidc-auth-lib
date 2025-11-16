@@ -64,11 +64,13 @@ class SimpleContainer(IContainer):
         logger.debug("SimpleContainer initialized (thread=%s)", threading.get_ident())
 
     @override
-    def register[T](
+    def factory[T](
         self, service_type: type[T], factory: ServiceFactory[T]
     ) -> "SimpleContainer":
         """
-        Register a service factory
+        Register a service factory.
+
+        Created every time, never cached
 
         Args:
             service_type: The type of service to register
@@ -232,28 +234,11 @@ class SimpleContainer(IContainer):
         return self
 
     @override
-    def transient[T](
-        self, service_type: type[T], factory: ServiceFactory[T]
-    ) -> "SimpleContainer":
-        """
-        Register a transient service.
-
-        Creates a new instance every time it's resolved.
-        """
-
-        def create_new(container: IContainer) -> T:
-            return factory(container)
-
-        self.register(service_type, create_new)
-        logger.debug("Registered transient service '%s'", _safe_type_name(service_type))
-        return self
-
-    # NEW METHOD
     def request_scoped[T](
         self, service_type: type[T], factory: ServiceFactory[T]
     ) -> "SimpleContainer":
         """
-        Register a request-scoped service (NEW!).
+        Register a request-scoped service
 
         Created once per request, shared within that request.
         Isolated between different requests.

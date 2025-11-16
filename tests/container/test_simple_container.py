@@ -16,7 +16,7 @@ def foo_factory(container: IContainer) -> Foo:
 def test_register_and_resolve() -> None:
     c: SimpleContainer = SimpleContainer()
     SimpleContainer.clear_singletons()
-    c.register(Foo, foo_factory)
+    c.factory(Foo, foo_factory)
     foo: Foo = c.resolve(Foo)
     assert isinstance(foo, Foo)
     assert foo.value == 42
@@ -29,16 +29,6 @@ def test_singleton() -> None:
     foo1: Foo = c.resolve(Foo)
     foo2: Foo = c.resolve(Foo)
     assert foo1 is foo2
-
-
-def test_transient() -> None:
-    c: SimpleContainer = SimpleContainer()
-    SimpleContainer.clear_singletons()
-    c.transient(Foo, foo_factory)
-    foo1: Foo = c.resolve(Foo)
-    foo2: Foo = c.resolve(Foo)
-    assert foo1 is not foo2
-    assert foo1.value == 42 and foo2.value == 42
 
 
 def test_service_not_found() -> None:
