@@ -210,3 +210,20 @@ class WellKnownConfigurationCache:
             if client_key_set.kids and kid in client_key_set.kids:
                 return client_key_set
         return None
+
+    async def get_async(self, auth_config: AuthConfig) -> dict[str, Any] | None:
+        """Get the cached OIDC discovery document for the given auth config.
+
+        Args:
+            auth_config (OIDCAuthConfig): OIDC authorization configuration.
+        Returns:
+            Dict[str, Any]: Parsed JSON discovery document.
+        """
+        well_known_uri: str | None = auth_config.well_known_uri
+        if not well_known_uri:
+            return None
+
+        if well_known_uri in self._cache:
+            return self._cache[well_known_uri]
+
+        return await self.read_async(auth_config=auth_config)

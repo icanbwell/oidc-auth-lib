@@ -13,6 +13,9 @@ from oidcauthlib.auth.auth_manager import AuthManager
 from oidcauthlib.auth.config.auth_config import AuthConfig
 from oidcauthlib.auth.config.auth_config_reader import AuthConfigReader
 from oidcauthlib.auth.token_reader import TokenReader
+from oidcauthlib.auth.well_known_configuration.well_known_configuration_manager import (
+    WellKnownConfigurationManager,
+)
 from oidcauthlib.utilities.environment.abstract_environment_variables import (
     AbstractEnvironmentVariables,
 )
@@ -30,6 +33,7 @@ class FastAPIAuthManager(AuthManager):
         environment_variables: AbstractEnvironmentVariables,
         auth_config_reader: AuthConfigReader,
         token_reader: TokenReader,
+        well_known_configuration_manager: WellKnownConfigurationManager,
     ) -> None:
         """
         Initialize the TokenStorageAuthManager with required components.
@@ -47,6 +51,16 @@ class FastAPIAuthManager(AuthManager):
             auth_config_reader=auth_config_reader,
             token_reader=token_reader,
         )
+        self.well_known_configuration_manager: WellKnownConfigurationManager = (
+            well_known_configuration_manager
+        )
+        if not isinstance(
+            self.well_known_configuration_manager,
+            WellKnownConfigurationManager,
+        ):
+            raise TypeError(
+                "well_known_configuration_manager must be an instance of WellKnownConfigurationManager"
+            )
 
     async def read_callback_response(self, *, request: Request) -> Response:
         """
@@ -173,10 +187,16 @@ class FastAPIAuthManager(AuthManager):
         end_session_endpoint = None
         if auth_config.well_known_uri:
             try:
-                async with httpx.AsyncClient(timeout=5) as async_client:
-                    resp = await async_client.get(auth_config.well_known_uri)
-                resp.raise_for_status()
-                end_session_endpoint = resp.json().get("end_session_endpoint")
+                well_known_config: (
+                    dict[str, Any] | None
+                ) = await self.well_known_configuration_manager.get_async(
+                    auth_config=auth_config
+                )
+                end_session_endpoint = (
+                    well_known_config.get("end_session_endpoint")
+                    if well_known_config
+                    else None
+                )
             except Exception as e:
                 logger.warning(f"Could not discover end_session_endpoint: {e}")
         if not end_session_endpoint and auth_config.issuer:

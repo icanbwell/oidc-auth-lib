@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from typing import List
+from typing import List, Any
 
 from joserfc.jwk import KeySet
 
@@ -77,3 +77,7 @@ class WellKnownConfigurationManager:
             self._cache.clear()
             self._loaded = False
         await self.ensure_initialized_async()
+
+    async def get_async(self, auth_config: AuthConfig) -> dict[str, Any] | None:
+        await self.ensure_initialized_async()
+        return await self._cache.get_async(auth_config=auth_config)

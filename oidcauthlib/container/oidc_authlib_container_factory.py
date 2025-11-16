@@ -65,6 +65,9 @@ class OidcAuthLibContainerFactory:
                 environment_variables=c.resolve(EnvironmentVariables),
                 auth_config_reader=c.resolve(AuthConfigReader),
                 token_reader=c.resolve(TokenReader),
+                well_known_configuration_manager=c.resolve(
+                    WellKnownConfigurationManager
+                ),
             ),
         )
 
