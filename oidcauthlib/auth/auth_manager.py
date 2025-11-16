@@ -1,5 +1,6 @@
 import logging
 import os
+import time
 import uuid
 from typing import Any, Dict, cast, List
 
@@ -298,3 +299,45 @@ class AuthManager:
             if auth_config.auth_provider.lower() == auth_provider.lower():
                 return auth_config
         return None
+
+    @staticmethod
+    def wait_till_well_known_configuration_available(
+        *, auth_config: AuthConfig, timeout_seconds: int = 30
+    ) -> None:
+        """
+        Wait until the well-known configuration is available for the given AuthConfig.
+
+        This method repeatedly attempts to fetch the well-known configuration from the
+        specified URL until it succeeds or the timeout is reached.
+
+        Args:
+            auth_config (AuthConfig): The authentication configuration containing the
+                well-known URL.
+            timeout_seconds (int): The maximum time to wait in seconds. Defaults to 30 seconds.
+        Raises:
+            TimeoutError: If the well-known configuration is not available within the timeout period.
+        """
+        if not auth_config.well_known_uri:
+            raise ValueError("AuthConfig must have a well-known URI to wait for.")
+
+        start_time = time.time()
+        while True:
+            try:
+                with httpx.Client(timeout=5) as client:
+                    resp = client.get(auth_config.well_known_uri)
+                resp.raise_for_status()
+                # Successfully fetched the configuration
+                logger.info(
+                    f"Well-known configuration is now available at {auth_config.well_known_uri}"
+                )
+                return
+            except Exception as e:
+                elapsed_time = time.time() - start_time
+                if elapsed_time >= timeout_seconds:
+                    raise TimeoutError(
+                        f"Timed out waiting for well-known configuration at {auth_config.well_known_uri}"
+                    ) from e
+                logger.debug(
+                    f"Well-known configuration not yet available, retrying... ({elapsed_time:.1f}s elapsed)"
+                )
+                time.sleep(2)  # Wait before retrying
