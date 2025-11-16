@@ -31,6 +31,9 @@ from oidcauthlib.auth.exceptions.authorization_bearer_token_missing_exception im
 )
 from oidcauthlib.auth.models.token import Token
 from oidcauthlib.utilities.logger.log_levels import SRC_LOG_LEVELS
+from oidcauthlib.auth.config.well_known_configuration_cache import (
+    WellKnownConfigurationCache,
+)
 
 logger = logging.getLogger(__name__)
 logger.setLevel(SRC_LOG_LEVELS["AUTH"])
@@ -73,18 +76,22 @@ class TokenReader:
         self.well_known_configs: List[
             Dict[str, Any]
         ] = []  # will load asynchronously later
-        self.jwks: KeySet = KeySet(keys=[])  # Will be set by async fetch
-        # Cache for well-known configs keyed by URI to prevent repeated fetches
-        self.cached_well_known_configs: Dict[str, Dict[str, Any]] = {}
+        # Removed internal cache attributes; replaced by WellKnownConfigurationCache
+        self._well_known_cache: WellKnownConfigurationCache = (
+            WellKnownConfigurationCache()
+        )
 
-        # Locks for preventing race conditions in concurrent environments
+        self.jwks: KeySet = KeySet(keys=[])  # Will be set by async fetch
+        # Cache for well-known configs keyed by URI to prevent repeated fetches (backward compatibility property exposes this)
+
+        # Locks for preventing race conditions in concurrent environments (JWKS only now)
         self._jwks_lock: asyncio.Lock = asyncio.Lock()  # Protects JWKS initialization
-        self._well_known_locks: Dict[
-            str, asyncio.Lock
-        ] = {}  # Per-URI locks for discovery document fetching
-        self._well_known_locks_lock: asyncio.Lock = (
-            asyncio.Lock()
-        )  # Protects _well_known_locks dict access
+        # Removed per-URI lock structures; handled inside WellKnownConfigurationCache
+
+    @property
+    def cached_well_known_configs(self) -> Dict[str, Dict[str, Any]]:
+        """Backward compatibility accessor for existing code/tests that inspect the cache."""
+        return self._well_known_cache.cache
 
     async def fetch_well_known_config_and_jwks_async(self) -> None:
         """
@@ -121,14 +128,14 @@ class TokenReader:
                     )
                     continue
 
-                well_known_config: Dict[
-                    str, Any
-                ] = await self.fetch_well_known_config_async(
-                    well_known_uri=auth_config.well_known_uri
+                self.well_known_configs.append(
+                    await self.fetch_well_known_config_async(
+                        well_known_uri=auth_config.well_known_uri
+                    )
                 )
 
                 jwks_uri = await self.get_jwks_uri_async(
-                    well_known_config=well_known_config
+                    well_known_config=self.well_known_configs[-1]
                 )
                 if not jwks_uri:
                     logger.warning(
@@ -144,11 +151,9 @@ class TokenReader:
                         jwks_data: Dict[str, Any] = response.json()
                         for key in jwks_data.get("keys", []):
                             kid = key.get("kid")
-                            # if there is no matching "kid" in keys then add it
                             if not any([k.get("kid") == kid for k in keys]):
                                 keys.append(key)
                             else:
-                                # Log warning if a duplicate kid is found
                                 logger.warning(
                                     f"Duplicate key ID '{kid}' found when fetching JWKS from {jwks_uri}. "
                                     f"This may indicate overlapping keys from different providers. "
@@ -168,12 +173,14 @@ class TokenReader:
                             f"Failed to connect to JWKS URI: {jwks_uri}: {e}"
                         )
 
-            self.jwks = KeySet.import_key_set(
-                {
-                    "keys": keys,
-                }
-            )
+            self.jwks = KeySet.import_key_set({"keys": keys})
             logger.debug(f"Fetched JWKS with {len(self.jwks.keys)} keys.")
+
+    async def fetch_well_known_config_async(
+        self, *, well_known_uri: str
+    ) -> Dict[str, Any]:
+        """Delegate to WellKnownConfigurationCache for backward compatibility."""
+        return await self._well_known_cache.get_async(well_known_uri=well_known_uri)
 
     @staticmethod
     def extract_token(*, authorization_header: str | None) -> Optional[str]:
@@ -363,72 +370,6 @@ class TokenReader:
                 message=f"Invalid token provided. Exp: {exp_str}, Now: {now_str}. Please check the token:\n{token}.",
                 token=token,
             ) from e
-
-    async def fetch_well_known_config_async(
-        self, *, well_known_uri: str
-    ) -> Dict[str, Any]:
-        """
-        Fetches the OpenID Connect discovery document and returns its contents as a dict.
-        Uses instance-level caching to prevent repeated fetches for the same URI.
-
-        This method uses per-URI locking to prevent race conditions when multiple concurrent
-        requests attempt to fetch the same discovery document simultaneously. Only one coroutine
-        will perform the HTTP fetch per URI, while others wait for the result.
-
-        Returns:
-            dict: The parsed discovery document.
-        Raises:
-            ValueError: If the document cannot be fetched or parsed.
-        """
-        if not well_known_uri:
-            raise ValueError("well_known_uri is not set")
-
-        # Fast path: check cache without lock to avoid contention on cache hits
-        if well_known_uri in self.cached_well_known_configs:
-            logger.info(f"✓ Using cached OIDC discovery document for {well_known_uri}")
-            return self.cached_well_known_configs[well_known_uri]
-
-        # Get or create a lock for this specific URI
-        # This lock creation needs to be protected to avoid race conditions
-        async with self._well_known_locks_lock:
-            if well_known_uri not in self._well_known_locks:
-                self._well_known_locks[well_known_uri] = asyncio.Lock()
-            uri_lock = self._well_known_locks[well_known_uri]
-
-        # Acquire the URI-specific lock to ensure only one coroutine fetches this URI
-        async with uri_lock:
-            # Double-check: another coroutine may have fetched while we waited for the lock
-            if well_known_uri in self.cached_well_known_configs:
-                logger.info(
-                    f"✓ Using cached OIDC discovery document (fetched by another coroutine) for {well_known_uri}"
-                )
-                return self.cached_well_known_configs[well_known_uri]
-
-            logger.info(
-                f"Cache miss for {well_known_uri}. Cache has {len(self.cached_well_known_configs)} entries."
-            )
-
-            # Cache miss - fetch from remote (only one coroutine reaches here per URI)
-            async with httpx.AsyncClient() as client:
-                try:
-                    logger.info(
-                        f"Fetching OIDC discovery document from {well_known_uri}"
-                    )
-                    response = await client.get(well_known_uri)
-                    response.raise_for_status()
-                    config = cast(Dict[str, Any], response.json())
-                    # Store in cache for future use
-                    self.cached_well_known_configs[well_known_uri] = config
-                    logger.info(f"Cached OIDC discovery document for {well_known_uri}")
-                    return config
-                except httpx.HTTPStatusError as e:
-                    raise ValueError(
-                        f"Failed to fetch OIDC discovery document from {well_known_uri} with status {e.response.status_code} : {e}"
-                    )
-                except ConnectError as e:
-                    raise ConnectionError(
-                        f"Failed to connect to OIDC discovery document: {well_known_uri}: {e}"
-                    )
 
     # noinspection PyMethodMayBeStatic
     async def get_jwks_uri_async(
