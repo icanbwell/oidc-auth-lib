@@ -65,11 +65,22 @@ class SimpleContainer(IContainer):
     # Reentrant lock prevents deadlock when singleton factories resolve other singletons
     _singleton_lock: threading.RLock = threading.RLock()
 
-    def __init__(self) -> None:
+    def __init__(self, *, source: str) -> None:
+        """
+        Initialize the SimpleContainer.
+        :param source: A string identifying the source of this container (for logging/debugging)
+        """
         self._factories: Dict[type[Any], ServiceFactory[Any]] = {}
         self._singleton_types: set[type[Any]] = set()
         self._request_scoped_types: set[type[Any]] = set()  # NEW
+        self._source: str = source
         logger.debug("SimpleContainer initialized (thread=%s)", threading.get_ident())
+
+    @override
+    @property
+    def container_source(self) -> str:
+        """Get the underlying container source."""
+        return self._source
 
     @override
     def factory[T](
@@ -419,8 +430,8 @@ class SimpleContainer(IContainer):
         """
         return _current_request_id.get(None) is not None
 
-    @classmethod
-    def clear_singletons(cls) -> None:
+    @override
+    def clear_singletons(self) -> None:
         """
         Clear all singleton instances from the container.
 

@@ -31,8 +31,8 @@ def bar_factory(container: IContainer) -> Bar:
 
 
 def test_register_and_resolve() -> None:
-    c: SimpleContainer = SimpleContainer()
-    SimpleContainer.clear_singletons()
+    c: SimpleContainer = SimpleContainer(source=__name__)
+    c.clear_singletons()
     c.factory(Foo, foo_factory)
     foo: Foo = c.resolve(Foo)
     assert isinstance(foo, Foo)
@@ -40,8 +40,8 @@ def test_register_and_resolve() -> None:
 
 
 def test_singleton() -> None:
-    c: SimpleContainer = SimpleContainer()
-    SimpleContainer.clear_singletons()
+    c: SimpleContainer = SimpleContainer(source=__name__)
+    c.clear_singletons()
     c.singleton(Foo, foo_factory)
     foo1: Foo = c.resolve(Foo)
     foo2: Foo = c.resolve(Foo)
@@ -49,8 +49,8 @@ def test_singleton() -> None:
 
 
 def test_service_not_found() -> None:
-    c: SimpleContainer = SimpleContainer()
-    SimpleContainer.clear_singletons()
+    c: SimpleContainer = SimpleContainer(source=__name__)
+    c.clear_singletons()
     with pytest.raises(ServiceNotFoundError):
         c.resolve(Foo)
 
@@ -59,7 +59,7 @@ def test_service_not_found() -> None:
 
 
 def test_request_scoped_resolution_same_request() -> None:
-    c = SimpleContainer()
+    c = SimpleContainer(source=__name__)
     c.request_scoped(Bar, bar_factory)
     request_id = SimpleContainer.begin_request_scope("req-1")
     try:
@@ -75,7 +75,7 @@ def test_request_scoped_resolution_same_request() -> None:
 
 
 def test_request_scoped_resolution_different_requests() -> None:
-    c = SimpleContainer()
+    c = SimpleContainer(source=__name__)
     c.request_scoped(Bar, bar_factory)
     SimpleContainer.begin_request_scope("req-A")
     try:
@@ -93,14 +93,14 @@ def test_request_scoped_resolution_different_requests() -> None:
 
 
 def test_request_scoped_resolution_without_scope() -> None:
-    c = SimpleContainer()
+    c = SimpleContainer(source=__name__)
     c.request_scoped(Bar, bar_factory)
     with pytest.raises(RequestScopeNotActiveError):
         c.resolve(Bar)
 
 
 def test_request_scope_lifecycle_helpers() -> None:
-    c = SimpleContainer()
+    c = SimpleContainer(source=__name__)
     c.request_scoped(Bar, bar_factory)
     assert not SimpleContainer.is_request_scope_active()
     rid = SimpleContainer.begin_request_scope("life-1")
@@ -109,7 +109,7 @@ def test_request_scope_lifecycle_helpers() -> None:
         assert SimpleContainer.get_current_request_id() == rid
         instance = c.resolve(Bar)
         # clear singletons should not affect request scoped instance
-        SimpleContainer.clear_singletons()
+        c.clear_singletons()
         instance2 = c.resolve(Bar)
         assert instance is instance2
     finally:
@@ -125,7 +125,7 @@ def test_end_request_scope_without_begin(caplog: LogCaptureFixture) -> None:
 
 
 def test_nested_request_scope_warning(caplog: LogCaptureFixture) -> None:
-    c = SimpleContainer()
+    c = SimpleContainer(source=__name__)
     c.request_scoped(Bar, bar_factory)
     caplog.set_level("WARNING")
     SimpleContainer.begin_request_scope("outer")
