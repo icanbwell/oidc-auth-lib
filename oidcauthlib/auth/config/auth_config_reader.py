@@ -1,4 +1,5 @@
 import os
+import threading
 
 from oidcauthlib.auth.config.auth_config import AuthConfig
 from oidcauthlib.utilities.environment.abstract_environment_variables import (
@@ -27,6 +28,8 @@ class AuthConfigReader:
                 "environment_variables must be an instance of EnvironmentVariables"
             )
         self._auth_configs: list[AuthConfig] | None = None
+        # lock to protect first-time initialization of _auth_configs across threads
+        self._lock: threading.Lock = threading.Lock()
 
     def get_auth_configs_for_all_auth_providers(self) -> list[AuthConfig]:
         """
@@ -35,20 +38,27 @@ class AuthConfigReader:
         Returns:
             list[AuthConfig]: A list of AuthConfig instances for each audience.
         """
-        if self._auth_configs is not None:
-            return self._auth_configs
-
-        auth_providers: list[str] | None = self.environment_variables.auth_providers
-        if auth_providers is None:
-            raise ValueError("auth_providers environment variable must be set")
-        auth_configs: list[AuthConfig] = []
-        for auth_provider in auth_providers:
-            auth_config: AuthConfig | None = self.read_config_for_auth_provider(
-                auth_provider=auth_provider,
-            )
-            if auth_config is not None:
-                auth_configs.append(auth_config)
-        return auth_configs
+        # Fast path without locking if already initialized
+        existing: list[AuthConfig] | None = self._auth_configs
+        if existing is not None:
+            return existing
+        # Double-checked locking to ensure only one thread performs initialization
+        with self._lock:
+            if self._auth_configs is not None:
+                return self._auth_configs
+            auth_providers: list[str] | None = self.environment_variables.auth_providers
+            if auth_providers is None:
+                raise ValueError("auth_providers environment variable must be set")
+            auth_configs: list[AuthConfig] = []
+            for auth_provider in auth_providers:
+                auth_config: AuthConfig | None = self.read_config_for_auth_provider(
+                    auth_provider=auth_provider,
+                )
+                if auth_config is not None:
+                    auth_configs.append(auth_config)
+            # Assign atomically while still under lock
+            self._auth_configs = auth_configs
+            return auth_configs
 
     def get_config_for_auth_provider(self, *, auth_provider: str) -> AuthConfig | None:
         """

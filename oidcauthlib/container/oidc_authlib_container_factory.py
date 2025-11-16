@@ -22,12 +22,12 @@ class OidcAuthLibContainerFactory:
         :return:
         """
         # register services here
-        container.register(
+        container.singleton(
             EnvironmentVariables,
             lambda c: EnvironmentVariables(),
         )
 
-        container.register(
+        container.singleton(
             AuthConfigReader,
             lambda c: AuthConfigReader(
                 environment_variables=c.resolve(EnvironmentVariables)
