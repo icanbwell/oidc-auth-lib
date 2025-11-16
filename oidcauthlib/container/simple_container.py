@@ -250,6 +250,13 @@ class SimpleContainer(IContainer):
         """
         self._factories[service_type] = factory
         self._singleton_types.add(service_type)
+        # clear any cached singleton instance to allow re-registration
+        if service_type in SimpleContainer._singletons:
+            del SimpleContainer._singletons[service_type]
+            logger.debug(
+                "Cleared existing singleton instance for '%s' due to re-registration",
+                _safe_type_name(service_type),
+            )
         logger.debug("Registered singleton service '%s'", _safe_type_name(service_type))
         return self
 
