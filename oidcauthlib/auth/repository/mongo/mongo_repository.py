@@ -303,7 +303,7 @@ class AsyncMongoRepository[T: BaseDbModel](AsyncBaseRepository[T]):
             collection_name=collection_name, fields=keys, model_class=model_class
         )
         if existing_item:
-            item = on_update(existing_item)
+            item = on_update(item)
         else:
             item = on_insert(item)
         document = self._convert_model_to_dict(item)
