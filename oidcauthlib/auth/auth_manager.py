@@ -159,10 +159,7 @@ class AuthManager:
         if client is None:
             raise ValueError(f"Client for audience {audience} not found")
         state_content: Dict[str, str | None] = {
-            "client_id": client_id,
-            "audience": audience,
             "auth_provider": auth_provider,
-            "issuer": issuer,
             "referring_email": referring_email,
             "referring_subject": referring_subject,
             "url": url,  # the URL of the tool that has requested this
@@ -309,3 +306,13 @@ class AuthManager:
                     f"Well-known configuration not yet available, retrying... ({elapsed_time:.1f}s elapsed)"
                 )
                 time.sleep(2)  # Wait before retrying
+
+    def get_auth_config_for_auth_provider(
+        self, *, auth_provider: str
+    ) -> AuthConfig | None:
+        if not auth_provider:
+            raise ValueError("auth_provider must not be empty")
+        for auth_config in self.auth_configs:
+            if auth_config.auth_provider.lower() == auth_provider.lower():
+                return auth_config
+        return None
