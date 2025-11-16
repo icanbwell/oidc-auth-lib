@@ -22,6 +22,9 @@ from oidcauthlib.auth.exceptions.authorization_needed_exception import (
     AuthorizationNeededException,
 )
 from oidcauthlib.auth.token_reader import TokenReader
+from oidcauthlib.auth.well_known_configuration.well_known_configuration_manager import (
+    WellKnownConfigurationManager,
+)
 from oidcauthlib.utilities.environment.abstract_environment_variables import (
     AbstractEnvironmentVariables,
 )
@@ -48,6 +51,7 @@ class AuthManager:
         environment_variables: AbstractEnvironmentVariables,
         auth_config_reader: AuthConfigReader,
         token_reader: TokenReader,
+        well_known_configuration_manager: WellKnownConfigurationManager,
     ) -> None:
         """
         Initialize the AuthManager with the necessary configuration for OIDC PKCE.
@@ -88,6 +92,17 @@ class AuthManager:
         if not isinstance(self.token_reader, TokenReader):
             raise TypeError("token_reader must be an instance of TokenReader")
 
+        self.well_known_configuration_manager: WellKnownConfigurationManager = (
+            well_known_configuration_manager
+        )
+        if self.well_known_configuration_manager is None:
+            raise ValueError("well_known_configuration_manager must not be None")
+        if not isinstance(
+            self.well_known_configuration_manager, WellKnownConfigurationManager
+        ):
+            raise TypeError(
+                "well_known_configuration_manager must be an instance of WellKnownConfigurationManager"
+            )
         oauth_cache_type = environment_variables.oauth_cache
         self.cache: OAuthCache = (
             OAuthMemoryCache()
@@ -103,21 +118,39 @@ class AuthManager:
         if self.redirect_uri is None:
             raise ValueError("AUTH_REDIRECT_URI environment variable must be set")
         # https://docs.authlib.org/en/latest/client/frameworks.html#frameworks-clients
-        self.oauth: OAuth = OAuth(cache=self.cache)  # type: ignore[no-untyped-call]
+        self._oauth: OAuth = OAuth(cache=self.cache)  # type: ignore[no-untyped-call]
         # read AUTH_PROVIDERS comma separated list from the environment variable and register the OIDC provider for each provider
-        auth_configs: List[AuthConfig] = (
+        self.auth_configs: List[AuthConfig] = (
             self.auth_config_reader.get_auth_configs_for_all_auth_providers()
         )
 
+    async def ensure_initialized_async(self) -> None:
         auth_config: AuthConfig
-        for auth_config in auth_configs:
-            self.oauth.register(
-                name=auth_config.audience,
+        for auth_config in self.auth_configs:
+            server_metadata: (
+                dict[str, Any] | None
+            ) = await self.well_known_configuration_manager.get_async(
+                auth_config=auth_config
+            )
+            logger.debug(
+                f"Registering OAuth client for auth provider {auth_config.auth_provider}"
+                + (
+                    f" with well-known configuration: {server_metadata}"
+                    if server_metadata is not None
+                    else f" from {auth_config.well_known_uri}"
+                )
+            )
+            self._oauth.register(
+                name=auth_config.auth_provider.lower(),
                 client_id=auth_config.client_id,
                 client_secret=auth_config.client_secret,
                 server_metadata_url=auth_config.well_known_uri,
+                # server_metadata_url=auth_config.well_known_uri
+                # if server_metadata is None
+                # else None,
+                # server_metadata=server_metadata,
                 client_kwargs={
-                    "scope": "openid email",
+                    "scope": auth_config.scope,
                     "code_challenge_method": "S256",
                     "transport": LoggingTransport(httpx.AsyncHTTPTransport()),
                 },
@@ -126,9 +159,9 @@ class AuthManager:
     async def create_authorization_url(
         self,
         *,
+        auth_provider: str,
         redirect_uri: str,
         audience: str,
-        issuer: str,
         url: str | None,
         referring_email: str | None,
         referring_subject: str | None,
@@ -140,10 +173,10 @@ class AuthManager:
         including the redirect URI and state. The state is encoded to include the tool name,
         which is used to identify the tool that initiated the authentication process.
         Args:
+            auth_provider (str): The name of the OIDC provider.
             redirect_uri (str): The redirect URI to which the OIDC provider will send the user
                 after authentication.
             audience (str): The audience we need to get a token for.
-            issuer (str): The issuer of the OIDC provider, used to validate the token.
             url (str): The URL of the tool that has requested this.
             referring_email (str): The email of the user who initiated the request.
             referring_subject (str): The subject of the user who initiated the request.
@@ -151,15 +184,11 @@ class AuthManager:
             str: The authorization URL to redirect the user to for authentication.
         """
         # default to first audience
-        client: StarletteOAuth2App = self.create_oauth_client(audience=audience)
+        client: StarletteOAuth2App = await self.create_oauth_client(name=auth_provider)
         if client is None:
             raise ValueError(f"Client for audience {audience} not found")
         state_content: Dict[str, str | None] = {
-            "audience": audience,
-            "auth_provider": self.auth_config_reader.get_provider_for_audience(
-                audience=audience
-            ),
-            "issuer": issuer,
+            "auth_provider": auth_provider,
             "referring_email": referring_email,
             "referring_subject": referring_subject,
             "url": url,  # the URL of the tool that has requested this
@@ -183,8 +212,11 @@ class AuthManager:
         await client.save_authorize_data(request=None, redirect_uri=redirect_uri, **rv)  # type: ignore[no-untyped-call]
         return cast(str, rv["url"])
 
-    def create_oauth_client(self, *, audience: str) -> StarletteOAuth2App:
-        return cast(StarletteOAuth2App, self.oauth.create_client(audience))  # type: ignore[no-untyped-call]
+    async def create_oauth_client(self, *, name: str) -> StarletteOAuth2App:
+        if not name:
+            raise ValueError("name must not be empty")
+        await self.ensure_initialized_async()
+        return cast(StarletteOAuth2App, self._oauth.create_client(name=name.lower()))  # type: ignore[no-untyped-call]
 
     @staticmethod
     async def login_and_get_token_with_username_password_async(
@@ -262,6 +294,16 @@ class AuthManager:
             raise AuthorizationNeededException(message="No access token returned.")
 
         return access_token
+
+    def get_auth_config_for_auth_provider(
+        self, *, auth_provider: str
+    ) -> AuthConfig | None:
+        if not auth_provider:
+            raise ValueError("auth_provider must not be empty")
+        for auth_config in self.auth_configs:
+            if auth_config.auth_provider.lower() == auth_provider.lower():
+                return auth_config
+        return None
 
     @staticmethod
     def wait_till_well_known_configuration_available(

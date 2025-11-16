@@ -35,6 +35,9 @@ class AsyncMongoRepository[T: BaseDbModel](AsyncBaseRepository[T]):
         database_name: str,
         username: Optional[str],
         password: Optional[str],
+        client: Optional[
+            AsyncMongoClient[Any]
+        ] = None,  # Optional injected async client (for testing or custom usage)
     ) -> None:
         """
         Initialize async MongoDB connection.
@@ -55,7 +58,12 @@ class AsyncMongoRepository[T: BaseDbModel](AsyncBaseRepository[T]):
             password=password,
         )
         self.database_name = database_name
-        self._client: AsyncMongoClient[Any] = AsyncMongoClient(self.connection_string)
+        # Use injected client if provided; otherwise create a new AsyncMongoClient
+        self._client: AsyncMongoClient[Any]
+        if client is not None:
+            self._client = client
+        else:
+            self._client = AsyncMongoClient(self.connection_string)
         self._db = self._client[database_name]
 
     async def connect(self) -> None:
@@ -303,7 +311,7 @@ class AsyncMongoRepository[T: BaseDbModel](AsyncBaseRepository[T]):
             collection_name=collection_name, fields=keys, model_class=model_class
         )
         if existing_item:
-            item = on_update(existing_item)
+            item = on_update(item)
         else:
             item = on_insert(item)
         document = self._convert_model_to_dict(item)

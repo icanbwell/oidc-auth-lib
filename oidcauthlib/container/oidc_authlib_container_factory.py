@@ -2,6 +2,12 @@ import logging
 
 from oidcauthlib.auth.auth_manager import AuthManager
 from oidcauthlib.auth.config.auth_config_reader import AuthConfigReader
+from oidcauthlib.auth.well_known_configuration.well_known_configuration_cache import (
+    WellKnownConfigurationCache,
+)
+from oidcauthlib.auth.well_known_configuration.well_known_configuration_manager import (
+    WellKnownConfigurationManager,
+)
 from oidcauthlib.auth.fastapi_auth_manager import FastAPIAuthManager
 from oidcauthlib.auth.token_reader import TokenReader
 from oidcauthlib.container.simple_container import SimpleContainer
@@ -22,12 +28,12 @@ class OidcAuthLibContainerFactory:
         :return:
         """
         # register services here
-        container.register(
+        container.singleton(
             EnvironmentVariables,
             lambda c: EnvironmentVariables(),
         )
 
-        container.register(
+        container.singleton(
             AuthConfigReader,
             lambda c: AuthConfigReader(
                 environment_variables=c.resolve(EnvironmentVariables)
@@ -35,26 +41,45 @@ class OidcAuthLibContainerFactory:
         )
 
         container.singleton(
+            WellKnownConfigurationCache, lambda c: WellKnownConfigurationCache()
+        )
+
+        container.singleton(
+            WellKnownConfigurationManager,
+            lambda c: WellKnownConfigurationManager(
+                auth_config_reader=c.resolve(AuthConfigReader),
+                cache=c.resolve(WellKnownConfigurationCache),
+            ),
+        )
+
+        container.singleton(
             TokenReader,
             lambda c: TokenReader(
                 auth_config_reader=c.resolve(AuthConfigReader),
+                well_known_config_manager=c.resolve(WellKnownConfigurationManager),
             ),
         )
-        container.register(
+        container.singleton(
             FastAPIAuthManager,
             lambda c: FastAPIAuthManager(
                 environment_variables=c.resolve(EnvironmentVariables),
                 auth_config_reader=c.resolve(AuthConfigReader),
                 token_reader=c.resolve(TokenReader),
+                well_known_configuration_manager=c.resolve(
+                    WellKnownConfigurationManager
+                ),
             ),
         )
 
-        container.register(
+        container.singleton(
             AuthManager,
             lambda c: AuthManager(
                 auth_config_reader=c.resolve(AuthConfigReader),
                 token_reader=c.resolve(TokenReader),
                 environment_variables=c.resolve(EnvironmentVariables),
+                well_known_configuration_manager=c.resolve(
+                    WellKnownConfigurationManager
+                ),
             ),
         )
 
