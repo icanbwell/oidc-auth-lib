@@ -204,7 +204,11 @@ class Token(BaseModel):
             str: The client ID associated with the token.
         """
         return (
-            (self.claims.get("cid") or self.claims.get("client_id"))
+            (
+                self.claims.get("cid")
+                or self.claims.get("client_id")
+                or self.claims.get("azp")
+            )
             if self.claims
             else None
         )

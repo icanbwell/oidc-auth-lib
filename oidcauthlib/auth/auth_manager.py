@@ -132,14 +132,23 @@ class AuthManager:
             ) = await self.well_known_configuration_manager.get_async(
                 auth_config=auth_config
             )
+            logger.debug(
+                f"Registering OAuth client for auth provider {auth_config.auth_provider}"
+                + (
+                    f" with well-known configuration: {server_metadata}"
+                    if server_metadata is not None
+                    else f" from {auth_config.well_known_uri}"
+                )
+            )
             self._oauth.register(
                 name=auth_config.auth_provider.lower(),
                 client_id=auth_config.client_id,
                 client_secret=auth_config.client_secret,
-                server_metadata_url=auth_config.well_known_uri
-                if server_metadata is None
-                else None,
-                server_metadata=server_metadata,
+                server_metadata_url=auth_config.well_known_uri,
+                # server_metadata_url=auth_config.well_known_uri
+                # if server_metadata is None
+                # else None,
+                # server_metadata=server_metadata,
                 client_kwargs={
                     "scope": "openid email",
                     "code_challenge_method": "S256",
