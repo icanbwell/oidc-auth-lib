@@ -161,7 +161,9 @@ class SimpleContainer(IContainer):
                 service: T = factory(self)
                 SimpleContainer._singletons[service_type] = service
                 logger.debug(
-                    f"Singleton '{service_name}' instantiated and cached with class {service.__class__.__name__}",
+                    "Singleton '%s' instantiated and cached with class %s",
+                    service_name,
+                    service.__class__.__name__,
                 )
                 return service
 
