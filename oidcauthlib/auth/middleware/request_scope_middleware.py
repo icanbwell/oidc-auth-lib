@@ -11,8 +11,10 @@ from starlette.requests import Request
 from starlette.responses import Response
 
 from oidcauthlib.container.container_registry import ContainerRegistry
+from oidcauthlib.utilities.logger.log_levels import SRC_LOG_LEVELS
 
 logger = logging.getLogger(__name__)
+logger.setLevel(SRC_LOG_LEVELS["REQUEST_SCOPE"])
 
 
 class RequestScopeMiddleware(BaseHTTPMiddleware):
@@ -51,7 +53,7 @@ class RequestScopeMiddleware(BaseHTTPMiddleware):
 
         # Begin request scope
         ContainerRegistry.begin_request_scope(request_id)
-        logger.info(
+        logger.debug(
             f"→ {request.method} {request.url.path} (request_id={request_id[:8]}...)"
         )
 
@@ -62,7 +64,7 @@ class RequestScopeMiddleware(BaseHTTPMiddleware):
             # Add request ID to response headers for tracing
             response.headers["X-Request-ID"] = request_id
 
-            logger.info(
+            logger.debug(
                 f"← {request.method} {request.url.path} "
                 f"[{response.status_code}] "
                 f"(request_id={request_id[:8]}...)"
