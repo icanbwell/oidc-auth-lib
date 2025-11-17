@@ -161,7 +161,6 @@ class AuthManager:
         *,
         auth_provider: str,
         redirect_uri: str,
-        audience: str,
         url: str | None,
         referring_email: str | None,
         referring_subject: str | None,
@@ -176,7 +175,6 @@ class AuthManager:
             auth_provider (str): The name of the OIDC provider.
             redirect_uri (str): The redirect URI to which the OIDC provider will send the user
                 after authentication.
-            audience (str): The audience we need to get a token for.
             url (str): The URL of the tool that has requested this.
             referring_email (str): The email of the user who initiated the request.
             referring_subject (str): The subject of the user who initiated the request.
@@ -186,7 +184,7 @@ class AuthManager:
         # default to first audience
         client: StarletteOAuth2App = await self.create_oauth_client(name=auth_provider)
         if client is None:
-            raise ValueError(f"Client for audience {audience} not found")
+            raise ValueError(f"Client for auth_provider {auth_provider} not found")
         state_content: Dict[str, str | None] = {
             "auth_provider": auth_provider,
             "referring_email": referring_email,
@@ -201,7 +199,8 @@ class AuthManager:
         state: str = AuthHelper.encode_state(state_content)
 
         logger.debug(
-            f"Creating authorization URL for audience {audience} with state {state_content} and encoded state {state}"
+            f"Creating authorization URL for auth_provider {auth_provider}"
+            f" with state {state_content} and encoded state {state}"
         )
 
         rv: Dict[str, Any] = await client.create_authorization_url(  # type: ignore[no-untyped-call]

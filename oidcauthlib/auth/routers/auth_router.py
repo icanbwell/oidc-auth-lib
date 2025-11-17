@@ -1,7 +1,7 @@
 import logging
 import traceback
 from enum import Enum
-from typing import Sequence, Annotated, Union, List, Optional
+from typing import Sequence, Annotated, Union, Optional
 
 from fastapi import APIRouter
 from fastapi import params
@@ -81,7 +81,6 @@ class AuthRouter:
         environment_variables: Annotated[
             EnvironmentVariables, Depends(Inject(EnvironmentVariables))
         ],
-        audience: str | None = None,
     ) -> Union[RedirectResponse, JSONResponse]:
         """
         Handle the login route for authentication.
@@ -92,7 +91,6 @@ class AuthRouter:
             auth_manager (AuthManager): The authentication manager instance.
             auth_config_reader (AuthConfigReader): The authentication configuration reader instance.
             environment_variables (EnvironmentVariables): The environment variables instance.
-            audience (str | None): The audience for which to authenticate. If None, the first audience from the config will be used.
         """
         auth_redirect_uri_text: Optional[str] = environment_variables.auth_redirect_uri
         redirect_uri1: URL = (
@@ -102,30 +100,9 @@ class AuthRouter:
         )
 
         try:
-            my_audience: str | None = audience
-            auth_config: AuthConfig | None
-            if audience is None:
-                auth_configs: List[AuthConfig] = (
-                    auth_config_reader.get_auth_configs_for_all_auth_providers()
-                )
-                auth_config = auth_configs[0] if auth_configs else None
-                my_audience = auth_config.audience if auth_config else None
-                if my_audience is None:
-                    raise ValueError("No audience found in auth configuration")
-            else:
-                provider_for_audience: str | None = (
-                    auth_config_reader.get_provider_for_audience(audience=audience)
-                )
-                if provider_for_audience is None:
-                    raise ValueError(f"No provider found for audience: {audience}")
-
-                auth_config = auth_config_reader.get_config_for_auth_provider(
-                    auth_provider=provider_for_audience
-                )
-                if auth_config is None:
-                    raise ValueError(
-                        f"auth_config must not be None for provider: {audience}"
-                    )
+            auth_config: AuthConfig | None = (
+                auth_config_reader.get_config_for_first_auth_provider()
+            )
 
             if not auth_config:
                 raise ValueError("No auth config found")
@@ -133,25 +110,16 @@ class AuthRouter:
             if not isinstance(auth_config, AuthConfig):
                 raise TypeError("auth_config is not of type AuthConfig")
 
-            if not my_audience:
-                raise ValueError("my_audience must not be None")
-
-            issuer: str | None = auth_config.issuer
-
-            if not issuer:
-                raise ValueError("issuer must not be None in auth config")
-
             url = await auth_manager.create_authorization_url(
                 auth_provider=auth_config.auth_provider,
                 redirect_uri=str(redirect_uri1),
-                audience=my_audience,
                 url=str(request.url),
                 referring_email=environment_variables.oauth_referring_email,
                 referring_subject=environment_variables.oauth_referring_subject,
             )
 
             logger.info(
-                f"Redirecting to authorization URL: {url} (audience: {my_audience})"
+                f"Redirecting to authorization URL: {url} (auth_provider: {auth_config.auth_provider})"
             )
 
             return RedirectResponse(url, status_code=302)

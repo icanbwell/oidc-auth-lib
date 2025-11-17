@@ -160,7 +160,11 @@ class SimpleContainer(IContainer):
                 factory = self._factories[service_type]
                 service: T = factory(self)
                 SimpleContainer._singletons[service_type] = service
-                logger.debug("Singleton '%s' instantiated and cached", service_name)
+                logger.debug(
+                    "Singleton '%s' instantiated and cached with class %s",
+                    service_name,
+                    service.__class__.__name__,
+                )
                 return service
 
         # NEW: Check if this is a request-scoped type
