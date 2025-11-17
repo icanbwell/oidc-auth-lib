@@ -35,7 +35,9 @@ def test_request_scope_middleware_success_path(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     app = _build_app()
-    caplog.set_level(logging.DEBUG)
+    caplog.set_level(
+        logging.DEBUG, logger="oidcauthlib.auth.middleware.request_scope_middleware"
+    )
 
     calls: list[tuple[str, str | None]] = []
 
@@ -93,7 +95,10 @@ def test_request_scope_middleware_error_path(
     caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     app = _build_app()
-    caplog.set_level(logging.DEBUG)
+    # Capture both DEBUG (for start/cleanup) and ERROR (for exception) logs
+    caplog.set_level(
+        logging.DEBUG, logger="oidcauthlib.auth.middleware.request_scope_middleware"
+    )
 
     calls: list[tuple[str, str | None]] = []
 
@@ -161,7 +166,9 @@ def test_existing_short_header(
 ) -> None:
     # Edge case: very short header value to ensure slicing doesn't fail
     app = _build_app()
-    caplog.set_level(logging.DEBUG)
+    caplog.set_level(
+        logging.DEBUG, logger="oidcauthlib.auth.middleware.request_scope_middleware"
+    )
 
     def fake_begin(request_id: str) -> str:
         return request_id
