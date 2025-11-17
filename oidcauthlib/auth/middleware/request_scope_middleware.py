@@ -16,6 +16,9 @@ from oidcauthlib.utilities.logger.log_levels import SRC_LOG_LEVELS
 logger = logging.getLogger(__name__)
 logger.setLevel(SRC_LOG_LEVELS["REQUEST_SCOPE"])
 
+# Paths for which request logging should be suppressed (e.g., health checks)
+_SUPPRESSED_LOG_PATHS = {"/health", "/health/"}
+
 
 class RequestScopeMiddleware(BaseHTTPMiddleware):
     """
@@ -24,7 +27,7 @@ class RequestScopeMiddleware(BaseHTTPMiddleware):
     Features:
     - Supports X-Request-ID header for request tracing
     - Adds X-Request-ID to response headers
-    - Comprehensive logging
+    - Comprehensive logging (suppressed for health endpoint)
     - Proper cleanup even on errors
 
     Usage:
@@ -44,18 +47,21 @@ class RequestScopeMiddleware(BaseHTTPMiddleware):
         request_id = request.headers.get("X-Request-ID")
         if not request_id:
             request_id = str(uuid4())
-            logger.debug(f"Generated new request ID: {request_id}")
+            if request.url.path not in _SUPPRESSED_LOG_PATHS:
+                logger.debug(f"Generated new request ID: {request_id}")
         else:
-            logger.debug(f"Using request ID from header: {request_id}")
+            if request.url.path not in _SUPPRESSED_LOG_PATHS:
+                logger.debug(f"Using request ID from header: {request_id}")
 
         # Store request ID in request state for access in endpoints
         request.state.request_id = request_id
 
         # Begin request scope
         ContainerRegistry.begin_request_scope(request_id)
-        logger.debug(
-            f"→ {request.method} {request.url.path} (request_id={request_id[:8]}...)"
-        )
+        if request.url.path not in _SUPPRESSED_LOG_PATHS:
+            logger.debug(
+                f"→ {request.method} {request.url.path} (request_id={request_id[:8]}...)"
+            )
 
         try:
             # Process the request
@@ -64,23 +70,28 @@ class RequestScopeMiddleware(BaseHTTPMiddleware):
             # Add request ID to response headers for tracing
             response.headers["X-Request-ID"] = request_id
 
-            logger.debug(
-                f"← {request.method} {request.url.path} "
-                f"[{response.status_code}] "
-                f"(request_id={request_id[:8]}...)"
-            )
+            if request.url.path not in _SUPPRESSED_LOG_PATHS:
+                logger.debug(
+                    f"← {request.method} {request.url.path} "
+                    f"[{response.status_code}] "
+                    f"(request_id={request_id[:8]}...)"
+                )
 
             return response
 
         except Exception as e:
-            logger.error(
-                f"✗ {request.method} {request.url.path} "
-                f"(request_id={request_id[:8]}...): {type(e).__name__}: {e}",
-                exc_info=True,
-            )
+            if request.url.path not in _SUPPRESSED_LOG_PATHS:
+                logger.error(
+                    f"✗ {request.method} {request.url.path} "
+                    f"(request_id={request_id[:8]}...): {type(e).__name__}: {e}",
+                    exc_info=True,
+                )
             raise
 
         finally:
             # Always clean up request scope
             ContainerRegistry.end_request_scope()
-            logger.debug(f"Request scope cleaned up (request_id={request_id[:8]}...)")
+            if request.url.path not in _SUPPRESSED_LOG_PATHS:
+                logger.debug(
+                    f"Request scope cleaned up (request_id={request_id[:8]}...)"
+                )
