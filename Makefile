@@ -49,7 +49,10 @@ update: down Pipfile.lock setup-pre-commit  ## Updates all the packages using Pi
 
 .PHONY:tests
 tests: up
-	docker compose run --rm --name oidcauthlib dev pytest tests oidcauthlib
+	docker compose \
+		-f docker-compose-mongo.yml \
+		-f docker-compose.yml \
+	run --rm --name oidcauthlib dev pytest tests oidcauthlib
 
 .PHONY:shell
 shell:devdocker ## Brings up the bash shell in dev docker
