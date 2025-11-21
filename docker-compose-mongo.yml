@@ -1,0 +1,20 @@
+services:
+  mongo:
+    image: mongodb/mongodb-atlas-local:8.2.1
+    # https://github.com/mongodb/mongodb-atlas-cli/releases
+    # https://www.mongodb.com/docs/atlas/cli/current/atlas-cli-changelog/
+    # https://hub.docker.com/r/mongodb/mongodb-atlas-local
+    ports:
+      - "27017:27017"
+    environment:
+      #      ALLOW_EMPTY_PASSWORD: yes
+      MONGODB_INITDB_ROOT_USERNAME: root
+      MONGODB_INITDB_ROOT_PASSWORD: "test123" # pragma: allowlist secret
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh mongo:27017/test --quiet
+    networks:
+      - web
+
+networks:
+  web:
+    driver: bridge

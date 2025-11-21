@@ -16,11 +16,18 @@ init: Pipfile.lock devdocker up setup-pre-commit  ## Initializes the local devel
 
 .PHONY: up
 up:
-	docker compose up --build -d --remove-orphans
+	docker compose \
+		-f docker-compose-mongo.yml \
+		-f docker-compose.yml \
+		up --build -d --remove-orphans
+	@./scripts/wait-for-healthy.sh oidc-auth-lib-mongo-1
 
 .PHONY: down
 down:
-	docker compose down
+	docker compose \
+		-f docker-compose-mongo.yml \
+		-f docker-compose.yml \
+	down
 
 .PHONY:clean-pre-commit
 clean-pre-commit: ## removes pre-commit hook
