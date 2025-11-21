@@ -3,6 +3,9 @@ from typing import Any, Dict, Optional, Type, Mapping, cast, override, Callable
 
 from bson import ObjectId
 from pymongo import AsyncMongoClient
+from pymongo.read_preferences import ReadPreference
+from pymongo.read_concern import ReadConcern
+
 from pydantic import BaseModel
 from pymongo.results import InsertOneResult, UpdateResult
 
@@ -63,7 +66,15 @@ class AsyncMongoRepository[T: BaseDbModel](AsyncBaseRepository[T]):
         if client is not None:
             self._client = client
         else:
-            self._client = AsyncMongoClient(self.connection_string)
+            # read_preference=ReadPreference.PRIMARY ensures all reads go to the primary node (freshest data)
+            # read_concern=ReadConcern("majority") ensures reads only return data acknowledged by a majority of replica set members
+            self._client = AsyncMongoClient(
+                self.connection_string,
+                read_preference=ReadPreference.PRIMARY,  # Always read from primary
+                read_concern=ReadConcern(
+                    "majority"
+                ),  # Only return majority-acknowledged data
+            )
         self._db = self._client[database_name]
 
     async def connect(self) -> None:
