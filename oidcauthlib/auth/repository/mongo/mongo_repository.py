@@ -3,8 +3,6 @@ from typing import Any, Dict, Optional, Type, Mapping, cast, override, Callable
 
 from bson import ObjectId
 from pymongo import AsyncMongoClient
-from pymongo.read_preferences import ReadPreference
-from pymongo.read_concern import ReadConcern
 
 from pydantic import BaseModel
 from pymongo.results import InsertOneResult, UpdateResult
@@ -42,11 +40,9 @@ class AsyncMongoRepository[T: BaseDbModel](AsyncBaseRepository[T]):
             AsyncMongoClient[Any]
         ] = None,  # Optional injected async client (for testing or custom usage)
         read_preference: Optional[
-            ReadPreference
+            str
         ] = None,  # MongoDB read preference (default: PRIMARY_PREFERRED)
-        read_concern: Optional[
-            ReadConcern
-        ] = None,  # MongoDB read concern (default: majority)
+        read_concern: Optional[str] = None,  # MongoDB read concern (default: majority)
     ) -> None:
         """
         Initialize async MongoDB connection.
@@ -80,22 +76,17 @@ class AsyncMongoRepository[T: BaseDbModel](AsyncBaseRepository[T]):
             # Set defaults if not provided
             # https://pymongo.readthedocs.io/en/4.0.1/examples/high_availability.html
             my_read_preference = (
-                read_preference
-                if read_preference is not None
-                else ReadPreference.PRIMARY_PREFERRED
+                read_preference if read_preference is not None else "primaryPreferred"
             )
+            # Set read_concern at the database level
+            my_read_concern = read_concern if read_concern is not None else "majority"
             # Only pass read_preference to AsyncMongoClient; read_concern is set on DB/collection
             self._client = AsyncMongoClient(
                 self.connection_string,
                 readPreference=my_read_preference,  # e.g., PRIMARY_PREFERRED for high availability
+                readConcernLevel=my_read_concern,
             )
-        # Set read_concern at the database level
-        my_read_concern = (
-            read_concern if read_concern is not None else ReadConcern("majority")
-        )
-        self._db = self._client[database_name].with_options(
-            read_concern=my_read_concern
-        )
+        self._db = self._client[database_name]
 
     async def connect(self) -> None:
         """

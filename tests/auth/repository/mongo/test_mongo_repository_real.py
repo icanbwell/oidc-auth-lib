@@ -28,7 +28,10 @@ async def mongo_repo() -> AsyncGenerator[AsyncMongoRepository[TestModel], None]:
     print(f"Connecting to MongoDB at {mongo_url} with user {mongo_username}")
     db_name = "test_oidcauthlib_repo"
     client: AsyncMongoClient[Mapping[str, Any]] = AsyncMongoClient(
-        mongo_url, username=mongo_username, password=mongo_password
+        mongo_url,
+        username=mongo_username,
+        password=mongo_password,
+        readPreference="primaryPreferred",
     )
     await client.drop_database(db_name)
     repo = AsyncMongoRepository[TestModel](
