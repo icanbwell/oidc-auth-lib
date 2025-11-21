@@ -80,7 +80,7 @@ class AsyncMongoRepository[T: BaseDbModel](AsyncBaseRepository[T]):
             my_read_preference = (
                 read_preference
                 if read_preference is not None
-                else ReadPreference.PRIMARY
+                else ReadPreference.PRIMARY_PREFERRED
             )
             my_read_concern = (
                 read_concern if read_concern is not None else ReadConcern("majority")
