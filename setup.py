@@ -58,9 +58,9 @@ setup(
     install_requires=[
         "httpx>=0.27.2",
         "authlib>=1.6.4",
-        "joserfc>=1.2.2",
+        "joserfc>=1.4.3",
         "pydantic>=2.0,<3.0.0",
-        "pymongo[srv]>=4.15.3",
+        "pymongo[srv]>=4.15.4",
         "fastapi>=0.115.8",
         "starlette>=0.49.1",
     ],

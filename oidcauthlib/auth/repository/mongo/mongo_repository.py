@@ -3,6 +3,7 @@ from typing import Any, Dict, Optional, Type, Mapping, cast, override, Callable
 
 from bson import ObjectId
 from pymongo import AsyncMongoClient
+
 from pydantic import BaseModel
 from pymongo.results import InsertOneResult, UpdateResult
 
@@ -38,6 +39,10 @@ class AsyncMongoRepository[T: BaseDbModel](AsyncBaseRepository[T]):
         client: Optional[
             AsyncMongoClient[Any]
         ] = None,  # Optional injected async client (for testing or custom usage)
+        read_preference: Optional[
+            str
+        ] = None,  # MongoDB read preference (default: PRIMARY_PREFERRED)
+        read_concern: Optional[str] = None,  # MongoDB read concern (default: majority)
     ) -> None:
         """
         Initialize async MongoDB connection.
@@ -47,6 +52,11 @@ class AsyncMongoRepository[T: BaseDbModel](AsyncBaseRepository[T]):
             database_name (str): Name of the database
             username (Optional[str]): MongoDB username
             password (Optional[str]): MongoDB password
+            client (Optional[AsyncMongoClient]): Optional injected async client
+            read_preference (Optional[ReadPreference]): MongoDB read preference (default: PRIMARY_PREFERRED)
+                - PRIMARY_PREFERRED: Read from primary if available, otherwise secondary. Good for most replica set use cases.
+            read_concern (Optional[ReadConcern]): MongoDB read concern (default: majority)
+                - majority: Only return data acknowledged by a majority of replica set members.
         """
         if not server_url:
             raise ValueError("MONGO_URL environment variable is not set.")
@@ -63,7 +73,19 @@ class AsyncMongoRepository[T: BaseDbModel](AsyncBaseRepository[T]):
         if client is not None:
             self._client = client
         else:
-            self._client = AsyncMongoClient(self.connection_string)
+            # Set defaults if not provided
+            # https://pymongo.readthedocs.io/en/4.0.1/examples/high_availability.html
+            my_read_preference = (
+                read_preference if read_preference is not None else "primaryPreferred"
+            )
+            # Set read_concern at the database level
+            my_read_concern = read_concern if read_concern is not None else "majority"
+            # Only pass read_preference to AsyncMongoClient; read_concern is set on DB/collection
+            self._client = AsyncMongoClient(
+                self.connection_string,
+                readPreference=my_read_preference,  # e.g., PRIMARY_PREFERRED for high availability
+                readConcernLevel=my_read_concern,
+            )
         self._db = self._client[database_name]
 
     async def connect(self) -> None:

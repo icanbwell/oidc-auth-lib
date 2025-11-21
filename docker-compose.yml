@@ -9,5 +9,16 @@ services:
       - ./:/usr/src/oidcauthlib
     container_name: oidcauthlib_dev
     working_dir: /usr/src/oidcauthlib
+    environment:
+      MONGO_DB_NAME: fhir
+      MONGO_URL: 'mongodb://mongo:27017?appName=fhir-server'
+      MONGO_USERNAME: root
+      MONGO_PASSWORD: "test123"  # pragma: allowlist secret
     env_file:
       - docker.env
+    networks:
+      - web
+
+networks:
+  web:
+    driver: bridge

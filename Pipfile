@@ -15,11 +15,11 @@ httpx = ">=0.27.2"
 # authlib is a Python library for OAuth and OpenID Connect
 authlib = ">=1.6.4"
 # joserfc is a Python library for working with JOSE (JSON Object Signing and Encryption)
-joserfc = ">=1.2.2"
+joserfc = ">=1.4.3"
 # pydantic is a Python library for data validation
 pydantic = ">=2.0,<3.0.0"
 # pymongo is a Python library for working with MongoDB
-pymongo = { version = ">=4.15.3", extras = ["srv"] }
+pymongo = { version = ">=4.15.4", extras = ["srv"] }
 # fastapi is a Python library for building APIs
 fastapi = ">=0.115.8"
 # starlette is a Python library for building ASGI applications
