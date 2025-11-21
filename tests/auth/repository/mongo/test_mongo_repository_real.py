@@ -20,19 +20,22 @@ class TestModel(BaseDbModel):
 async def mongo_repo() -> AsyncGenerator[AsyncMongoRepository[TestModel], None]:
     print("")
     mongo_url = os.environ.get("MONGO_URL")
-    if not mongo_url:
-        pytest.skip("MONGO_URL environment variable not set")
+    assert mongo_url is not None
     mongo_username = os.environ.get("MONGO_USERNAME")
+    assert mongo_username
     mongo_password = os.environ.get("MONGO_PASSWORD")
+    assert mongo_password
     print(f"Connecting to MongoDB at {mongo_url} with user {mongo_username}")
     db_name = "test_oidcauthlib_repo"
-    client: AsyncMongoClient[Mapping[str, Any]] = AsyncMongoClient(mongo_url)
+    client: AsyncMongoClient[Mapping[str, Any]] = AsyncMongoClient(
+        mongo_url, username=mongo_username, password=mongo_password
+    )
+    await client.drop_database(db_name)
     repo = AsyncMongoRepository[TestModel](
         server_url=mongo_url,
         database_name=db_name,
         username=mongo_username,
         password=mongo_password,
-        client=client,
     )
     await repo.connect()
     yield repo
