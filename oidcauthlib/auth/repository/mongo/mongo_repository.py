@@ -66,6 +66,16 @@ class AsyncMongoRepository[T: BaseDbModel](AsyncBaseRepository[T]):
             raise ValueError("MONGO_URL environment variable is not set.")
         if not database_name:
             raise ValueError("Database name must be provided.")
+
+        # Validate that additional options don't conflict with explicitly set parameters
+        reserved_keys = {"readPreference", "readConcernLevel", "compressors"}
+        if additional_mongo_client_options:
+            conflicting_keys = reserved_keys & additional_mongo_client_options.keys()
+            if conflicting_keys:
+                raise ValueError(
+                    f"Cannot override these options via additional_mongo_client_options: {conflicting_keys}. "
+                    f"Use the explicit parameters instead."
+                )
         self.connection_string: str = MongoUrlHelpers.add_credentials_to_mongo_url(
             mongo_url=server_url,
             username=username,
