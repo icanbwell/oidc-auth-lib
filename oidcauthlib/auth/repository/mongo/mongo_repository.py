@@ -43,6 +43,8 @@ class AsyncMongoRepository[T: BaseDbModel](AsyncBaseRepository[T]):
             str
         ] = None,  # MongoDB read preference (default: PRIMARY_PREFERRED)
         read_concern: Optional[str] = None,  # MongoDB read concern (default: majority)
+        compressors: Optional[str] = None,
+        additional_mongo_client_options: Optional[Dict[str, Any]] = None,
     ) -> None:
         """
         Initialize async MongoDB connection.
@@ -57,6 +59,8 @@ class AsyncMongoRepository[T: BaseDbModel](AsyncBaseRepository[T]):
                 - PRIMARY_PREFERRED: Read from primary if available, otherwise secondary. Good for most replica set use cases.
             read_concern (Optional[ReadConcern]): MongoDB read concern (default: majority)
                 - majority: Only return data acknowledged by a majority of replica set members.
+            compressors (Optional[str]): Comma separated list of compressors for wire protocol compression (default: None)
+            additional_mongo_client_options (Optional[Dict[str, Any]]): Additional options for AsyncMongoClient
         """
         if not server_url:
             raise ValueError("MONGO_URL environment variable is not set.")
@@ -81,10 +85,13 @@ class AsyncMongoRepository[T: BaseDbModel](AsyncBaseRepository[T]):
             # Set read_concern at the database level
             my_read_concern = read_concern if read_concern is not None else "majority"
             # Only pass read_preference to AsyncMongoClient; read_concern is set on DB/collection
+            # https://pymongo.readthedocs.io/en/stable/api/pymongo/asynchronous/mongo_client.html
             self._client = AsyncMongoClient(
                 self.connection_string,
                 readPreference=my_read_preference,  # e.g., PRIMARY_PREFERRED for high availability
                 readConcernLevel=my_read_concern,
+                compressors=compressors,
+                **(additional_mongo_client_options or {}),
             )
         self._db = self._client[database_name]
 
