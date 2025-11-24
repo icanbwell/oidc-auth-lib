@@ -1,11 +1,11 @@
 import pytest
-from datetime import datetime
+from datetime import datetime, UTC
 from oidcauthlib.auth.models.auth import AuthInformation
 from oidcauthlib.auth.models.cache_item import CacheItem
 
 
 def test_auth_information_creation() -> None:
-    now: datetime = datetime.utcnow()
+    now: datetime = datetime.now(UTC)
     info: AuthInformation = AuthInformation(
         redirect_uri="http://localhost",
         claims={"role": "admin"},
@@ -30,7 +30,7 @@ def test_auth_information_forbid_extra() -> None:
 
 
 def test_cache_item_creation() -> None:
-    now = datetime.utcnow()
+    now = datetime.now(UTC)
     item = CacheItem(key="foo", value="bar", created=now)
     assert item.key == "foo"
     assert item.value == "bar"
