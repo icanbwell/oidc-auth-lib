@@ -43,6 +43,7 @@ class AsyncMongoRepository[T: BaseDbModel](AsyncBaseRepository[T]):
             str
         ] = None,  # MongoDB read preference (default: PRIMARY_PREFERRED)
         read_concern: Optional[str] = None,  # MongoDB read concern (default: majority)
+        additional_mongo_client_options: Optional[Dict[str, Any]] = None,
     ) -> None:
         """
         Initialize async MongoDB connection.
@@ -57,11 +58,22 @@ class AsyncMongoRepository[T: BaseDbModel](AsyncBaseRepository[T]):
                 - PRIMARY_PREFERRED: Read from primary if available, otherwise secondary. Good for most replica set use cases.
             read_concern (Optional[ReadConcern]): MongoDB read concern (default: majority)
                 - majority: Only return data acknowledged by a majority of replica set members.
+            additional_mongo_client_options (Optional[Dict[str, Any]]): Additional options for AsyncMongoClient
         """
         if not server_url:
             raise ValueError("MONGO_URL environment variable is not set.")
         if not database_name:
             raise ValueError("Database name must be provided.")
+
+        # Validate that additional options don't conflict with explicitly set parameters
+        reserved_keys = {"readPreference", "readConcernLevel"}
+        if additional_mongo_client_options:
+            conflicting_keys = reserved_keys & additional_mongo_client_options.keys()
+            if conflicting_keys:
+                raise ValueError(
+                    f"Cannot override these options via additional_mongo_client_options: {conflicting_keys}. "
+                    f"Use the explicit parameters instead."
+                )
         self.connection_string: str = MongoUrlHelpers.add_credentials_to_mongo_url(
             mongo_url=server_url,
             username=username,
@@ -81,10 +93,12 @@ class AsyncMongoRepository[T: BaseDbModel](AsyncBaseRepository[T]):
             # Set read_concern at the database level
             my_read_concern = read_concern if read_concern is not None else "majority"
             # Only pass read_preference to AsyncMongoClient; read_concern is set on DB/collection
+            # https://pymongo.readthedocs.io/en/stable/api/pymongo/asynchronous/mongo_client.html
             self._client = AsyncMongoClient(
                 self.connection_string,
                 readPreference=my_read_preference,  # e.g., PRIMARY_PREFERRED for high availability
                 readConcernLevel=my_read_concern,
+                **(additional_mongo_client_options or {}),
             )
         self._db = self._client[database_name]
 

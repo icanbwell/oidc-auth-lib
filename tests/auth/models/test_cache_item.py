@@ -1,10 +1,10 @@
 from typing import Any
 from oidcauthlib.auth.models.cache_item import CacheItem
-from datetime import datetime
+from datetime import datetime, UTC
 
 
 def test_cache_item_creation() -> None:
-    now: datetime = datetime.utcnow()
+    now: datetime = datetime.now(UTC)
     item: CacheItem = CacheItem(key="foo", value="bar", created=now)
     assert item.key == "foo"
     assert item.value == "bar"
