@@ -116,7 +116,7 @@ class WellKnownConfigurationCache:
                         # Format: https://docs.authlib.org/en/latest/oauth/oidc/discovery.html#openid-connect-discovery
                         config = cast(Dict[str, Any], response.json())
                         self._cache[well_known_uri] = config
-                        await self.read_jwks_async(
+                        await self._read_jwks_async(
                             auth_config=auth_config,
                             well_known_config=config,
                         )
@@ -134,7 +134,7 @@ class WellKnownConfigurationCache:
                         )
 
     @staticmethod
-    async def read_jwks_uri_async(*, well_known_config: Dict[str, Any]) -> str | None:
+    async def _read_jwks_uri_async(*, well_known_config: Dict[str, Any]) -> str | None:
         jwks_uri: str | None = well_known_config.get("jwks_uri")
         issuer = well_known_config.get("issuer")
         if not jwks_uri:
@@ -147,7 +147,7 @@ class WellKnownConfigurationCache:
             )
         return jwks_uri
 
-    async def read_jwks_async(
+    async def _read_jwks_async(
         self, *, auth_config: AuthConfig, well_known_config: dict[str, Any]
     ) -> None:
         """Return the list of cached ClientKeySet objects (JWKS).
@@ -155,7 +155,7 @@ class WellKnownConfigurationCache:
         Returns:
             List[ClientKeySet]: List of cached ClientKeySet objects.
         """
-        jwks_uri = await self.read_jwks_uri_async(well_known_config=well_known_config)
+        jwks_uri = await self._read_jwks_uri_async(well_known_config=well_known_config)
         if not jwks_uri:
             logger.warning(
                 f"AuthConfig {auth_config} does not have a JWKS URI, skipping JWKS fetch."
@@ -228,7 +228,7 @@ class WellKnownConfigurationCache:
                 return client_key_set
         return None
 
-    async def get_async(self, auth_config: AuthConfig) -> dict[str, Any] | None:
+    async def get_async(self, *, auth_config: AuthConfig) -> dict[str, Any] | None:
         """Get the cached OIDC discovery document for the given auth config.
 
         Args:
