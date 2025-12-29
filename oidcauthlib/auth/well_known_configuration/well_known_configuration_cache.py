@@ -5,9 +5,11 @@ from typing import Dict, Any, cast
 import httpx
 from httpx import ConnectError
 from joserfc.jwk import KeySet
+from opentelemetry import trace
 
 from oidcauthlib.auth.config.auth_config import AuthConfig
 from oidcauthlib.auth.models.client_key_set import ClientKeySet
+from oidcauthlib.open_telemetry.span_names import OidcOpenTelemetrySpanNames
 from oidcauthlib.utilities.logger.log_levels import SRC_LOG_LEVELS
 
 logger = logging.getLogger(__name__)
@@ -99,30 +101,37 @@ class WellKnownConfigurationCache:
             logger.info(
                 f"Cache miss for {well_known_uri}. Cache has {len(self._cache)} entries."
             )
-            async with httpx.AsyncClient() as client:
-                try:
-                    logger.info(
-                        f"Fetching OIDC discovery document from {well_known_uri}"
-                    )
-                    response = await client.get(well_known_uri)
-                    response.raise_for_status()
-                    # Format: https://docs.authlib.org/en/latest/oauth/oidc/discovery.html#openid-connect-discovery
-                    config = cast(Dict[str, Any], response.json())
-                    self._cache[well_known_uri] = config
-                    await self.read_jwks_async(
-                        auth_config=auth_config,
-                        well_known_config=config,
-                    )
-                    logger.info(f"Cached OIDC discovery document for {well_known_uri}")
-                    return config
-                except httpx.HTTPStatusError as e:
-                    raise ValueError(
-                        f"Failed to fetch OIDC discovery document from {well_known_uri} with status {e.response.status_code} : {e}"
-                    )
-                except ConnectError as e:
-                    raise ConnectionError(
-                        f"Failed to connect to OIDC discovery document: {well_known_uri}: {e}"
-                    )
+            tracer = trace.get_tracer(__name__)
+            with tracer.start_as_current_span(
+                OidcOpenTelemetrySpanNames.READ_WELL_KNOWN_CONFIGURATION,
+            ) as span:
+                span.set_attribute("well_known_uri", well_known_uri)
+                async with httpx.AsyncClient() as client:
+                    try:
+                        logger.info(
+                            f"Fetching OIDC discovery document from {well_known_uri}"
+                        )
+                        response = await client.get(well_known_uri)
+                        response.raise_for_status()
+                        # Format: https://docs.authlib.org/en/latest/oauth/oidc/discovery.html#openid-connect-discovery
+                        config = cast(Dict[str, Any], response.json())
+                        self._cache[well_known_uri] = config
+                        await self.read_jwks_async(
+                            auth_config=auth_config,
+                            well_known_config=config,
+                        )
+                        logger.info(
+                            f"Cached OIDC discovery document for {well_known_uri}"
+                        )
+                        return config
+                    except httpx.HTTPStatusError as e:
+                        raise ValueError(
+                            f"Failed to fetch OIDC discovery document from {well_known_uri} with status {e.response.status_code} : {e}"
+                        )
+                    except ConnectError as e:
+                        raise ConnectionError(
+                            f"Failed to connect to OIDC discovery document: {well_known_uri}: {e}"
+                        )
 
     @staticmethod
     async def read_jwks_uri_async(*, well_known_config: Dict[str, Any]) -> str | None:

@@ -3,12 +3,14 @@ import logging
 from typing import List, Any
 
 from joserfc.jwk import KeySet
+from opentelemetry import trace
 
 from oidcauthlib.auth.config.auth_config import AuthConfig
 from oidcauthlib.auth.config.auth_config_reader import AuthConfigReader
 from oidcauthlib.auth.well_known_configuration.well_known_configuration_cache import (
     WellKnownConfigurationCache,
 )
+from oidcauthlib.open_telemetry.span_names import OidcOpenTelemetrySpanNames
 from oidcauthlib.utilities.logger.log_levels import SRC_LOG_LEVELS
 
 logger = logging.getLogger(__name__)
@@ -98,28 +100,32 @@ class WellKnownConfigurationManager:
             return None
 
         # We are the initializer
-        try:
-            logger.debug("Manager fetching well-known configurations and JWKS.")
-            # Load configs WITHOUT holding the manager lock to avoid deadlock
-            # The cache has its own locking mechanism
-            configs_to_load = [c for c in self._auth_configs if c.well_known_uri]
+        tracer = trace.get_tracer(__name__)
+        with tracer.start_as_current_span(
+            OidcOpenTelemetrySpanNames.POPULATE_WELL_KNOWN_CONFIG_CACHE,
+        ):
+            try:
+                logger.debug("Manager fetching well-known configurations and JWKS.")
+                # Load configs WITHOUT holding the manager lock to avoid deadlock
+                # The cache has its own locking mechanism
+                configs_to_load = [c for c in self._auth_configs if c.well_known_uri]
 
-            for auth_config in configs_to_load:
-                await self._cache.read_async(auth_config=auth_config)
+                for auth_config in configs_to_load:
+                    await self._cache.read_async(auth_config=auth_config)
 
-            # Mark as loaded (acquire lock to prevent race with refresh)
-            async with self._lock:
-                self._loaded = True
-            logger.debug("Manager initialization complete.")
-        except Exception:
-            # Reset initializing flag so next coroutine can retry
-            self._initializing = False
-            # Set event to unblock waiting coroutines (they will retry)
-            self._init_event.set()
-            raise
-        else:
-            # Success: signal all waiting coroutines
-            self._init_event.set()
+                # Mark as loaded (acquire lock to prevent race with refresh)
+                async with self._lock:
+                    self._loaded = True
+                logger.debug("Manager initialization complete.")
+            except Exception:
+                # Reset initializing flag so next coroutine can retry
+                self._initializing = False
+                # Set event to unblock waiting coroutines (they will retry)
+                self._init_event.set()
+                raise
+            else:
+                # Success: signal all waiting coroutines
+                self._init_event.set()
 
     async def refresh_async(self) -> None:
         """Force a refresh of well-known configs and JWKS (clears caches).
