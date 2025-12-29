@@ -1,9 +1,18 @@
 import os
+from enum import Enum
 from typing import Optional, override
 
 from oidcauthlib.utilities.environment.abstract_environment_variables import (
     AbstractEnvironmentVariables,
 )
+
+
+class CacheProvider(str, Enum):
+    """Cache provider types - a single source of truth for cache implementations."""
+
+    MONGODB = "mongodb"
+    REDIS = "redis"
+    MEMORY = "memory"
 
 
 class EnvironmentVariables(AbstractEnvironmentVariables):
@@ -69,3 +78,32 @@ class EnvironmentVariables(AbstractEnvironmentVariables):
     @override
     def auth_redirect_uri(self) -> Optional[str]:
         return os.environ.get("AUTH_REDIRECT_URI")
+
+    @property
+    def cache_provider(self) -> CacheProvider:
+        """
+        Cache provider type.
+
+        Determines which provider to use for cache implementations.
+        See the CacheProvider enum for valid values.
+
+        Set via CACHE_PROVIDER environment variable.
+        Defaults to mongodb.
+
+        Returns:
+            CacheProvider enum value
+
+        Raises:
+            ValueError: If an invalid provider type specified
+        """
+        provider_str = os.environ.get(
+            "CACHE_PROVIDER", CacheProvider.MONGODB.value
+        ).lower()
+
+        try:
+            return CacheProvider(provider_str)
+        except ValueError:
+            valid_values = [p.value for p in CacheProvider]
+            raise ValueError(
+                f"CACHE_PROVIDER must be one of {valid_values}, got '{provider_str}'"
+            )

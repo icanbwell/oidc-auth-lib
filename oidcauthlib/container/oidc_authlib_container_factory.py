@@ -1,5 +1,7 @@
 import logging
 
+from key_value.aio.stores.memory import MemoryStore
+
 from oidcauthlib.auth.auth_manager import AuthManager
 from oidcauthlib.auth.config.auth_config_reader import AuthConfigReader
 from oidcauthlib.auth.well_known_configuration.well_known_configuration_cache import (
@@ -41,7 +43,8 @@ class OidcAuthLibContainerFactory:
         )
 
         container.singleton(
-            WellKnownConfigurationCache, lambda c: WellKnownConfigurationCache()
+            WellKnownConfigurationCache,
+            lambda c: WellKnownConfigurationCache(well_known_store=MemoryStore()),
         )
 
         container.singleton(

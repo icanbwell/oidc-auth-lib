@@ -2,16 +2,20 @@ import asyncio
 import respx
 import httpx
 import pytest
+from key_value.aio.stores.memory import MemoryStore
 
 from oidcauthlib.auth.config.auth_config import AuthConfig
 from oidcauthlib.auth.well_known_configuration.well_known_configuration_cache import (
     WellKnownConfigurationCache,
 )
+from oidcauthlib.auth.well_known_configuration.well_known_configuration_cache_result import (
+    WellKnownConfigurationCacheResult,
+)
 
 
 @pytest.mark.asyncio
 async def test_get_async_caches_on_first_call() -> None:
-    cache = WellKnownConfigurationCache()
+    cache = WellKnownConfigurationCache(well_known_store=MemoryStore())
     uri = "https://provider.example.com/.well-known/openid-configuration"
 
     with respx.mock(assert_all_called=True) as respx_mock:
@@ -36,7 +40,11 @@ async def test_get_async_caches_on_first_call() -> None:
             well_known_uri=uri,
             scope="openid profile email",
         )
-        result = await cache.read_async(auth_config=auth_config)
+        cache_result: WellKnownConfigurationCacheResult | None = await cache.read_async(
+            auth_config=auth_config
+        )
+        assert cache_result is not None
+        result = cache_result.well_known_config
         assert result is not None
         assert result["issuer"] == "https://provider.example.com"
         assert result["jwks_uri"] == "https://provider.example.com/jwks"
@@ -50,7 +58,7 @@ async def test_get_async_caches_on_first_call() -> None:
 
 @pytest.mark.asyncio
 async def test_get_async_uses_cache_on_subsequent_calls() -> None:
-    cache = WellKnownConfigurationCache()
+    cache = WellKnownConfigurationCache(well_known_store=MemoryStore())
     uri = "https://provider.example.com/.well-known/openid-configuration"
 
     with respx.mock(assert_all_called=True) as respx_mock:
@@ -88,7 +96,7 @@ async def test_get_async_uses_cache_on_subsequent_calls() -> None:
 
 @pytest.mark.asyncio
 async def test_get_async_concurrent_single_fetch() -> None:
-    cache = WellKnownConfigurationCache()
+    cache = WellKnownConfigurationCache(well_known_store=MemoryStore())
     uri = "https://provider.example.com/.well-known/openid-configuration"
 
     with respx.mock(assert_all_called=True) as respx_mock:
@@ -125,7 +133,7 @@ async def test_get_async_concurrent_single_fetch() -> None:
 
 @pytest.mark.asyncio
 async def test_get_async_multiple_uris_concurrent() -> None:
-    cache = WellKnownConfigurationCache()
+    cache = WellKnownConfigurationCache(well_known_store=MemoryStore())
     uri1 = "https://provider1.example.com/.well-known/openid-configuration"
     uri2 = "https://provider2.example.com/.well-known/openid-configuration"
 
@@ -195,7 +203,7 @@ async def test_get_async_multiple_uris_concurrent() -> None:
 
 @pytest.mark.asyncio
 async def test_clear_resets_cache() -> None:
-    cache = WellKnownConfigurationCache()
+    cache = WellKnownConfigurationCache(well_known_store=MemoryStore())
     uri = "https://provider.example.com/.well-known/openid-configuration"
 
     with respx.mock(assert_all_called=False) as respx_mock:

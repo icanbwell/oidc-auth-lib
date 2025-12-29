@@ -47,17 +47,17 @@ class WellKnownConfigurationCache:
     cache dict so existing tests and callers continue to function unchanged.
     """
 
-    def __init__(self, *, well_known_store: BaseStore) -> None:
+    def __init__(self, *, well_known_store: BaseStore | None) -> None:
         self._cache: Dict[str, WellKnownConfigurationCacheResult] = {}
         self._jwks: KeySet = KeySet(keys=[])
         self._loaded: bool = False
         self._locks: Dict[str, asyncio.Lock] = {}
         self._locks_lock: asyncio.Lock = asyncio.Lock()  # protects _locks dict mutation
-        self.well_known_store = well_known_store
-        if well_known_store is None:
-            raise ValueError("well_known_store is required")
-        if not isinstance(well_known_store, BaseStore):
-            raise TypeError("well_known_store must be an instance of BaseStore")
+        self.well_known_store: BaseStore | None = well_known_store
+        if well_known_store is not None and not isinstance(well_known_store, BaseStore):
+            raise TypeError(
+                f"well_known_store must be an instance of BaseStore: {type(well_known_store)}"
+            )
 
     @property
     def jwks(self) -> KeySet:
@@ -74,7 +74,7 @@ class WellKnownConfigurationCache:
         """
         tasks = []
         for auth_config in auth_configs:
-            tasks.append(self.ensure_read_async(auth_config=auth_config))
+            tasks.append(self.read_async(auth_config=auth_config))
         results: list[WellKnownConfigurationCacheResult] = [
             result for result in await asyncio.gather(*tasks) if result is not None
         ]
@@ -87,7 +87,7 @@ class WellKnownConfigurationCache:
         )
         return results
 
-    async def ensure_read_async(
+    async def read_async(
         self, *, auth_config: AuthConfig
     ) -> WellKnownConfigurationCacheResult | None:
         """Retrieve (and cache) the OIDC discovery document for the given well-known URI.
@@ -115,8 +115,12 @@ class WellKnownConfigurationCache:
             return self._cache[well_known_uri]
 
         # check if this well_known_uri is in the well_known_store
-        stored_config: dict[str, Any] = await self.well_known_store.get(
-            key=well_known_uri,
+        stored_config: dict[str, Any] | None = (
+            await self.well_known_store.get(
+                key=well_known_uri,
+            )
+            if self.well_known_store is not None
+            else None
         )
         if stored_config:
             logger.info(
@@ -172,13 +176,14 @@ class WellKnownConfigurationCache:
                         self._cache[well_known_uri] = (
                             well_known_configuration_cache_result
                         )
-                        await self.well_known_store.put(
-                            key=well_known_uri,
-                            value=well_known_configuration_cache_result.model_dump(),
-                        )
-                        logger.info(
-                            f"Cached OIDC discovery document for {well_known_uri}"
-                        )
+                        if self.well_known_store is not None:
+                            await self.well_known_store.put(
+                                key=well_known_uri,
+                                value=well_known_configuration_cache_result.model_dump(),
+                            )
+                            logger.info(
+                                f"Cached OIDC discovery document for {well_known_uri}"
+                            )
                         return well_known_configuration_cache_result
                     except httpx.HTTPStatusError as e:
                         raise ValueError(

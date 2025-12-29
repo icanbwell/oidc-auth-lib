@@ -10,10 +10,15 @@ import respx
 import httpx
 from typing import override, Coroutine, Any
 
+from key_value.aio.stores.memory import MemoryStore
+
 from oidcauthlib.auth.config.auth_config import AuthConfig
 from oidcauthlib.auth.config.auth_config_reader import AuthConfigReader
 from oidcauthlib.auth.well_known_configuration.well_known_configuration_cache import (
     WellKnownConfigurationCache,
+)
+from oidcauthlib.auth.well_known_configuration.well_known_configuration_cache_result import (
+    WellKnownConfigurationCacheResult,
 )
 from oidcauthlib.auth.well_known_configuration.well_known_configuration_manager import (
     WellKnownConfigurationManager,
@@ -86,7 +91,7 @@ async def test_concurrent_initialization_no_deadlock() -> None:
             return_value=httpx.Response(200, json={"keys": []})
         )
 
-        cache = WellKnownConfigurationCache()
+        cache = WellKnownConfigurationCache(well_known_store=MemoryStore())
         reader = MockAuthConfigReader(auth_configs)
         manager = WellKnownConfigurationManager(
             auth_config_reader=reader,
@@ -138,7 +143,7 @@ async def test_get_async_during_initialization_no_deadlock() -> None:
             return_value=httpx.Response(200, json={"keys": []})
         )
 
-        cache = WellKnownConfigurationCache()
+        cache = WellKnownConfigurationCache(well_known_store=MemoryStore())
         reader = MockAuthConfigReader([auth_config])
         manager = WellKnownConfigurationManager(
             auth_config_reader=reader,
@@ -201,7 +206,7 @@ async def test_initialization_failure_retries() -> None:
             return_value=httpx.Response(200, json={"keys": []})
         )
 
-        cache = WellKnownConfigurationCache()
+        cache = WellKnownConfigurationCache(well_known_store=MemoryStore())
         reader = MockAuthConfigReader([auth_config])
         manager = WellKnownConfigurationManager(
             auth_config_reader=reader,
@@ -255,7 +260,7 @@ async def test_refresh_under_concurrent_load_no_deadlock() -> None:
             return_value=httpx.Response(200, json={"keys": []})
         )
 
-        cache = WellKnownConfigurationCache()
+        cache = WellKnownConfigurationCache(well_known_store=MemoryStore())
         reader = MockAuthConfigReader([auth_config])
         manager = WellKnownConfigurationManager(
             auth_config_reader=reader,
@@ -320,7 +325,7 @@ async def test_concurrent_refresh_operations() -> None:
             return_value=httpx.Response(200, json={"keys": []})
         )
 
-        cache = WellKnownConfigurationCache()
+        cache = WellKnownConfigurationCache(well_known_store=MemoryStore())
         reader = MockAuthConfigReader([auth_config])
         manager = WellKnownConfigurationManager(
             auth_config_reader=reader,
@@ -329,8 +334,13 @@ async def test_concurrent_refresh_operations() -> None:
 
         # Initial load
         await manager.ensure_initialized_async()
-        auth_config_1 = await manager.get_async(auth_config)
+        auth_config_1_result: (
+            WellKnownConfigurationCacheResult | None
+        ) = await manager.get_async(auth_config)
+        assert auth_config_1_result is not None
+        auth_config_1 = auth_config_1_result.well_known_config
         assert auth_config_1 is not None
+
         initial_version = auth_config_1.get("version")
 
         # Launch multiple concurrent refreshes
@@ -345,7 +355,11 @@ async def test_concurrent_refresh_operations() -> None:
 
         # Verify final state is valid
         assert manager._loaded is True
-        auth_config_2 = await manager.get_async(auth_config)
+        auth_config_2_result: (
+            WellKnownConfigurationCacheResult | None
+        ) = await manager.get_async(auth_config)
+        assert auth_config_2_result is not None
+        auth_config_2: dict[str, Any] | None = auth_config_2_result.well_known_config
         assert auth_config_2 is not None
         final_version = auth_config_2.get("version")
 
