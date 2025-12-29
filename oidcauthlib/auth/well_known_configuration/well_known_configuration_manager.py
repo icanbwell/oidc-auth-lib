@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from typing import List, Any
+from typing import List
 
 from joserfc.jwk import KeySet
 from opentelemetry import trace
@@ -9,6 +9,9 @@ from oidcauthlib.auth.config.auth_config import AuthConfig
 from oidcauthlib.auth.config.auth_config_reader import AuthConfigReader
 from oidcauthlib.auth.well_known_configuration.well_known_configuration_cache import (
     WellKnownConfigurationCache,
+)
+from oidcauthlib.auth.well_known_configuration.well_known_configuration_cache_result import (
+    WellKnownConfigurationCacheResult,
 )
 from oidcauthlib.open_telemetry.span_names import OidcOpenTelemetrySpanNames
 from oidcauthlib.utilities.logger.log_levels import SRC_LOG_LEVELS
@@ -110,8 +113,7 @@ class WellKnownConfigurationManager:
                 # The cache has its own locking mechanism
                 configs_to_load = [c for c in self._auth_configs if c.well_known_uri]
 
-                for auth_config in configs_to_load:
-                    await self._cache.read_async(auth_config=auth_config)
+                await self._cache.read_list_async(auth_configs=configs_to_load)
 
                 # Mark as loaded (acquire lock to prevent race with refresh)
                 async with self._lock:
@@ -155,6 +157,8 @@ class WellKnownConfigurationManager:
 
             await self.ensure_initialized_async()
 
-    async def get_async(self, auth_config: AuthConfig) -> dict[str, Any] | None:
+    async def get_async(
+        self, auth_config: AuthConfig
+    ) -> WellKnownConfigurationCacheResult | None:
         await self.ensure_initialized_async()
         return await self._cache.get_async(auth_config=auth_config)

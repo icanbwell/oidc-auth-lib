@@ -22,6 +22,9 @@ from oidcauthlib.auth.exceptions.authorization_needed_exception import (
     AuthorizationNeededException,
 )
 from oidcauthlib.auth.token_reader import TokenReader
+from oidcauthlib.auth.well_known_configuration.well_known_configuration_cache_result import (
+    WellKnownConfigurationCacheResult,
+)
 from oidcauthlib.auth.well_known_configuration.well_known_configuration_manager import (
     WellKnownConfigurationManager,
 )
@@ -127,10 +130,13 @@ class AuthManager:
     async def ensure_initialized_async(self) -> None:
         auth_config: AuthConfig
         for auth_config in self.auth_configs:
-            server_metadata: (
-                dict[str, Any] | None
+            well_known_result: (
+                WellKnownConfigurationCacheResult | None
             ) = await self.well_known_configuration_manager.get_async(
                 auth_config=auth_config
+            )
+            server_metadata: dict[str, Any] | None = (
+                well_known_result.well_known_config if well_known_result else None
             )
             logger.debug(
                 f"Registering OAuth client for auth provider {auth_config.auth_provider}"

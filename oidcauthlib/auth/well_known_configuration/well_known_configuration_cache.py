@@ -5,10 +5,14 @@ from typing import Dict, Any, cast
 import httpx
 from httpx import ConnectError
 from joserfc.jwk import KeySet
+from key_value.aio.stores.base import BaseStore
 from opentelemetry import trace
 
 from oidcauthlib.auth.config.auth_config import AuthConfig
 from oidcauthlib.auth.models.client_key_set import ClientKeySet
+from oidcauthlib.auth.well_known_configuration.well_known_configuration_cache_result import (
+    WellKnownConfigurationCacheResult,
+)
 from oidcauthlib.open_telemetry.span_names import OidcOpenTelemetrySpanNames
 from oidcauthlib.utilities.logger.log_levels import SRC_LOG_LEVELS
 
@@ -43,22 +47,49 @@ class WellKnownConfigurationCache:
     cache dict so existing tests and callers continue to function unchanged.
     """
 
-    def __init__(self) -> None:
-        self._cache: Dict[str, Dict[str, Any]] = {}
-        self.client_key_sets: list[
-            ClientKeySet
-        ] = []  # will be loaded asynchronously later
+    def __init__(self, *, well_known_store: BaseStore) -> None:
+        self._cache: Dict[str, WellKnownConfigurationCacheResult] = {}
         self._jwks: KeySet = KeySet(keys=[])
         self._loaded: bool = False
         self._locks: Dict[str, asyncio.Lock] = {}
         self._locks_lock: asyncio.Lock = asyncio.Lock()  # protects _locks dict mutation
+        self.well_known_store = well_known_store
+        if well_known_store is None:
+            raise ValueError("well_known_store is required")
+        if not isinstance(well_known_store, BaseStore):
+            raise TypeError("well_known_store must be an instance of BaseStore")
 
     @property
     def jwks(self) -> KeySet:
         """Return the cached JWKS KeySet, if available."""
         return self._jwks
 
-    async def read_async(self, *, auth_config: AuthConfig) -> Dict[str, Any] | None:
+    async def read_list_async(
+        self, *, auth_configs: list[AuthConfig]
+    ) -> list[WellKnownConfigurationCacheResult]:
+        """Retrieve and cache OIDC discovery documents for a list of auth configs.
+
+        Args:
+            auth_configs (list[AuthConfig]): List of OIDC authorization configurations.
+        """
+        tasks = []
+        for auth_config in auth_configs:
+            tasks.append(self.ensure_read_async(auth_config=auth_config))
+        results: list[WellKnownConfigurationCacheResult] = [
+            result for result in await asyncio.gather(*tasks) if result is not None
+        ]
+        self.read_jwks_from_key_sets(
+            key_sets=[
+                result.client_key_set
+                for result in results
+                if result.client_key_set is not None
+            ]
+        )
+        return results
+
+    async def ensure_read_async(
+        self, *, auth_config: AuthConfig
+    ) -> WellKnownConfigurationCacheResult | None:
         """Retrieve (and cache) the OIDC discovery document for the given well-known URI.
 
         Args:
@@ -80,6 +111,19 @@ class WellKnownConfigurationCache:
         if well_known_uri in self._cache:
             logger.info(
                 f"\u2713 Using cached OIDC discovery document for {well_known_uri}"
+            )
+            return self._cache[well_known_uri]
+
+        # check if this well_known_uri is in the well_known_store
+        stored_config: dict[str, Any] = await self.well_known_store.get(
+            key=well_known_uri,
+        )
+        if stored_config:
+            logger.info(
+                f"\u2713 Using stored OIDC discovery document from store for {well_known_uri}"
+            )
+            self._cache[well_known_uri] = (
+                WellKnownConfigurationCacheResult.model_validate(stored_config)
             )
             return self._cache[well_known_uri]
 
@@ -115,15 +159,27 @@ class WellKnownConfigurationCache:
                         response.raise_for_status()
                         # Format: https://docs.authlib.org/en/latest/oauth/oidc/discovery.html#openid-connect-discovery
                         config = cast(Dict[str, Any], response.json())
-                        self._cache[well_known_uri] = config
-                        await self._read_jwks_async(
-                            auth_config=auth_config,
-                            well_known_config=config,
+                        well_known_configuration_cache_result = (
+                            WellKnownConfigurationCacheResult(
+                                well_known_uri=well_known_uri,
+                                well_known_config=config,
+                                client_key_set=await self._read_jwks_async(
+                                    auth_config=auth_config,
+                                    well_known_config=config,
+                                ),
+                            )
+                        )
+                        self._cache[well_known_uri] = (
+                            well_known_configuration_cache_result
+                        )
+                        await self.well_known_store.put(
+                            key=well_known_uri,
+                            value=well_known_configuration_cache_result.model_dump(),
                         )
                         logger.info(
                             f"Cached OIDC discovery document for {well_known_uri}"
                         )
-                        return config
+                        return well_known_configuration_cache_result
                     except httpx.HTTPStatusError as e:
                         raise ValueError(
                             f"Failed to fetch OIDC discovery document from {well_known_uri} with status {e.response.status_code} : {e}"
@@ -147,21 +203,7 @@ class WellKnownConfigurationCache:
             )
         return jwks_uri
 
-    async def _read_jwks_async(
-        self, *, auth_config: AuthConfig, well_known_config: dict[str, Any]
-    ) -> None:
-        """Return the list of cached ClientKeySet objects (JWKS).
-
-        Returns:
-            List[ClientKeySet]: List of cached ClientKeySet objects.
-        """
-        jwks_uri = await self._read_jwks_uri_async(well_known_config=well_known_config)
-        if not jwks_uri:
-            logger.warning(
-                f"AuthConfig {auth_config} does not have a JWKS URI, skipping JWKS fetch."
-            )
-            return None
-
+    async def _read_jwks_from_uri_async(self, *, jwks_uri: str) -> list[Dict[str, Any]]:
         async with httpx.AsyncClient() as client:
             try:
                 logger.info(f"Fetching JWKS from {jwks_uri}")
@@ -175,26 +217,7 @@ class WellKnownConfigurationCache:
                 logger.info(
                     f"Successfully fetched JWKS from {jwks_uri}, keys= {len(keys)}"
                 )
-                if len(keys) > 0:
-                    self.client_key_sets.append(
-                        ClientKeySet(
-                            auth_config=auth_config,
-                            well_known_config=well_known_config,
-                            jwks=KeySet.import_key_set({"keys": keys}),
-                            kids=[
-                                cast(str, key.get("kid"))
-                                for key in keys
-                                if key.get("kid")
-                            ],
-                        )
-                    )
-                    existing_kids = {key.kid for key in self._jwks}
-                    new_keys = [
-                        key for key in keys if key.get("kid") not in existing_kids
-                    ]
-                    self._jwks = KeySet.import_key_set(
-                        {"keys": new_keys + [ek.as_dict() for ek in self._jwks]}
-                    )
+                return keys
             except httpx.HTTPStatusError as e:
                 logger.exception(e)
                 raise ValueError(
@@ -203,6 +226,54 @@ class WellKnownConfigurationCache:
             except ConnectError as e:
                 raise ConnectionError(f"Failed to connect to JWKS URI: {jwks_uri}: {e}")
 
+    async def _read_jwks_async(
+        self, *, auth_config: AuthConfig, well_known_config: dict[str, Any]
+    ) -> ClientKeySet | None:
+        """Return the list of cached ClientKeySet objects (JWKS).
+
+        Returns:
+            List[ClientKeySet]: List of cached ClientKeySet objects.
+        """
+        jwks_uri = await self._read_jwks_uri_async(well_known_config=well_known_config)
+        if not jwks_uri:
+            logger.warning(
+                f"AuthConfig {auth_config} does not have a JWKS URI, skipping JWKS fetch."
+            )
+            return None
+
+        # check if the jwks_uri is already cached
+        keys: list[Dict[str, Any]] = await self._read_jwks_from_uri_async(
+            jwks_uri=jwks_uri
+        )
+
+        if len(keys) > 0:
+            return ClientKeySet(
+                auth_config=auth_config,
+                well_known_config=well_known_config,
+                kids=[
+                    cast(str, key.get("kid"))
+                    for key in keys
+                    if key.get("kid") is not None
+                ],
+                keys=keys,
+            )
+        else:
+            return None
+
+    def read_jwks_from_key_sets(self, *, key_sets: list[ClientKeySet]) -> None:
+        """Convert the list of ClientKeySet objects to a single JWKS KeySet.
+
+        Returns:
+            KeySet: Combined JWKS KeySet.
+        """
+        keys: list[Dict[str, Any]] = [key for ks in key_sets for key in (ks.keys or [])]
+
+        existing_kids = {key.kid for key in self._jwks}
+        new_keys = [key for key in keys if key.get("kid") not in existing_kids]
+        self._jwks = KeySet.import_key_set(
+            {"keys": new_keys + [ek.as_dict() for ek in self._jwks]}
+        )
+
     def size(self) -> int:
         """Return number of cached discovery documents."""
         return len(self._cache)
@@ -210,7 +281,6 @@ class WellKnownConfigurationCache:
     def clear(self) -> None:
         """Clear all cached discovery documents (useful for tests)."""
         self._cache.clear()
-        self.client_key_sets.clear()
         self._jwks = KeySet(keys=[])
         self._loaded = False
 
@@ -223,12 +293,16 @@ class WellKnownConfigurationCache:
         if kid is None:
             return None
 
-        for client_key_set in self.client_key_sets:
-            if client_key_set.kids and kid in client_key_set.kids:
+        for well_known_result in self._cache.values():
+            client_key_set = well_known_result.client_key_set
+            if client_key_set and client_key_set.kids and kid in client_key_set.kids:
                 return client_key_set
+
         return None
 
-    async def get_async(self, *, auth_config: AuthConfig) -> dict[str, Any] | None:
+    async def get_async(
+        self, *, auth_config: AuthConfig
+    ) -> WellKnownConfigurationCacheResult | None:
         """Get the cached OIDC discovery document for the given auth config.
 
         Args:
@@ -240,7 +314,9 @@ class WellKnownConfigurationCache:
         if not well_known_uri:
             return None
 
-        if well_known_uri in self._cache:
-            return self._cache[well_known_uri]
+        if well_known_uri not in self._cache:
+            raise ValueError(
+                f"JWKS for well-known URI {well_known_uri} not found in cache.  Call read_list_async() first."
+            )
 
-        return await self.read_async(auth_config=auth_config)
+        return self._cache[well_known_uri]
