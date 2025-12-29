@@ -1,19 +1,19 @@
 import logging
 
-from key_value.aio.stores.memory import MemoryStore
-
 from oidcauthlib.auth.auth_manager import AuthManager
 from oidcauthlib.auth.config.auth_config_reader import AuthConfigReader
+from oidcauthlib.auth.fastapi_auth_manager import FastAPIAuthManager
+from oidcauthlib.auth.token_reader import TokenReader
 from oidcauthlib.auth.well_known_configuration.well_known_configuration_cache import (
     WellKnownConfigurationCache,
 )
 from oidcauthlib.auth.well_known_configuration.well_known_configuration_manager import (
     WellKnownConfigurationManager,
 )
-from oidcauthlib.auth.fastapi_auth_manager import FastAPIAuthManager
-from oidcauthlib.auth.token_reader import TokenReader
 from oidcauthlib.container.simple_container import SimpleContainer
 from oidcauthlib.utilities.environment.environment_variables import EnvironmentVariables
+from tests.storage.memory_storage_factory import MemoryStorageFactory
+from tests.storage.storage_factory import StorageFactory
 
 logger = logging.getLogger(__name__)
 
@@ -42,9 +42,15 @@ class OidcAuthLibContainerFactory:
             ),
         )
 
+        container.singleton(StorageFactory, lambda c: MemoryStorageFactory())
+
         container.singleton(
             WellKnownConfigurationCache,
-            lambda c: WellKnownConfigurationCache(well_known_store=MemoryStore()),
+            lambda c: WellKnownConfigurationCache(
+                well_known_store=c.resolve(StorageFactory).get_store(
+                    namespace="well_known_configuration",
+                )
+            ),
         )
 
         container.singleton(

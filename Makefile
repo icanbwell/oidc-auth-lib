@@ -52,7 +52,7 @@ tests: up
 	docker compose \
 		-f docker-compose-mongo.yml \
 		-f docker-compose.yml \
-	run --rm --name oidcauthlib dev pytest tests oidcauthlib
+	run --rm --name oidcauthlib dev pytest tests oidcauthlib --cov=oidcauthlib --cov-report=term:skip-covered --cov-config=.coveragerc --cov-fail-under=63
 
 .PHONY:shell
 shell:devdocker ## Brings up the bash shell in dev docker
