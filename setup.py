@@ -60,7 +60,7 @@ setup(
         "authlib>=1.6.4",
         "joserfc>=1.4.3",
         "pydantic<3.0.0,>=2.0",
-        "pymongo[snappy]>=4.15.3",
+        "pymongo[snappy]>=4.15.4",
         "python-snappy>=0.7.3",
         "fastapi>=0.115.8",
         "starlette>=0.49.1",
