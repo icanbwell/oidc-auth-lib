@@ -1,10 +1,9 @@
-from typing import runtime_checkable, Protocol
+from abc import abstractmethod, ABC
 
 from key_value.aio.stores.base import BaseStore
 
 
-@runtime_checkable
-class StorageFactory(Protocol):
+class StorageFactory(ABC):
     """Protocol for storage factory implementations.
 
     This protocol defines the interface that all storage factory implementations
@@ -21,6 +20,7 @@ class StorageFactory(Protocol):
 
     """
 
+    @abstractmethod
     def get_store(self, namespace: str) -> BaseStore:
         """Get or create cache store for the specified namespace.
 
