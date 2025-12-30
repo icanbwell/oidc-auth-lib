@@ -3,7 +3,7 @@ from typing import override
 from key_value.aio.stores.base import BaseDestroyCollectionStore
 from key_value.aio.stores.memory import MemoryStore
 
-from tests.storage.storage_factory import StorageFactory
+from oidcauthlib.storage.storage_factory import StorageFactory
 
 
 class MemoryStorageFactory(StorageFactory):

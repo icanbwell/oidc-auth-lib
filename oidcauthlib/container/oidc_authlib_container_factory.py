@@ -11,8 +11,10 @@ from oidcauthlib.auth.well_known_configuration.well_known_configuration_manager 
     WellKnownConfigurationManager,
 )
 from oidcauthlib.container.simple_container import SimpleContainer
-from oidcauthlib.utilities.environment.environment_variables import EnvironmentVariables
-from tests.storage.memory_storage_factory import MemoryStorageFactory
+from oidcauthlib.utilities.environment.oidc_environment_variables import (
+    OidcEnvironmentVariables,
+)
+from oidcauthlib.storage.memory_storage_factory import MemoryStorageFactory
 
 logger = logging.getLogger(__name__)
 
@@ -30,14 +32,14 @@ class OidcAuthLibContainerFactory:
         """
         # register services here
         container.singleton(
-            EnvironmentVariables,
-            lambda c: EnvironmentVariables(),
+            OidcEnvironmentVariables,
+            lambda c: OidcEnvironmentVariables(),
         )
 
         container.singleton(
             AuthConfigReader,
             lambda c: AuthConfigReader(
-                environment_variables=c.resolve(EnvironmentVariables)
+                environment_variables=c.resolve(OidcEnvironmentVariables)
             ),
         )
 
@@ -71,7 +73,7 @@ class OidcAuthLibContainerFactory:
         container.singleton(
             FastAPIAuthManager,
             lambda c: FastAPIAuthManager(
-                environment_variables=c.resolve(EnvironmentVariables),
+                environment_variables=c.resolve(OidcEnvironmentVariables),
                 auth_config_reader=c.resolve(AuthConfigReader),
                 token_reader=c.resolve(TokenReader),
                 well_known_configuration_manager=c.resolve(
@@ -85,7 +87,7 @@ class OidcAuthLibContainerFactory:
             lambda c: AuthManager(
                 auth_config_reader=c.resolve(AuthConfigReader),
                 token_reader=c.resolve(TokenReader),
-                environment_variables=c.resolve(EnvironmentVariables),
+                environment_variables=c.resolve(OidcEnvironmentVariables),
                 well_known_configuration_manager=c.resolve(
                     WellKnownConfigurationManager
                 ),

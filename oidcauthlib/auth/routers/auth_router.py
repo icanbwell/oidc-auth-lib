@@ -18,7 +18,9 @@ from oidcauthlib.auth.config.auth_config_reader import (
 )
 from oidcauthlib.auth.fastapi_auth_manager import FastAPIAuthManager
 from oidcauthlib.container.inject import Inject
-from oidcauthlib.utilities.environment.environment_variables import EnvironmentVariables
+from oidcauthlib.utilities.environment.oidc_environment_variables import (
+    OidcEnvironmentVariables,
+)
 from oidcauthlib.utilities.logger.log_levels import SRC_LOG_LEVELS
 
 logger = logging.getLogger(__name__)
@@ -79,7 +81,7 @@ class AuthRouter:
             AuthConfigReader, Depends(Inject(AuthConfigReader))
         ],
         environment_variables: Annotated[
-            EnvironmentVariables, Depends(Inject(EnvironmentVariables))
+            OidcEnvironmentVariables, Depends(Inject(OidcEnvironmentVariables))
         ],
     ) -> Union[RedirectResponse, JSONResponse]:
         """
@@ -90,7 +92,7 @@ class AuthRouter:
             request (Request): The incoming request object.
             auth_manager (AuthManager): The authentication manager instance.
             auth_config_reader (AuthConfigReader): The authentication configuration reader instance.
-            environment_variables (EnvironmentVariables): The environment variables instance.
+            environment_variables (OidcEnvironmentVariables): The environment variables instance.
         """
         auth_redirect_uri_text: Optional[str] = environment_variables.auth_redirect_uri
         redirect_uri1: URL = (

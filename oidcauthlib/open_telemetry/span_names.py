@@ -13,3 +13,7 @@ class OidcOpenTelemetrySpanNames:
     POPULATE_WELL_KNOWN_CONFIG_CACHE: str = "auth.oidc.well_known_config_cache.populate"
 
     READ_WELL_KNOWN_CONFIGURATION: str = "auth.oidc.well_known_config.read"
+
+    # Mongo GridFS operations (pruned to only essential spans)
+    MONGO_GRIDFS_GET_MANAGED_ENTRY: str = "mongo.gridfs.get_managed_entry"
+    MONGO_GRIDFS_PUT_MANAGED_ENTRY: str = "mongo.gridfs.put_managed_entry"

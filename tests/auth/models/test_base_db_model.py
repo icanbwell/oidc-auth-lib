@@ -1,6 +1,8 @@
 from oidcauthlib.auth.models.base_db_model import BaseDbModel
 from bson import ObjectId
-from oidcauthlib.utilities.environment.environment_variables import EnvironmentVariables
+from oidcauthlib.utilities.environment.oidc_environment_variables import (
+    OidcEnvironmentVariables,
+)
 from oidcauthlib.auth.config.auth_config_reader import AuthConfigReader
 from oidcauthlib.auth.config.auth_config import AuthConfig
 from typing import Any, List, Dict, override
@@ -19,7 +21,7 @@ def test_base_db_model_creation_and_serialization() -> None:
     assert str(obj.id) in json_data
 
 
-class DummyEnvVars(EnvironmentVariables):
+class DummyEnvVars(OidcEnvironmentVariables):
     def __init__(self, providers: List[str], configs: Dict[str, Any]) -> None:
         self._providers: List[str] = providers
         self._configs: Dict[str, Any] = configs

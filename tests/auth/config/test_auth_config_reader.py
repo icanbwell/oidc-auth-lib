@@ -3,10 +3,12 @@ from oidcauthlib.auth.config.auth_config import AuthConfig
 import pytest
 from typing import Any, Dict, List, override, Optional
 
-from oidcauthlib.utilities.environment.environment_variables import EnvironmentVariables
+from oidcauthlib.utilities.environment.oidc_environment_variables import (
+    OidcEnvironmentVariables,
+)
 
 
-class DummyEnvVars(EnvironmentVariables):
+class DummyEnvVars(OidcEnvironmentVariables):
     def __init__(self, providers: list[str], configs: dict[str, Any]) -> None:
         self._providers: Optional[list[str]] = providers
         self._configs: dict[str, Any] = configs
