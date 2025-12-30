@@ -63,7 +63,7 @@ async def test_gridfs_store_and_get_roundtrip(test_container: IContainer) -> Non
     - Force GridFS by lowering inline threshold
     - Store a large payload, then retrieve it, verifying value integrity
     """
-    storage_factory: StorageFactory = test_container.resolve(StorageFactory)  # type: ignore[type-abstract]
+    storage_factory: StorageFactory = test_container.resolve(StorageFactory)
     store = cast(MongoDBGridFSStore, storage_factory.get_store(TEST_CACHE))
     await store.setup_collection(collection="gridfs_big_test")
 
@@ -88,7 +88,7 @@ async def test_update_cleanup_old_gridfs_file(test_container: IContainer) -> Non
     - Assert metadata has inline_value and old gridfs_file_id is removed
     - Verify retrieved value is the new small object
     """
-    storage_factory: StorageFactory = test_container.resolve(StorageFactory)  # type: ignore[type-abstract]
+    storage_factory: StorageFactory = test_container.resolve(StorageFactory)
     store = cast(MongoDBGridFSStore, storage_factory.get_store(TEST_CACHE))
     await store.setup_collection(collection="gridfs_update_test")
 
@@ -144,7 +144,7 @@ async def test_batch_get_mixed_inline_and_gridfs(test_container: IContainer) -> 
     - Store one inline and one GridFS entry; request both plus a missing key
     - Assert order preservation and None for missing entry
     """
-    storage_factory: StorageFactory = test_container.resolve(StorageFactory)  # type: ignore[type-abstract]
+    storage_factory: StorageFactory = test_container.resolve(StorageFactory)
     store = cast(MongoDBGridFSStore, storage_factory.get_store(TEST_CACHE))
     await store.setup_collection(collection="gridfs_batch_test")
 
@@ -180,7 +180,7 @@ async def test_batch_get_all_missing_returns_nones(test_container: IContainer) -
     Validate batch get behavior when all keys are missing:
     - Request multiple missing keys and assert the result list contains only None values
     """
-    storage_factory: StorageFactory = test_container.resolve(StorageFactory)  # type: ignore[type-abstract]
+    storage_factory: StorageFactory = test_container.resolve(StorageFactory)
     store = cast(MongoDBGridFSStore, storage_factory.get_store(TEST_CACHE))
     await store.setup_collection(collection="gridfs_all_missing_test")
 
@@ -199,7 +199,7 @@ async def test_delete_managed_entries_bulk(test_container: IContainer) -> None:
     - Store three entries (mix inline/GridFS), delete two keys via bulk delete
     - Assert deleted keys return None and remaining key returns its value
     """
-    storage_factory: StorageFactory = test_container.resolve(StorageFactory)  # type: ignore[type-abstract]
+    storage_factory: StorageFactory = test_container.resolve(StorageFactory)
     store = cast(MongoDBGridFSStore, storage_factory.get_store(TEST_CACHE))
     await store.setup_collection(collection="gridfs_delete_bulk")
 
@@ -240,7 +240,7 @@ async def test_delete_managed_entry_single_path(test_container: IContainer) -> N
     - Store one entry, delete it via _delete_managed_entry, verify it's gone
     - Deleting a non-existent key should return False
     """
-    storage_factory: StorageFactory = test_container.resolve(StorageFactory)  # type: ignore[type-abstract]
+    storage_factory: StorageFactory = test_container.resolve(StorageFactory)
     store = cast(MongoDBGridFSStore, storage_factory.get_store(TEST_CACHE))
     await store.setup_collection(collection="gridfs_delete_single")
 
@@ -282,7 +282,7 @@ async def test_gridfs_stats_and_delete_collection(test_container: IContainer) ->
     - Delete the collection; internal references should be removed
     - Re-setup the collection and assert subsequent gets return None
     """
-    storage_factory: StorageFactory = test_container.resolve(StorageFactory)  # type: ignore[type-abstract]
+    storage_factory: StorageFactory = test_container.resolve(StorageFactory)
     store = cast(MongoDBGridFSStore, storage_factory.get_store(TEST_CACHE))
     await store.setup_collection(collection="gridfs_stats_test")
 
