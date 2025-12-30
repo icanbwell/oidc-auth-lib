@@ -15,6 +15,46 @@ services:
     networks:
       - web
 
+  atlas-cli:
+    # https://www.mongodb.com/docs/atlas/cli/current/atlas-cli-changelog/
+    image: mongodb/atlas:v1.50.0
+    profiles: ["seed"]
+    environment:
+      # Hardcoded values for vector index creation
+      MONGO_VECTOR_SERVER: mongo
+      MONGO_VECTOR_DATABASE: data-science
+      MONGO_VECTOR_COLLECTION: clinical-notes
+      MONGO_VECTOR_USERNAME: root
+      MONGO_VECTOR_PASSWORD: test123  # pragma: allowlist secret
+      MONGO_VECTOR_PORT: 27017
+      # vector index settings
+      MONGO_VECTOR_INDEX_NAME: vector_index
+      MONGO_VECTOR_INDEX_TYPE: vectorSearch
+      MONGO_VECTOR_EMBEDDINGS_FIELD: embedding
+      MONGO_VECTOR_DIMENSIONS: 1536
+      MONGO_VECTOR_SIMILARITY: dotProduct
+      MONGO_VECTOR_QUANTIZATION: scalar
+      MONGO_TEXT_INDEX_NAME: search_text_index
+      MONGO_TEXT_FIELD: text
+      # Force bash instead of zsh
+      ZDOTDIR: /dev/null
+      SHELL: /bin/bash
+    depends_on:
+      mongo:
+        condition: service_healthy
+    container_name: atlas-cli
+    volumes:
+      - ./scripts/create_vector_index.sh:/create_vector_index.sh:ro
+    entrypoint: ["/bin/bash", "-c"]
+    command: ["/bin/bash /create_vector_index.sh"]
+    healthcheck:
+      test: /bin/sh -c "if [ -n \"$MONGO_TEXT_INDEX_NAME\" ]; then echo \"(() => { const col=db.getCollection(\\\"clinical-notes\\\"); const hasVector = col.getSearchIndexes().filter(i => i.name === \\\"$MONGO_VECTOR_INDEX_NAME\\\").length > 0; const hasText = col.getSearchIndexes().filter(i => i.name === \\\"$MONGO_TEXT_INDEX_NAME\\\").length > 0; return hasVector && hasText; })()\" | mongosh mongodb://root:test123@mongo:27017/data-science?authSource=admin&appName=McpFhirAgent; else echo \"(() => { const col=db.getCollection(\\\"clinical-notes\\\"); const hasVector = col.getSearchIndexes().filter(i => i.name === \\\"$MONGO_VECTOR_INDEX_NAME\\\").length > 0; return hasVector; })()\" | mongosh mongodb://root:test123@mongo:27017/data-science?authSource=admin&appName=McpFhirAgent; fi"
+      interval: 10s
+      timeout: 10s
+      retries: 10
+    networks:
+      - web
+
 networks:
   web:
     driver: bridge

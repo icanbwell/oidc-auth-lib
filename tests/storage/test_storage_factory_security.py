@@ -46,9 +46,9 @@ async def test_data_isolation_between_namespaces() -> None:
     env.dynamic_client_registration_collection = "dynamic_client_registration"
     env.mcp_response_cache_collection = "mcp_response_cache"
 
-    with patch("mcpfhiragent.storage.mongo_storage_factory.AsyncMongoClient"):
+    with patch("oidcauthlib.storage.mongo_storage_factory.AsyncMongoClient"):
         with patch(
-            "mcpfhiragent.storage.mongo_storage_factory.MongoDBGridFSStore"
+            "oidcauthlib.storage.mongo_storage_factory.MongoDBGridFSStore"
         ) as mock_store_class:
             # Create two separate mock stores
             person_store_mock = Mock()
@@ -98,9 +98,9 @@ async def test_concurrent_writes_to_different_namespaces_dont_interfere() -> Non
     env.dynamic_client_registration_collection = "dynamic_client_registration"
     env.mcp_response_cache_collection = "mcp_response_cache"
 
-    with patch("mcpfhiragent.storage.mongo_storage_factory.AsyncMongoClient"):
+    with patch("oidcauthlib.storage.mongo_storage_factory.AsyncMongoClient"):
         with patch(
-            "mcpfhiragent.storage.mongo_storage_factory.MongoDBGridFSStore"
+            "oidcauthlib.storage.mongo_storage_factory.MongoDBGridFSStore"
         ) as mock_store_class:
             # Create separate mock stores with tracking
             person_writes = []
@@ -170,9 +170,9 @@ def test_different_namespaces_use_different_collections() -> None:
     env.dynamic_client_registration_collection = "dynamic_client_registration"
     env.mcp_response_cache_collection = "mcp_response_cache"
 
-    with patch("mcpfhiragent.storage.mongo_storage_factory.AsyncMongoClient"):
+    with patch("oidcauthlib.storage.mongo_storage_factory.AsyncMongoClient"):
         with patch(
-            "mcpfhiragent.storage.mongo_storage_factory.MongoDBGridFSStore"
+            "oidcauthlib.storage.mongo_storage_factory.MongoDBGridFSStore"
         ) as mock_store_class:
             factory = MongoStoreFactory(
                 environment_variables=env,
@@ -218,9 +218,9 @@ def test_concurrent_get_cache_same_namespace_returns_same_instance() -> None:
     env.dynamic_client_registration_collection = "dynamic_client_registration"
     env.mcp_response_cache_collection = "mcp_response_cache"
 
-    with patch("mcpfhiragent.storage.mongo_storage_factory.AsyncMongoClient"):
+    with patch("oidcauthlib.storage.mongo_storage_factory.AsyncMongoClient"):
         with patch(
-            "mcpfhiragent.storage.mongo_storage_factory.MongoDBGridFSStore"
+            "oidcauthlib.storage.mongo_storage_factory.MongoDBGridFSStore"
         ) as mock_store_class:
             mock_store_instance = Mock()
             mock_store_class.return_value = mock_store_instance
@@ -263,7 +263,7 @@ def test_factory_initialization_is_thread_safe() -> None:
     env.mongo_db_password = None
     env.cache_provider = CacheProvider.MONGODB
 
-    with patch("mcpfhiragent.storage.mongo_storage_factory.AsyncMongoClient"):
+    with patch("oidcauthlib.storage.mongo_storage_factory.AsyncMongoClient"):
         factories = []
 
         def create_factory_instance() -> None:
@@ -305,9 +305,9 @@ def test_singleton_per_namespace() -> None:
     env.dynamic_client_registration_collection = "dynamic_client_registration"
     env.mcp_response_cache_collection = "mcp_response_cache"
 
-    with patch("mcpfhiragent.storage.mongo_storage_factory.AsyncMongoClient"):
+    with patch("oidcauthlib.storage.mongo_storage_factory.AsyncMongoClient"):
         with patch(
-            "mcpfhiragent.storage.mongo_storage_factory.MongoDBGridFSStore"
+            "oidcauthlib.storage.mongo_storage_factory.MongoDBGridFSStore"
         ) as mock_store_class:
             mock_store_instance = Mock()
             mock_store_class.return_value = mock_store_instance
@@ -344,9 +344,9 @@ def test_different_namespaces_return_different_instances() -> None:
     env.dynamic_client_registration_collection = "dynamic_client_registration"
     env.mcp_response_cache_collection = "mcp_response_cache"
 
-    with patch("mcpfhiragent.storage.mongo_storage_factory.AsyncMongoClient"):
+    with patch("oidcauthlib.storage.mongo_storage_factory.AsyncMongoClient"):
         with patch(
-            "mcpfhiragent.storage.mongo_storage_factory.MongoDBGridFSStore"
+            "oidcauthlib.storage.mongo_storage_factory.MongoDBGridFSStore"
         ) as mock_store_class:
             # Return different mocks for each call
             mock_store_class.side_effect = [Mock(), Mock()]
@@ -381,9 +381,9 @@ def test_singleton_per_factory_instance() -> None:
     env.dynamic_client_registration_collection = "dynamic_client_registration"
     env.mcp_response_cache_collection = "mcp_response_cache"
 
-    with patch("mcpfhiragent.storage.mongo_storage_factory.AsyncMongoClient"):
+    with patch("oidcauthlib.storage.mongo_storage_factory.AsyncMongoClient"):
         with patch(
-            "mcpfhiragent.storage.mongo_storage_factory.MongoDBGridFSStore"
+            "oidcauthlib.storage.mongo_storage_factory.MongoDBGridFSStore"
         ) as mock_store_class:
             # Return different mocks for each call
             mock_store_class.side_effect = [Mock(), Mock(), Mock(), Mock()]
@@ -430,7 +430,7 @@ def test_factory_selection_mongodb() -> None:
     env.mongo_db_username = None
     env.mongo_db_password = None
 
-    with patch("mcpfhiragent.storage.mongo_storage_factory.AsyncMongoClient"):
+    with patch("oidcauthlib.storage.mongo_storage_factory.AsyncMongoClient"):
         factory = MongoStoreFactory(
             environment_variables=env,
             cache_to_collection_mapper=CacheToCollectionMapper(

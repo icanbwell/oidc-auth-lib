@@ -41,11 +41,11 @@ def test_credential_injection_from_separate_env_vars() -> None:
     env.mongo_db_password = "k8s_pass"  # pragma: allowlist secret
 
     with patch(
-        "mcpfhiragent.storage.mongo_storage_factory.AsyncMongoClient"
+        "oidcauthlib.storage.mongo_storage_factory.AsyncMongoClient"
     ) as mock_client_class:
-        with patch("mcpfhiragent.storage.mongo_storage_factory.MongoDBGridFSStore"):
+        with patch("oidcauthlib.storage.mongo_storage_factory.MongoDBGridFSStore"):
             with patch(
-                "mcpfhiragent.storage.mongo_storage_factory.MongoUrlHelpers.add_credentials_to_mongo_url"
+                "oidcauthlib.storage.mongo_storage_factory.MongoUrlHelpers.add_credentials_to_mongo_url"
             ) as mock_add_creds:
                 # Mock the credential injection to return URL with credentials
                 mock_add_creds.return_value = (
@@ -96,10 +96,10 @@ def test_credential_injection_env_vars_override_embedded() -> None:
     env.mongo_db_username = "k8s_user"
     env.mongo_db_password = "k8s_pass"  # pragma: allowlist secret
 
-    with patch("mcpfhiragent.storage.mongo_storage_factory.AsyncMongoClient"):
-        with patch("mcpfhiragent.storage.mongo_storage_factory.MongoDBGridFSStore"):
+    with patch("oidcauthlib.storage.mongo_storage_factory.AsyncMongoClient"):
+        with patch("oidcauthlib.storage.mongo_storage_factory.MongoDBGridFSStore"):
             with patch(
-                "mcpfhiragent.storage.mongo_storage_factory.MongoUrlHelpers.add_credentials_to_mongo_url"
+                "oidcauthlib.storage.mongo_storage_factory.MongoUrlHelpers.add_credentials_to_mongo_url"
             ) as mock_add_creds:
                 # Mock the credential injection to return a test URL
                 mock_add_creds.return_value = (
@@ -135,11 +135,11 @@ def test_credential_injection_skipped_when_only_username_provided() -> None:
     env.mongo_db_password = None  # Missing password
 
     with patch(
-        "mcpfhiragent.storage.mongo_storage_factory.AsyncMongoClient"
+        "oidcauthlib.storage.mongo_storage_factory.AsyncMongoClient"
     ) as mock_client_class:
-        with patch("mcpfhiragent.storage.mongo_storage_factory.MongoDBGridFSStore"):
+        with patch("oidcauthlib.storage.mongo_storage_factory.MongoDBGridFSStore"):
             with patch(
-                "mcpfhiragent.storage.mongo_storage_factory.MongoUrlHelpers.add_credentials_to_mongo_url"
+                "oidcauthlib.storage.mongo_storage_factory.MongoUrlHelpers.add_credentials_to_mongo_url"
             ) as mock_add_creds:
                 # When only username, should not inject (return original URL)
                 mock_add_creds.return_value = env.mongo_uri
@@ -174,11 +174,11 @@ def test_credential_injection_skipped_when_only_password_provided() -> None:
     env.mongo_db_password = "testpass"  # pragma: allowlist secret
 
     with patch(
-        "mcpfhiragent.storage.mongo_storage_factory.AsyncMongoClient"
+        "oidcauthlib.storage.mongo_storage_factory.AsyncMongoClient"
     ) as mock_client_class:
-        with patch("mcpfhiragent.storage.mongo_storage_factory.MongoDBGridFSStore"):
+        with patch("oidcauthlib.storage.mongo_storage_factory.MongoDBGridFSStore"):
             with patch(
-                "mcpfhiragent.storage.mongo_storage_factory.MongoUrlHelpers.add_credentials_to_mongo_url"
+                "oidcauthlib.storage.mongo_storage_factory.MongoUrlHelpers.add_credentials_to_mongo_url"
             ) as mock_add_creds:
                 # When only password, should not inject (return original URL)
                 mock_add_creds.return_value = env.mongo_uri
@@ -212,7 +212,7 @@ def test_mongo_store_factory_implements_storage_factory_protocol() -> None:
     env.mongo_max_pool_size = 10
     env.mongo_min_pool_size = 2
 
-    with patch("mcpfhiragent.storage.mongo_storage_factory.AsyncMongoClient"):
+    with patch("oidcauthlib.storage.mongo_storage_factory.AsyncMongoClient"):
         factory = MongoStoreFactory(
             environment_variables=env,
             cache_to_collection_mapper=CacheToCollectionMapper(
@@ -237,9 +237,9 @@ def test_get_cache_method_returns_base_store() -> None:
     env.mongo_db_username = None
     env.mongo_db_password = None
 
-    with patch("mcpfhiragent.storage.mongo_storage_factory.AsyncMongoClient"):
+    with patch("oidcauthlib.storage.mongo_storage_factory.AsyncMongoClient"):
         with patch(
-            "mcpfhiragent.storage.mongo_storage_factory.MongoDBGridFSStore"
+            "oidcauthlib.storage.mongo_storage_factory.MongoDBGridFSStore"
         ) as mock_store_class:
             mock_store = Mock()
             mock_store_class.return_value = mock_store
@@ -267,7 +267,7 @@ def test_get_cache_with_unknown_namespace_raises_error() -> None:
     env.mongo_max_pool_size = 10
     env.mongo_min_pool_size = 2
 
-    with patch("mcpfhiragent.storage.mongo_storage_factory.AsyncMongoClient"):
+    with patch("oidcauthlib.storage.mongo_storage_factory.AsyncMongoClient"):
         factory = MongoStoreFactory(
             environment_variables=env,
             cache_to_collection_mapper=CacheToCollectionMapper(
@@ -302,9 +302,9 @@ def test_connection_pool_size_configuration() -> None:
     env.mongo_db_password = None
 
     with patch(
-        "mcpfhiragent.storage.mongo_storage_factory.AsyncMongoClient"
+        "oidcauthlib.storage.mongo_storage_factory.AsyncMongoClient"
     ) as mock_client_class:
-        with patch("mcpfhiragent.storage.mongo_storage_factory.MongoDBGridFSStore"):
+        with patch("oidcauthlib.storage.mongo_storage_factory.MongoDBGridFSStore"):
             factory = MongoStoreFactory(
                 environment_variables=env,
                 cache_to_collection_mapper=CacheToCollectionMapper(
@@ -322,7 +322,7 @@ def test_connection_pool_size_configuration() -> None:
             assert call_kwargs["minPoolSize"] == 5
             assert call_kwargs["maxIdleTimeMS"] == 45000
             assert call_kwargs["serverSelectionTimeoutMS"] == 5000
-            assert call_kwargs["appname"] == "McpFhirAgent"
+            assert call_kwargs["appname"] == "oidcauthlib"
 
 
 def test_shared_mongo_client_across_namespaces() -> None:
@@ -343,9 +343,9 @@ def test_shared_mongo_client_across_namespaces() -> None:
     env.mongo_db_password = None
 
     with patch(
-        "mcpfhiragent.storage.mongo_storage_factory.AsyncMongoClient"
+        "oidcauthlib.storage.mongo_storage_factory.AsyncMongoClient"
     ) as mock_client_class:
-        with patch("mcpfhiragent.storage.mongo_storage_factory.MongoDBGridFSStore"):
+        with patch("oidcauthlib.storage.mongo_storage_factory.MongoDBGridFSStore"):
             mock_client = Mock()
             mock_client_class.return_value = mock_client
 
@@ -377,10 +377,10 @@ def test_connection_string_cached_across_calls() -> None:
     env.mongo_db_username = "user"
     env.mongo_db_password = "pass"  # pragma: allowlist secret
 
-    with patch("mcpfhiragent.storage.mongo_storage_factory.AsyncMongoClient"):
-        with patch("mcpfhiragent.storage.mongo_storage_factory.MongoDBGridFSStore"):
+    with patch("oidcauthlib.storage.mongo_storage_factory.AsyncMongoClient"):
+        with patch("oidcauthlib.storage.mongo_storage_factory.MongoDBGridFSStore"):
             with patch(
-                "mcpfhiragent.storage.mongo_storage_factory.MongoUrlHelpers.add_credentials_to_mongo_url"
+                "oidcauthlib.storage.mongo_storage_factory.MongoUrlHelpers.add_credentials_to_mongo_url"
             ) as mock_add_creds:
                 mock_add_creds.return_value = "mongodb://user:pass@localhost:27017/"
 
@@ -410,8 +410,8 @@ def test_mongo_store_factory_without_required_db_name_raises_error() -> None:
     env.mongo_min_pool_size = 2
     env.person_patient_cache_collection = "person_patient_cache"
 
-    with patch("mcpfhiragent.storage.mongo_storage_factory.AsyncMongoClient"):
-        with patch("mcpfhiragent.storage.mongo_storage_factory.MongoDBGridFSStore"):
+    with patch("oidcauthlib.storage.mongo_storage_factory.AsyncMongoClient"):
+        with patch("oidcauthlib.storage.mongo_storage_factory.MongoDBGridFSStore"):
             factory = MongoStoreFactory(
                 environment_variables=env,
                 cache_to_collection_mapper=CacheToCollectionMapper(
@@ -435,8 +435,8 @@ def test_mongo_store_factory_without_required_collection_name_raises_error() -> 
     env.person_patient_cache_collection = None  # Missing
     env.mcp_response_cache_collection = "mcp_response_cache"
 
-    with patch("mcpfhiragent.storage.mongo_storage_factory.AsyncMongoClient"):
-        with patch("mcpfhiragent.storage.mongo_storage_factory.MongoDBGridFSStore"):
+    with patch("oidcauthlib.storage.mongo_storage_factory.AsyncMongoClient"):
+        with patch("oidcauthlib.storage.mongo_storage_factory.MongoDBGridFSStore"):
             factory = MongoStoreFactory(
                 environment_variables=env,
                 cache_to_collection_mapper=CacheToCollectionMapper(
@@ -465,9 +465,9 @@ def test_different_factory_instances_have_separate_clients() -> None:
     env.mongo_db_password = None
 
     with patch(
-        "mcpfhiragent.storage.mongo_storage_factory.AsyncMongoClient"
+        "oidcauthlib.storage.mongo_storage_factory.AsyncMongoClient"
     ) as mock_client_class:
-        with patch("mcpfhiragent.storage.mongo_storage_factory.MongoDBGridFSStore"):
+        with patch("oidcauthlib.storage.mongo_storage_factory.MongoDBGridFSStore"):
             # Create separate clients for each factory instance
             mock_client_class.side_effect = [Mock(), Mock()]
 

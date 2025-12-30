@@ -1,15 +1,28 @@
 from datetime import datetime, UTC
-from typing import cast
+from typing import cast, override
 
 import pytest
 from bson import ObjectId
 from key_value.shared.utils.managed_entry import ManagedEntry
 from oidcauthlib.container.interfaces import IContainer
+from oidcauthlib.storage.cache_to_collection_mapper import CacheToCollectionMapper
 from oidcauthlib.storage.storage_factory import StorageFactory
 
 from oidcauthlib.storage.mongo_gridfs_db import MongoDBGridFSStore
+from oidcauthlib.utilities.environment.oidc_environment_variables import (
+    OidcEnvironmentVariables,
+)
 
 TEST_CACHE = "test_cache"
+
+
+class TestCacheToCollectionMapper(CacheToCollectionMapper):
+    @override
+    def get_collection_for_cache(self, *, cache_name: str) -> str | None:
+        mapping = {
+            TEST_CACHE: "test_collection",
+        }
+        return mapping.get(cache_name)
 
 
 @pytest.mark.asyncio
@@ -19,7 +32,13 @@ async def test_inline_store_and_get_roundtrip(test_container: IContainer) -> Non
     - Use small payload so value is stored inline in metadata (not GridFS)
     - Put entry, then get it, and assert ManagedEntry.value matches original object
     """
-    storage_factory: StorageFactory = test_container.resolve(StorageFactory)  # type: ignore[type-abstract]
+    test_container.singleton(
+        CacheToCollectionMapper,
+        lambda c: TestCacheToCollectionMapper(
+            environment_variables=c.resolve(OidcEnvironmentVariables)
+        ),
+    )
+    storage_factory: StorageFactory = test_container.resolve(StorageFactory)
     store = cast(MongoDBGridFSStore, storage_factory.get_store(TEST_CACHE))
     await store.setup_collection(collection="gridfs_inline_test")
 

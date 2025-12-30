@@ -2,7 +2,15 @@
 Shared test fixtures and utilities for auth tests.
 """
 
-from typing import List, override
+from typing import List, override, AsyncGenerator
+
+import pytest
+
+from oidcauthlib.container.container_registry import ContainerRegistry
+from oidcauthlib.container.interfaces import IContainer
+from oidcauthlib.container.oidc_authlib_container_factory import (
+    OidcAuthLibContainerFactory,
+)
 from oidcauthlib.utilities.environment.abstract_environment_variables import (
     AbstractEnvironmentVariables,
 )
@@ -68,3 +76,24 @@ class MockEnvironmentVariables(AbstractEnvironmentVariables):
     @override
     def auth_redirect_uri(self) -> str | None:
         return None
+
+
+def create_test_container() -> IContainer:
+    """
+    Create a singleton-like dependency injection container for tests.
+    :return: IContainer
+    """
+    container: IContainer = OidcAuthLibContainerFactory().create_container()
+    # Register the MockEnvironmentVariables for testing
+    container.singleton(
+        AbstractEnvironmentVariables,
+        lambda c: MockEnvironmentVariables(providers=["test_provider"]),
+    )
+    return container
+
+
+@pytest.fixture(scope="function")
+async def test_container() -> AsyncGenerator[IContainer, None]:
+    test_container: IContainer = create_test_container()
+    async with ContainerRegistry.override(container=test_container) as container:
+        yield container

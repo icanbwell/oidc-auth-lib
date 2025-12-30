@@ -12,6 +12,7 @@ from oidcauthlib.auth.well_known_configuration.well_known_configuration_manager 
 )
 from oidcauthlib.container.simple_container import SimpleContainer
 from oidcauthlib.storage.cache_to_collection_mapper import CacheToCollectionMapper
+from oidcauthlib.storage.storage_factory import StorageFactory
 from oidcauthlib.storage.storage_factory_creator import StorageFactoryCreator
 from oidcauthlib.utilities.environment.oidc_environment_variables import (
     OidcEnvironmentVariables,
@@ -22,6 +23,17 @@ logger = logging.getLogger(__name__)
 
 
 class OidcAuthLibContainerFactory:
+    @classmethod
+    def create_container(cls) -> SimpleContainer:
+        logger.info("Initializing DI container")
+
+        container = SimpleContainer()
+
+        container = OidcAuthLibContainerFactory().register_services_in_container(
+            container=container
+        )
+        return container
+
     @staticmethod
     def register_services_in_container(
         *, container: SimpleContainer
@@ -109,6 +121,12 @@ class OidcAuthLibContainerFactory:
                 environment_variables=c.resolve(OidcEnvironmentVariables),
                 cache_to_collection_mapper=c.resolve(CacheToCollectionMapper),
             ),
+        )
+        # Register storage factory as singleton to manage connection pools
+        # Implementation (MongoDB/Redis) selected based on CACHE_PROVIDER env var
+        container.singleton(
+            StorageFactory,
+            lambda c: c.resolve(StorageFactoryCreator).create_storage_factory(),
         )
 
         logger.info("DI container initialized")
