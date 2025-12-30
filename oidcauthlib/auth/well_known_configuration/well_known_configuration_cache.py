@@ -275,16 +275,20 @@ class WellKnownConfigurationCache:
 
         existing_kids = {key.kid for key in self._jwks}
         new_keys = [key for key in keys if key.get("kid") not in existing_kids]
-        self._jwks = KeySet.import_key_set(
-            {"keys": new_keys + [ek.as_dict() for ek in self._jwks]}
-        )
+
+        all_keys = new_keys + [ek.as_dict() for ek in self._jwks]
+        if all_keys:
+            self._jwks = KeySet.import_key_set({"keys": all_keys})
 
     def size(self) -> int:
         """Return number of cached discovery documents."""
         return len(self._cache)
 
-    def clear(self) -> None:
+    async def clear_async(self) -> None:
         """Clear all cached discovery documents (useful for tests)."""
+        well_known_uris: list[str] = list(self._cache.keys())
+        if self.well_known_store is not None:
+            await self.well_known_store.delete_many(well_known_uris)
         self._cache.clear()
         self._jwks = KeySet(keys=[])
         self._loaded = False

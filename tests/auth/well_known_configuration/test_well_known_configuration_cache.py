@@ -231,7 +231,7 @@ async def test_clear_resets_cache() -> None:
         await cache.read_async(auth_config=auth_config)
 
         assert cache.size() == 1
-        cache.clear()
+        await cache.clear_async()
         assert cache.size() == 0
 
         # Fetch again after clear triggers new HTTP call

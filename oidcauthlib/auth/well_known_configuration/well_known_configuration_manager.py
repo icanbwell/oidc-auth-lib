@@ -150,7 +150,7 @@ class WellKnownConfigurationManager:
 
             # Now clear and reset - no concurrent initialization can be running
             async with self._lock:
-                self._cache.clear()
+                await self._cache.clear_async()
                 self._loaded = False
                 self._initializing = False
                 self._init_event.clear()
