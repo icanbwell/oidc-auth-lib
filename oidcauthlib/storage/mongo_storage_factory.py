@@ -66,16 +66,6 @@ class MongoStoreFactory(StorageFactory):
             if not mongo_url:
                 raise ValueError("mongo_uri is required in environment variables")
 
-            if not self._environment_variables.mongo_db_username:
-                raise ValueError(
-                    "mongo_db_username is required in environment variables"
-                )
-
-            if not self._environment_variables.mongo_db_password:
-                raise ValueError(
-                    "mongo_db_password is required in environment variables"
-                )
-
             self._connection_string = MongoUrlHelpers.add_credentials_to_mongo_url(
                 mongo_url=mongo_url,
                 username=self._environment_variables.mongo_db_username,
@@ -104,7 +94,7 @@ class MongoStoreFactory(StorageFactory):
                         minPoolSize=min_pool_size,  # Configurable via MONGO_MIN_POOL_SIZE
                         maxIdleTimeMS=DEFAULT_MAX_IDLE_TIME_MS,
                         serverSelectionTimeoutMS=DEFAULT_SERVER_SELECTION_TIMEOUT_MS,
-                        appname="McpFhirAgent",
+                        appname="OidcAuthLib",
                     )
         return self._mongo_client
 

@@ -4,7 +4,7 @@ Tests credential injection, protocol compliance, and connection pooling
 to ensure MongoDB implementation is secure and properly configured.
 """
 
-from typing import Mapping
+from typing import Mapping, override
 from unittest.mock import Mock, patch
 
 import pytest
@@ -39,6 +39,10 @@ class TestCacheToCollectionMapper(CacheToCollectionMapper):
             }
         self.mapping = mapping
 
+    @override
+    def get_collection_for_cache(self, *, cache_name: str) -> str | None:
+        return self.mapping.get(cache_name)
+
 
 def test_credential_injection_from_separate_env_vars() -> None:
     """Test that credentials are injected when username and password provided separately.
@@ -71,7 +75,7 @@ def test_credential_injection_from_separate_env_vars() -> None:
 
                 factory = MongoStoreFactory(
                     environment_variables=env,
-                    cache_to_collection_mapper=CacheToCollectionMapper(
+                    cache_to_collection_mapper=TestCacheToCollectionMapper(
                         environment_variables=env
                     ),
                 )
@@ -125,7 +129,7 @@ def test_credential_injection_env_vars_override_embedded() -> None:
 
                 factory = MongoStoreFactory(
                     environment_variables=env,
-                    cache_to_collection_mapper=CacheToCollectionMapper(
+                    cache_to_collection_mapper=TestCacheToCollectionMapper(
                         environment_variables=env
                     ),
                 )
@@ -163,7 +167,7 @@ def test_credential_injection_skipped_when_only_username_provided() -> None:
 
                 factory = MongoStoreFactory(
                     environment_variables=env,
-                    cache_to_collection_mapper=CacheToCollectionMapper(
+                    cache_to_collection_mapper=TestCacheToCollectionMapper(
                         environment_variables=env
                     ),
                 )
@@ -202,7 +206,7 @@ def test_credential_injection_skipped_when_only_password_provided() -> None:
 
                 factory = MongoStoreFactory(
                     environment_variables=env,
-                    cache_to_collection_mapper=CacheToCollectionMapper(
+                    cache_to_collection_mapper=TestCacheToCollectionMapper(
                         environment_variables=env
                     ),
                 )
@@ -232,7 +236,7 @@ def test_mongo_store_factory_implements_storage_factory_protocol() -> None:
     with patch("oidcauthlib.storage.mongo_storage_factory.AsyncMongoClient"):
         factory = MongoStoreFactory(
             environment_variables=env,
-            cache_to_collection_mapper=CacheToCollectionMapper(
+            cache_to_collection_mapper=TestCacheToCollectionMapper(
                 environment_variables=env
             ),
         )
@@ -263,7 +267,7 @@ def test_get_cache_method_returns_base_store() -> None:
 
             factory = MongoStoreFactory(
                 environment_variables=env,
-                cache_to_collection_mapper=CacheToCollectionMapper(
+                cache_to_collection_mapper=TestCacheToCollectionMapper(
                     environment_variables=env
                 ),
             )
@@ -287,7 +291,7 @@ def test_get_cache_with_unknown_namespace_raises_error() -> None:
     with patch("oidcauthlib.storage.mongo_storage_factory.AsyncMongoClient"):
         factory = MongoStoreFactory(
             environment_variables=env,
-            cache_to_collection_mapper=CacheToCollectionMapper(
+            cache_to_collection_mapper=TestCacheToCollectionMapper(
                 environment_variables=env
             ),
         )
@@ -299,7 +303,7 @@ def test_get_cache_with_unknown_namespace_raises_error() -> None:
         with pytest.raises(ValueError) as exc_info:
             factory.get_store(fake_namespace)
 
-        assert "Unknown cache namespace" in str(exc_info.value)
+        assert "No collection mapping found for cache namespace" in str(exc_info.value)
 
 
 # ============================================================================
@@ -324,7 +328,7 @@ def test_connection_pool_size_configuration() -> None:
         with patch("oidcauthlib.storage.mongo_storage_factory.MongoDBGridFSStore"):
             factory = MongoStoreFactory(
                 environment_variables=env,
-                cache_to_collection_mapper=CacheToCollectionMapper(
+                cache_to_collection_mapper=TestCacheToCollectionMapper(
                     environment_variables=env
                 ),
             )
@@ -339,7 +343,7 @@ def test_connection_pool_size_configuration() -> None:
             assert call_kwargs["minPoolSize"] == 5
             assert call_kwargs["maxIdleTimeMS"] == 45000
             assert call_kwargs["serverSelectionTimeoutMS"] == 5000
-            assert call_kwargs["appname"] == "oidcauthlib"
+            assert call_kwargs["appname"] == "OidcAuthLib"
 
 
 def test_shared_mongo_client_across_namespaces() -> None:
@@ -368,7 +372,7 @@ def test_shared_mongo_client_across_namespaces() -> None:
 
             factory = MongoStoreFactory(
                 environment_variables=env,
-                cache_to_collection_mapper=CacheToCollectionMapper(
+                cache_to_collection_mapper=TestCacheToCollectionMapper(
                     environment_variables=env
                 ),
             )
@@ -403,7 +407,7 @@ def test_connection_string_cached_across_calls() -> None:
 
                 factory = MongoStoreFactory(
                     environment_variables=env,
-                    cache_to_collection_mapper=CacheToCollectionMapper(
+                    cache_to_collection_mapper=TestCacheToCollectionMapper(
                         environment_variables=env
                     ),
                 )
@@ -431,7 +435,7 @@ def test_mongo_store_factory_without_required_db_name_raises_error() -> None:
         with patch("oidcauthlib.storage.mongo_storage_factory.MongoDBGridFSStore"):
             factory = MongoStoreFactory(
                 environment_variables=env,
-                cache_to_collection_mapper=CacheToCollectionMapper(
+                cache_to_collection_mapper=TestCacheToCollectionMapper(
                     environment_variables=env
                 ),
             )
@@ -447,6 +451,8 @@ def test_mongo_store_factory_without_required_collection_name_raises_error() -> 
     env = Mock(spec=OidcEnvironmentVariables)
     env.mongo_uri = "mongodb://localhost:27017/"
     env.mongo_db_name = "test_db"
+    env.mongo_db_username = "testuser"
+    env.mongo_db_password = "testpass"  # pragma: allowlist secret
     env.mongo_max_pool_size = 10
     env.mongo_min_pool_size = 2
     env.person_patient_cache_collection = None  # Missing
@@ -456,15 +462,15 @@ def test_mongo_store_factory_without_required_collection_name_raises_error() -> 
         with patch("oidcauthlib.storage.mongo_storage_factory.MongoDBGridFSStore"):
             factory = MongoStoreFactory(
                 environment_variables=env,
-                cache_to_collection_mapper=CacheToCollectionMapper(
-                    environment_variables=env
+                cache_to_collection_mapper=TestCacheToCollectionMapper(
+                    environment_variables=env, mapping={}
                 ),
             )
 
             with pytest.raises(ValueError) as exc_info:
                 factory.get_store(PERSON_PATIENT)
 
-            assert "person_patient_cache" in str(exc_info.value)
+            assert "person_patient" in str(exc_info.value)
 
 
 def test_different_factory_instances_have_separate_clients() -> None:
@@ -491,13 +497,13 @@ def test_different_factory_instances_have_separate_clients() -> None:
             # Create two factory instances
             factory1 = MongoStoreFactory(
                 environment_variables=env,
-                cache_to_collection_mapper=CacheToCollectionMapper(
+                cache_to_collection_mapper=TestCacheToCollectionMapper(
                     environment_variables=env
                 ),
             )
             factory2 = MongoStoreFactory(
                 environment_variables=env,
-                cache_to_collection_mapper=CacheToCollectionMapper(
+                cache_to_collection_mapper=TestCacheToCollectionMapper(
                     environment_variables=env
                 ),
             )

@@ -161,7 +161,7 @@ class MongoDBGridFSStore(MongoDBStore):
         # Threshold (bytes) for deciding inline vs GridFS storage
         self.max_inline_size_kb: int = max_inline_size_kb  # in KB
         # Initialize tracer for OpenTelemetry to instrument operations
-        self._tracer: Tracer = trace.get_tracer("mcpfhiragent.storage.mongo_gridfs_db")
+        self._tracer: Tracer = trace.get_tracer("oidcauthlib.storage.mongo_gridfs_db")
 
     @override
     async def setup_collection(self, *, collection: str) -> None:

@@ -6,25 +6,47 @@ to ensure no patient data leaks between cache instances.
 
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any
+from typing import Any, Mapping, override
 from unittest.mock import Mock, patch
 
 import pytest
 
+from oidcauthlib.container.interfaces import IContainer
 from oidcauthlib.storage.cache_to_collection_mapper import CacheToCollectionMapper
 from oidcauthlib.storage.mongo_storage_factory import MongoStoreFactory
 from oidcauthlib.storage.storage_factory import StorageFactory
+from oidcauthlib.storage.storage_factory_creator import StorageFactoryCreator
 from oidcauthlib.utilities.environment.oidc_environment_variables import (
     OidcEnvironmentVariables,
     CacheProvider,
 )
 
-PERSON_PATIENT: str = "person_patient"
+PERSON_PATIENT_CACHE: str = "person_patient_cache"
 DYNAMIC_CLIENT_REGISTRATION: str = "dynamic_client_registration"
 
 # ============================================================================
 # Data Isolation Tests - Critical for FHIR patient data security
 # ============================================================================
+
+
+class TestCacheToCollectionMapper(CacheToCollectionMapper):
+    def __init__(
+        self,
+        *,
+        environment_variables: OidcEnvironmentVariables,
+        mapping: Mapping[str, str] | None = None,
+    ) -> None:
+        super().__init__(environment_variables=environment_variables)
+        if mapping is None:
+            mapping = {
+                PERSON_PATIENT_CACHE: PERSON_PATIENT_CACHE,
+                DYNAMIC_CLIENT_REGISTRATION: DYNAMIC_CLIENT_REGISTRATION,
+            }
+        self.mapping = mapping
+
+    @override
+    def get_collection_for_cache(self, *, cache_name: str) -> str | None:
+        return self.mapping.get(cache_name)
 
 
 @pytest.mark.asyncio
@@ -42,7 +64,7 @@ async def test_data_isolation_between_namespaces() -> None:
     env.mongo_db_username = None
     env.mongo_db_password = None
     env.cache_provider = CacheProvider.MONGODB
-    env.person_patient_cache_collection = "person_patient_cache"
+    env.person_patient_cache_collection = PERSON_PATIENT_CACHE
     env.dynamic_client_registration_collection = "dynamic_client_registration"
     env.mcp_response_cache_collection = "mcp_response_cache"
 
@@ -57,7 +79,7 @@ async def test_data_isolation_between_namespaces() -> None:
             # Set up the mock to return different instances for different collections
             def create_store_side_effect(*args: Any, **kwargs: Any) -> Mock:
                 coll_name = kwargs.get("coll_name")
-                if coll_name == "person_patient_cache":
+                if coll_name == PERSON_PATIENT_CACHE:
                     return person_store_mock
                 elif coll_name == "dynamic_client_registration":
                     return client_store_mock
@@ -68,13 +90,13 @@ async def test_data_isolation_between_namespaces() -> None:
 
             factory = MongoStoreFactory(
                 environment_variables=env,
-                cache_to_collection_mapper=CacheToCollectionMapper(
+                cache_to_collection_mapper=TestCacheToCollectionMapper(
                     environment_variables=env
                 ),
             )
 
             # Get caches for different namespaces
-            person_cache = factory.get_store(PERSON_PATIENT)
+            person_cache = factory.get_store(PERSON_PATIENT_CACHE)
             client_cache = factory.get_store(DYNAMIC_CLIENT_REGISTRATION)
 
             # Verify they are different instances
@@ -94,7 +116,7 @@ async def test_concurrent_writes_to_different_namespaces_dont_interfere() -> Non
     env.mongo_db_username = None
     env.mongo_db_password = None
     env.cache_provider = CacheProvider.MONGODB
-    env.person_patient_cache_collection = "person_patient_cache"
+    env.person_patient_cache_collection = PERSON_PATIENT_CACHE
     env.dynamic_client_registration_collection = "dynamic_client_registration"
     env.mcp_response_cache_collection = "mcp_response_cache"
 
@@ -120,7 +142,7 @@ async def test_concurrent_writes_to_different_namespaces_dont_interfere() -> Non
 
             def create_store_side_effect(*args: Any, **kwargs: Any) -> Mock:
                 coll_name = kwargs.get("coll_name")
-                if coll_name == "person_patient_cache":
+                if coll_name == PERSON_PATIENT_CACHE:
                     return person_store_mock
                 elif coll_name == "dynamic_client_registration":
                     return client_store_mock
@@ -131,12 +153,12 @@ async def test_concurrent_writes_to_different_namespaces_dont_interfere() -> Non
 
             factory = MongoStoreFactory(
                 environment_variables=env,
-                cache_to_collection_mapper=CacheToCollectionMapper(
+                cache_to_collection_mapper=TestCacheToCollectionMapper(
                     environment_variables=env
                 ),
             )
 
-            person_cache = factory.get_store(PERSON_PATIENT)
+            person_cache = factory.get_store(PERSON_PATIENT_CACHE)
             client_cache = factory.get_store(DYNAMIC_CLIENT_REGISTRATION)
 
             # Simulate concurrent writes
@@ -166,7 +188,7 @@ def test_different_namespaces_use_different_collections() -> None:
     env.mongo_db_username = None
     env.mongo_db_password = None
     env.cache_provider = CacheProvider.MONGODB
-    env.person_patient_cache_collection = "person_patient_cache"
+    env.person_patient_cache_collection = PERSON_PATIENT_CACHE
     env.dynamic_client_registration_collection = "dynamic_client_registration"
     env.mcp_response_cache_collection = "mcp_response_cache"
 
@@ -176,13 +198,13 @@ def test_different_namespaces_use_different_collections() -> None:
         ) as mock_store_class:
             factory = MongoStoreFactory(
                 environment_variables=env,
-                cache_to_collection_mapper=CacheToCollectionMapper(
+                cache_to_collection_mapper=TestCacheToCollectionMapper(
                     environment_variables=env
                 ),
             )
 
             # Get both caches
-            factory.get_store(PERSON_PATIENT)
+            factory.get_store(PERSON_PATIENT_CACHE)
             factory.get_store(DYNAMIC_CLIENT_REGISTRATION)
 
             # Verify MongoDBStore was called twice with different collection names
@@ -191,7 +213,7 @@ def test_different_namespaces_use_different_collections() -> None:
             call_args_list = [
                 call[1]["coll_name"] for call in mock_store_class.call_args_list
             ]
-            assert "person_patient_cache" in call_args_list
+            assert PERSON_PATIENT_CACHE in call_args_list
             assert "dynamic_client_registration" in call_args_list
 
 
@@ -214,7 +236,7 @@ def test_concurrent_get_cache_same_namespace_returns_same_instance() -> None:
     env.mongo_db_username = None
     env.mongo_db_password = None
     env.cache_provider = CacheProvider.MONGODB
-    env.person_patient_cache_collection = "person_patient_cache"
+    env.person_patient_cache_collection = PERSON_PATIENT_CACHE
     env.dynamic_client_registration_collection = "dynamic_client_registration"
     env.mcp_response_cache_collection = "mcp_response_cache"
 
@@ -227,7 +249,7 @@ def test_concurrent_get_cache_same_namespace_returns_same_instance() -> None:
 
             factory = MongoStoreFactory(
                 environment_variables=env,
-                cache_to_collection_mapper=CacheToCollectionMapper(
+                cache_to_collection_mapper=TestCacheToCollectionMapper(
                     environment_variables=env
                 ),
             )
@@ -236,7 +258,7 @@ def test_concurrent_get_cache_same_namespace_returns_same_instance() -> None:
             caches = []
 
             def call_factory() -> None:
-                cache = factory.get_store(PERSON_PATIENT)
+                cache = factory.get_store(PERSON_PATIENT_CACHE)
                 caches.append(cache)
 
             with ThreadPoolExecutor(max_workers=10) as executor:
@@ -269,7 +291,7 @@ def test_factory_initialization_is_thread_safe() -> None:
         def create_factory_instance() -> None:
             factory = MongoStoreFactory(
                 environment_variables=env,
-                cache_to_collection_mapper=CacheToCollectionMapper(
+                cache_to_collection_mapper=TestCacheToCollectionMapper(
                     environment_variables=env
                 ),
             )
@@ -301,7 +323,7 @@ def test_singleton_per_namespace() -> None:
     env.mongo_db_username = None
     env.mongo_db_password = None
     env.cache_provider = CacheProvider.MONGODB
-    env.person_patient_cache_collection = "person_patient_cache"
+    env.person_patient_cache_collection = PERSON_PATIENT_CACHE
     env.dynamic_client_registration_collection = "dynamic_client_registration"
     env.mcp_response_cache_collection = "mcp_response_cache"
 
@@ -314,13 +336,13 @@ def test_singleton_per_namespace() -> None:
 
             factory = MongoStoreFactory(
                 environment_variables=env,
-                cache_to_collection_mapper=CacheToCollectionMapper(
+                cache_to_collection_mapper=TestCacheToCollectionMapper(
                     environment_variables=env
                 ),
             )
 
-            cache1 = factory.get_store(PERSON_PATIENT)
-            cache2 = factory.get_store(PERSON_PATIENT)
+            cache1 = factory.get_store(PERSON_PATIENT_CACHE)
+            cache2 = factory.get_store(PERSON_PATIENT_CACHE)
 
             # Same object reference (singleton)
             assert cache1 is cache2
@@ -340,7 +362,7 @@ def test_different_namespaces_return_different_instances() -> None:
     env.mongo_db_username = None
     env.mongo_db_password = None
     env.cache_provider = CacheProvider.MONGODB
-    env.person_patient_cache_collection = "person_patient_cache"
+    env.person_patient_cache_collection = PERSON_PATIENT_CACHE
     env.dynamic_client_registration_collection = "dynamic_client_registration"
     env.mcp_response_cache_collection = "mcp_response_cache"
 
@@ -353,12 +375,12 @@ def test_different_namespaces_return_different_instances() -> None:
 
             factory = MongoStoreFactory(
                 environment_variables=env,
-                cache_to_collection_mapper=CacheToCollectionMapper(
+                cache_to_collection_mapper=TestCacheToCollectionMapper(
                     environment_variables=env
                 ),
             )
 
-            cache1 = factory.get_store(PERSON_PATIENT)
+            cache1 = factory.get_store(PERSON_PATIENT_CACHE)
             cache2 = factory.get_store(DYNAMIC_CLIENT_REGISTRATION)
 
             # Different instances
@@ -377,7 +399,7 @@ def test_singleton_per_factory_instance() -> None:
     env.mongo_db_username = None
     env.mongo_db_password = None
     env.cache_provider = CacheProvider.MONGODB
-    env.person_patient_cache_collection = "person_patient_cache"
+    env.person_patient_cache_collection = PERSON_PATIENT_CACHE
     env.dynamic_client_registration_collection = "dynamic_client_registration"
     env.mcp_response_cache_collection = "mcp_response_cache"
 
@@ -391,26 +413,26 @@ def test_singleton_per_factory_instance() -> None:
             # Create two separate factory instances
             factory1 = MongoStoreFactory(
                 environment_variables=env,
-                cache_to_collection_mapper=CacheToCollectionMapper(
+                cache_to_collection_mapper=TestCacheToCollectionMapper(
                     environment_variables=env
                 ),
             )
             factory2 = MongoStoreFactory(
                 environment_variables=env,
-                cache_to_collection_mapper=CacheToCollectionMapper(
+                cache_to_collection_mapper=TestCacheToCollectionMapper(
                     environment_variables=env
                 ),
             )
 
             # Each factory should have its own stores
-            cache1_person = factory1.get_store(PERSON_PATIENT)
-            cache2_person = factory2.get_store(PERSON_PATIENT)
+            cache1_person = factory1.get_store(PERSON_PATIENT_CACHE)
+            cache2_person = factory2.get_store(PERSON_PATIENT_CACHE)
 
             # Different instances (different factories)
             assert cache1_person is not cache2_person
 
             # But within same factory, should be singleton
-            cache1_person_again = factory1.get_store(PERSON_PATIENT)
+            cache1_person_again = factory1.get_store(PERSON_PATIENT_CACHE)
             assert cache1_person is cache1_person_again
 
 
@@ -433,7 +455,7 @@ def test_factory_selection_mongodb() -> None:
     with patch("oidcauthlib.storage.mongo_storage_factory.AsyncMongoClient"):
         factory = MongoStoreFactory(
             environment_variables=env,
-            cache_to_collection_mapper=CacheToCollectionMapper(
+            cache_to_collection_mapper=TestCacheToCollectionMapper(
                 environment_variables=env
             ),
         )
@@ -442,18 +464,18 @@ def test_factory_selection_mongodb() -> None:
         assert isinstance(factory, StorageFactory)
 
 
-def test_factory_selection_redis_not_implemented() -> None:
+def test_factory_selection_redis_not_implemented(test_container: IContainer) -> None:
     """Test that CACHE_PROVIDER=redis raises NotImplementedError."""
     env = Mock(spec=OidcEnvironmentVariables)
     env.cache_provider = CacheProvider.REDIS
 
     with pytest.raises(NotImplementedError) as exc_info:
-        MongoStoreFactory(
+        StorageFactoryCreator(
             environment_variables=env,
-            cache_to_collection_mapper=CacheToCollectionMapper(
+            cache_to_collection_mapper=TestCacheToCollectionMapper(
                 environment_variables=env
             ),
-        )
+        ).create_storage_factory()
 
     assert "Redis provider not yet implemented" in str(exc_info.value)
     assert CacheProvider.MONGODB.value in str(exc_info.value)
@@ -466,11 +488,11 @@ def test_factory_selection_invalid_provider() -> None:
     env.cache_provider = "invalid_provider"
 
     with pytest.raises(ValueError) as exc_info:
-        MongoStoreFactory(
+        StorageFactoryCreator(
             environment_variables=env,
-            cache_to_collection_mapper=CacheToCollectionMapper(
+            cache_to_collection_mapper=TestCacheToCollectionMapper(
                 environment_variables=env
             ),
-        )
+        ).create_storage_factory()
 
     assert "Unknown cache provider" in str(exc_info.value)

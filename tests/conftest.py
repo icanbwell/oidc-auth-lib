@@ -120,7 +120,7 @@ async def initialize_caches(test_container: IContainer) -> AsyncGenerator[None, 
     # use mongo client to drop the test database to ensure a clean state
     mongo_client: AsyncMongoClient[dict[str, Any]] = AsyncMongoClient(
         connection_string,
-        appname="OidcAuthLibTests",
+        appname="OidcAuthLib",
     )
     await mongo_client.drop_database(db_name)
 
