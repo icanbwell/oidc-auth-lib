@@ -2,9 +2,10 @@
 Shared test fixtures and utilities for auth tests.
 """
 
-from typing import List, override, AsyncGenerator
+from typing import List, override, AsyncGenerator, Any
 
 import pytest
+from pymongo import AsyncMongoClient
 
 from oidcauthlib.container.container_registry import ContainerRegistry
 from oidcauthlib.container.interfaces import IContainer
@@ -14,6 +15,10 @@ from oidcauthlib.container.oidc_authlib_container_factory import (
 from oidcauthlib.utilities.environment.abstract_environment_variables import (
     AbstractEnvironmentVariables,
 )
+from oidcauthlib.utilities.environment.oidc_environment_variables import (
+    OidcEnvironmentVariables,
+)
+from oidcauthlib.utilities.mongo_url_utils import MongoUrlHelpers
 
 
 class MockEnvironmentVariables(AbstractEnvironmentVariables):
@@ -92,3 +97,33 @@ async def test_container() -> AsyncGenerator[IContainer, None]:
     test_container: IContainer = create_test_container()
     async with ContainerRegistry.override(container=test_container) as container:
         yield container
+
+
+@pytest.fixture(scope="function", autouse=True)
+async def initialize_caches(test_container: IContainer) -> AsyncGenerator[None, None]:
+    """
+    Drop the test database before each test to ensure a clean state.
+    """
+
+    environment_variables = test_container.resolve(OidcEnvironmentVariables)
+    db_name = environment_variables.mongo_db_name
+    if not db_name:
+        raise ValueError("mongo_db_name is required in environment variables")
+    mongo_url = environment_variables.mongo_uri
+    if not mongo_url:
+        raise ValueError("mongo_uri is required in environment variables")
+    connection_string = MongoUrlHelpers.add_credentials_to_mongo_url(
+        mongo_url=mongo_url,
+        username=environment_variables.mongo_db_username,
+        password=environment_variables.mongo_db_password,
+    )
+    # use mongo client to drop the test database to ensure a clean state
+    mongo_client: AsyncMongoClient[dict[str, Any]] = AsyncMongoClient(
+        connection_string,
+        appname="OidcAuthLibTests",
+    )
+    await mongo_client.drop_database(db_name)
+
+    yield
+
+    # Note: No explicit cleanup needed - storage factory manages lifecycle

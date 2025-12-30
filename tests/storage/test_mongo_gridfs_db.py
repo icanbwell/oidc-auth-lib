@@ -1,5 +1,5 @@
 from datetime import datetime, UTC
-from typing import cast, override
+from typing import cast, override, Mapping
 
 import pytest
 from bson import ObjectId
@@ -17,12 +17,22 @@ TEST_CACHE = "test_cache"
 
 
 class TestCacheToCollectionMapper(CacheToCollectionMapper):
+    def __init__(
+        self,
+        *,
+        environment_variables: OidcEnvironmentVariables,
+        mapping: Mapping[str, str] | None = None,
+    ) -> None:
+        super().__init__(environment_variables=environment_variables)
+        if mapping is None:
+            mapping = {
+                TEST_CACHE: "test_collection",
+            }
+        self.mapping = mapping
+
     @override
     def get_collection_for_cache(self, *, cache_name: str) -> str | None:
-        mapping = {
-            TEST_CACHE: "test_collection",
-        }
-        return mapping.get(cache_name)
+        return self.mapping.get(cache_name)
 
 
 @pytest.mark.asyncio
@@ -63,6 +73,12 @@ async def test_gridfs_store_and_get_roundtrip(test_container: IContainer) -> Non
     - Force GridFS by lowering inline threshold
     - Store a large payload, then retrieve it, verifying value integrity
     """
+    test_container.singleton(
+        CacheToCollectionMapper,
+        lambda c: TestCacheToCollectionMapper(
+            environment_variables=c.resolve(OidcEnvironmentVariables)
+        ),
+    )
     storage_factory: StorageFactory = test_container.resolve(StorageFactory)
     store = cast(MongoDBGridFSStore, storage_factory.get_store(TEST_CACHE))
     await store.setup_collection(collection="gridfs_big_test")
@@ -88,6 +104,12 @@ async def test_update_cleanup_old_gridfs_file(test_container: IContainer) -> Non
     - Assert metadata has inline_value and old gridfs_file_id is removed
     - Verify retrieved value is the new small object
     """
+    test_container.singleton(
+        CacheToCollectionMapper,
+        lambda c: TestCacheToCollectionMapper(
+            environment_variables=c.resolve(OidcEnvironmentVariables)
+        ),
+    )
     storage_factory: StorageFactory = test_container.resolve(StorageFactory)
     store = cast(MongoDBGridFSStore, storage_factory.get_store(TEST_CACHE))
     await store.setup_collection(collection="gridfs_update_test")
@@ -144,6 +166,12 @@ async def test_batch_get_mixed_inline_and_gridfs(test_container: IContainer) -> 
     - Store one inline and one GridFS entry; request both plus a missing key
     - Assert order preservation and None for missing entry
     """
+    test_container.singleton(
+        CacheToCollectionMapper,
+        lambda c: TestCacheToCollectionMapper(
+            environment_variables=c.resolve(OidcEnvironmentVariables)
+        ),
+    )
     storage_factory: StorageFactory = test_container.resolve(StorageFactory)
     store = cast(MongoDBGridFSStore, storage_factory.get_store(TEST_CACHE))
     await store.setup_collection(collection="gridfs_batch_test")
@@ -180,6 +208,12 @@ async def test_batch_get_all_missing_returns_nones(test_container: IContainer) -
     Validate batch get behavior when all keys are missing:
     - Request multiple missing keys and assert the result list contains only None values
     """
+    test_container.singleton(
+        CacheToCollectionMapper,
+        lambda c: TestCacheToCollectionMapper(
+            environment_variables=c.resolve(OidcEnvironmentVariables)
+        ),
+    )
     storage_factory: StorageFactory = test_container.resolve(StorageFactory)
     store = cast(MongoDBGridFSStore, storage_factory.get_store(TEST_CACHE))
     await store.setup_collection(collection="gridfs_all_missing_test")
@@ -199,6 +233,12 @@ async def test_delete_managed_entries_bulk(test_container: IContainer) -> None:
     - Store three entries (mix inline/GridFS), delete two keys via bulk delete
     - Assert deleted keys return None and remaining key returns its value
     """
+    test_container.singleton(
+        CacheToCollectionMapper,
+        lambda c: TestCacheToCollectionMapper(
+            environment_variables=c.resolve(OidcEnvironmentVariables)
+        ),
+    )
     storage_factory: StorageFactory = test_container.resolve(StorageFactory)
     store = cast(MongoDBGridFSStore, storage_factory.get_store(TEST_CACHE))
     await store.setup_collection(collection="gridfs_delete_bulk")
@@ -240,6 +280,12 @@ async def test_delete_managed_entry_single_path(test_container: IContainer) -> N
     - Store one entry, delete it via _delete_managed_entry, verify it's gone
     - Deleting a non-existent key should return False
     """
+    test_container.singleton(
+        CacheToCollectionMapper,
+        lambda c: TestCacheToCollectionMapper(
+            environment_variables=c.resolve(OidcEnvironmentVariables)
+        ),
+    )
     storage_factory: StorageFactory = test_container.resolve(StorageFactory)
     store = cast(MongoDBGridFSStore, storage_factory.get_store(TEST_CACHE))
     await store.setup_collection(collection="gridfs_delete_single")
@@ -282,6 +328,12 @@ async def test_gridfs_stats_and_delete_collection(test_container: IContainer) ->
     - Delete the collection; internal references should be removed
     - Re-setup the collection and assert subsequent gets return None
     """
+    test_container.singleton(
+        CacheToCollectionMapper,
+        lambda c: TestCacheToCollectionMapper(
+            environment_variables=c.resolve(OidcEnvironmentVariables)
+        ),
+    )
     storage_factory: StorageFactory = test_container.resolve(StorageFactory)
     store = cast(MongoDBGridFSStore, storage_factory.get_store(TEST_CACHE))
     await store.setup_collection(collection="gridfs_stats_test")

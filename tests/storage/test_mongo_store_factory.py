@@ -4,6 +4,7 @@ Tests credential injection, protocol compliance, and connection pooling
 to ensure MongoDB implementation is secure and properly configured.
 """
 
+from typing import Mapping
 from unittest.mock import Mock, patch
 
 import pytest
@@ -21,6 +22,22 @@ DYNAMIC_CLIENT_REGISTRATION: str = "dynamic_client_registration"
 # ============================================================================
 # Credential Injection Tests - Kubernetes secrets security
 # ============================================================================
+
+
+class TestCacheToCollectionMapper(CacheToCollectionMapper):
+    def __init__(
+        self,
+        *,
+        environment_variables: OidcEnvironmentVariables,
+        mapping: Mapping[str, str] | None = None,
+    ) -> None:
+        super().__init__(environment_variables=environment_variables)
+        if mapping is None:
+            mapping = {
+                PERSON_PATIENT: "person_patient",
+                DYNAMIC_CLIENT_REGISTRATION: "dynamic_client_registration",
+            }
+        self.mapping = mapping
 
 
 def test_credential_injection_from_separate_env_vars() -> None:
