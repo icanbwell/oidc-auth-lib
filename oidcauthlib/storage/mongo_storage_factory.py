@@ -34,6 +34,12 @@ class MongoStoreFactory(StorageFactory):
             environment_variables: Environment configuration
         """
         self._environment_variables: OidcEnvironmentVariables = environment_variables
+        if self._environment_variables is None:
+            raise ValueError("Environment variables must be provided")
+        if not isinstance(environment_variables, OidcEnvironmentVariables):
+            raise TypeError(
+                f"environment_variables must be an instance of OidcEnvironmentVariables: {type(environment_variables).__name__}"
+            )
         self._stores: dict[str, MongoDBGridFSStore] = {}
         self._connection_string: str | None = None
         self._mongo_client: AsyncMongoClient[dict[str, Any]] | None = None
@@ -59,6 +65,17 @@ class MongoStoreFactory(StorageFactory):
             mongo_url = self._environment_variables.mongo_uri
             if not mongo_url:
                 raise ValueError("mongo_uri is required in environment variables")
+
+            if not self._environment_variables.mongo_db_username:
+                raise ValueError(
+                    "mongo_db_username is required in environment variables"
+                )
+
+            if not self._environment_variables.mongo_db_password:
+                raise ValueError(
+                    "mongo_db_password is required in environment variables"
+                )
+
             self._connection_string = MongoUrlHelpers.add_credentials_to_mongo_url(
                 mongo_url=mongo_url,
                 username=self._environment_variables.mongo_db_username,

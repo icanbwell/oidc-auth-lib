@@ -21,11 +21,11 @@ async def mongo_repo() -> AsyncGenerator[AsyncMongoRepository[TestModel], None]:
     print("")
     mongo_url = os.environ.get("MONGO_URL")
     assert mongo_url is not None
-    mongo_username = os.environ.get("MONGO_USERNAME")
+    mongo_username = os.environ.get("MONGO_DB_USERNAME")
     assert mongo_username
-    mongo_password = os.environ.get("MONGO_PASSWORD")
+    mongo_password = os.environ.get("MONGO_DB_PASSWORD")
     assert mongo_password
-    print(f"Connecting to MongoDB at {mongo_url} with user {mongo_username}")
+    print(f"Connecting to MongoDB at {mongo_url} with user {mongo_password}")
     db_name = "test_oidcauthlib_repo"
     client: AsyncMongoClient[Mapping[str, Any]] = AsyncMongoClient(
         mongo_url,

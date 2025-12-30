@@ -12,8 +12,8 @@ services:
     environment:
       MONGO_DB_NAME: fhir
       MONGO_URL: 'mongodb://mongo:27017?appName=fhir-server'
-      MONGO_USERNAME: root
-      MONGO_PASSWORD: "test123"  # pragma: allowlist secret
+      MONGO_DB_USERNAME: root
+      MONGO_DB_PASSWORD: "test123"  # pragma: allowlist secret
     env_file:
       - docker.env
     networks:

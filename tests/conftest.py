@@ -84,11 +84,6 @@ def create_test_container() -> IContainer:
     :return: IContainer
     """
     container: IContainer = OidcAuthLibContainerFactory().create_container()
-    # Register the MockEnvironmentVariables for testing
-    container.singleton(
-        AbstractEnvironmentVariables,
-        lambda c: MockEnvironmentVariables(providers=["test_provider"]),
-    )
     return container
 
 
