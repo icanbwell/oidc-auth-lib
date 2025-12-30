@@ -1,7 +1,8 @@
 """MongoDB store factory for accessing different collections."""
 
 import threading
-from typing import TYPE_CHECKING, override
+from typing import Any
+from typing import override
 
 from pymongo import AsyncMongoClient
 
@@ -12,9 +13,6 @@ from oidcauthlib.utilities.environment.oidc_environment_variables import (
     OidcEnvironmentVariables,
 )
 from oidcauthlib.utilities.mongo_url_utils import MongoUrlHelpers
-
-if TYPE_CHECKING:
-    from typing import Any
 
 # MongoDB client connection configuration constants
 DEFAULT_MAX_IDLE_TIME_MS = 45_000  # 45 seconds - close idle connections
