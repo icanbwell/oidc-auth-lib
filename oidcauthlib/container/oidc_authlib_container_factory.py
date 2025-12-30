@@ -11,6 +11,8 @@ from oidcauthlib.auth.well_known_configuration.well_known_configuration_manager 
     WellKnownConfigurationManager,
 )
 from oidcauthlib.container.simple_container import SimpleContainer
+from oidcauthlib.storage.cache_to_collection_mapper import CacheToCollectionMapper
+from oidcauthlib.storage.storage_factory_creator import StorageFactoryCreator
 from oidcauthlib.utilities.environment.oidc_environment_variables import (
     OidcEnvironmentVariables,
 )
@@ -91,6 +93,21 @@ class OidcAuthLibContainerFactory:
                 well_known_configuration_manager=c.resolve(
                     WellKnownConfigurationManager
                 ),
+            ),
+        )
+
+        container.singleton(
+            CacheToCollectionMapper,
+            lambda c: CacheToCollectionMapper(
+                environment_variables=c.resolve(OidcEnvironmentVariables)
+            ),
+        )
+
+        container.singleton(
+            StorageFactoryCreator,
+            lambda c: StorageFactoryCreator(
+                environment_variables=c.resolve(OidcEnvironmentVariables),
+                cache_to_collection_mapper=c.resolve(CacheToCollectionMapper),
             ),
         )
 
