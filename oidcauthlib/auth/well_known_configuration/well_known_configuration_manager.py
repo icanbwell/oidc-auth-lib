@@ -145,6 +145,8 @@ class WellKnownConfigurationManager:
                 # Mark as loaded (acquire lock to prevent race with refresh)
                 async with self._lock:
                     self._loaded = True
+                    # Initialization completed successfully; reset flag
+                    self._initializing = False
                 logger.debug("Manager initialization complete.")
             except Exception:
                 # Reset initializing flag so next coroutine can retry
@@ -179,8 +181,9 @@ class WellKnownConfigurationManager:
                 await self._init_event.wait()
 
             # Now clear and reset - no concurrent initialization can be running
+            # Avoid performing I/O while holding the manager lock
+            await self._cache.clear_async()
             async with self._lock:
-                await self._cache.clear_async()
                 self._loaded = False
                 self._initializing = False
                 self._init_event.clear()
