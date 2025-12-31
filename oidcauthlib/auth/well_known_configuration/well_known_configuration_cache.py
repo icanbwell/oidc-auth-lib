@@ -57,7 +57,7 @@ class WellKnownConfigurationCache:
         self._jwks: KeySet = KeySet(keys=[])
         self._loaded: bool = False
         self._locks: Dict[str, asyncio.Lock] = {}
-        self._locks_lock: asyncio.Lock = asyncio.Lock()  # protects _locks dict mutation
+        self._locks_lock: asyncio.Lock = asyncio.Lock()
         self.well_known_store: BaseStore | None = well_known_store
         if well_known_store is not None and not isinstance(well_known_store, BaseStore):
             raise TypeError(
@@ -161,13 +161,12 @@ class WellKnownConfigurationCache:
             )
             return WellKnownConfigurationCacheResult.model_validate(stored_config)
 
-        # Acquire global lock to create/retrieve the per-URI lock safely
+        # Acquire or reuse a URI-specific lock to limit network calls per provider
         async with self._locks_lock:
             if well_known_uri not in self._locks:
                 self._locks[well_known_uri] = asyncio.Lock()
             uri_lock = self._locks[well_known_uri]
 
-        # Serialize remote fetch for this URI
         async with uri_lock:
             # Double-check after waiting: another coroutine may have filled the cache already
             cached_config_dict = cast(
@@ -396,9 +395,9 @@ class WellKnownConfigurationCache:
         if kid is None:
             return None
 
-        ks = await self._cache_store.keys()
-        for k in ks or []:
-            item: dict[str, Any] | None = await self._cache_store.get(key=k)
+        keys = await self._cache_store.keys()
+        for cache_key in keys or []:
+            item: dict[str, Any] | None = await self._cache_store.get(key=cache_key)
             if item is None:
                 continue
             wkr = WellKnownConfigurationCacheResult.model_validate(item)
