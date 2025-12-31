@@ -22,6 +22,9 @@ from oidcauthlib.auth.exceptions.authorization_needed_exception import (
     AuthorizationNeededException,
 )
 from oidcauthlib.auth.token_reader import TokenReader
+from oidcauthlib.auth.well_known_configuration.well_known_configuration_cache_result import (
+    WellKnownConfigurationCacheResult,
+)
 from oidcauthlib.auth.well_known_configuration.well_known_configuration_manager import (
     WellKnownConfigurationManager,
 )
@@ -118,7 +121,7 @@ class AuthManager:
         if self.redirect_uri is None:
             raise ValueError("AUTH_REDIRECT_URI environment variable must be set")
         # https://docs.authlib.org/en/latest/client/frameworks.html#frameworks-clients
-        self._oauth: OAuth = OAuth(cache=self.cache)  # type: ignore[no-untyped-call]
+        self._oauth: OAuth = OAuth(cache=self.cache)
         # read AUTH_PROVIDERS comma separated list from the environment variable and register the OIDC provider for each provider
         self.auth_configs: List[AuthConfig] = (
             self.auth_config_reader.get_auth_configs_for_all_auth_providers()
@@ -127,10 +130,13 @@ class AuthManager:
     async def ensure_initialized_async(self) -> None:
         auth_config: AuthConfig
         for auth_config in self.auth_configs:
-            server_metadata: (
-                dict[str, Any] | None
+            well_known_result: (
+                WellKnownConfigurationCacheResult | None
             ) = await self.well_known_configuration_manager.get_async(
                 auth_config=auth_config
+            )
+            server_metadata: dict[str, Any] | None = (
+                well_known_result.well_known_config if well_known_result else None
             )
             logger.debug(
                 f"Registering OAuth client for auth provider {auth_config.auth_provider}"
@@ -203,12 +209,12 @@ class AuthManager:
             f" with state {state_content} and encoded state {state}"
         )
 
-        rv: Dict[str, Any] = await client.create_authorization_url(  # type: ignore[no-untyped-call]
+        rv: Dict[str, Any] = await client.create_authorization_url(
             redirect_uri=redirect_uri, state=state
         )
         logger.debug(f"Authorization URL created: {rv}")
         # request is only needed if we are using the session to store the state
-        await client.save_authorize_data(request=None, redirect_uri=redirect_uri, **rv)  # type: ignore[no-untyped-call]
+        await client.save_authorize_data(request=None, redirect_uri=redirect_uri, **rv)
         return cast(str, rv["url"])
 
     async def create_oauth_client(self, *, name: str) -> StarletteOAuth2App:

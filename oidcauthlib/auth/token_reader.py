@@ -38,7 +38,28 @@ logger.setLevel(SRC_LOG_LEVELS["AUTH"])
 
 class TokenReader:
     """
-    TokenReader is a utility class for reading and verifying JWT tokens using JWKS (JSON Web Key Set).
+    TokenReader verifies and decodes JWT access tokens using provider JWKS, driven by configured AuthConfig entries.
+
+    Responsibilities:
+    - Extract tokens from Authorization headers.
+    - Decode tokens optionally without signature verification for inspection.
+    - Verify tokens against JWKS, enforcing audience and issuer alignment with configured providers.
+    - Validate claim structures and expiration.
+
+    Security & Privacy:
+    - Does not log full tokens or sensitive claims; only high-level statuses.
+    - Enforces audience presence and issuer check (if configured) to prevent token confusion across providers.
+    - JWKS is retrieved via WellKnownConfigurationManager and must be loaded before verification.
+
+    Public API:
+    - extract_token(authorization_header): parse "Bearer <token>" header.
+    - decode_token_async(token, verify_signature): decode claims; optionally verify with JWKS.
+    - verify_token_async(token): fully validate a token; raises typed exceptions on failure.
+    - is_token_valid_async(access_token): boolean validity check (expiration and signature).
+
+    Notes:
+    - All verification operations are async and depend on WellKnownConfigurationManager.
+    - Algorithms used for verification are configurable via the constructor.
     """
 
     def __init__(
@@ -49,10 +70,17 @@ class TokenReader:
         well_known_config_manager: WellKnownConfigurationManager,
     ):
         """
-        Initializes the TokenReader with the JWKS URI or Well-Known URI, issuer, audience, and algorithms.
+        Initialize TokenReader with dependencies and verification settings.
+
         Args:
-            algorithms (Optional[list[str]]): The list of algorithms to use for verifying the JWT.
-            auth_config_reader (AuthConfigReader): The configuration reader for authentication settings.
+            algorithms: Allowed JWT algorithms for signature verification (e.g., ["RS256"]).
+            auth_config_reader: Provider configuration reader used for issuer/audience validation.
+            well_known_config_manager: Manager responsible for well-known configs and JWKS retrieval.
+        Raises:
+            ValueError: If required dependencies or provider configs are missing.
+            TypeError: If dependency types do not match expected classes.
+        Usage:
+            Create a TokenReader with allowed algorithms, an AuthConfigReader, and a WellKnownConfigurationManager.
         """
         self.uuid: UUID = uuid.uuid4()
         self.algorithms: List[str] | None = algorithms or None
@@ -85,11 +113,14 @@ class TokenReader:
     @staticmethod
     def extract_token(*, authorization_header: str | None) -> Optional[str]:
         """
-        Extracts the JWT token from the Authorization header.
+        Extract a JWT token from an HTTP Authorization header.
+
         Args:
-            authorization_header (str | None): The Authorization header string.
+            authorization_header: Header string (e.g., "Bearer eyJ..."), or None.
         Returns:
-            Optional[str]: The extracted JWT token if present, otherwise None.
+            The compact JWT string if present, otherwise None.
+        Example:
+            Passing "Bearer abc.def.ghi" returns "abc.def.ghi".
         """
         if not authorization_header:
             return None
@@ -102,12 +133,21 @@ class TokenReader:
         self, *, token: str, verify_signature: bool
     ) -> Dict[str, Any] | None:
         """
-        Decode a JWT token, optionally without verifying its signature.
+        Decode a JWT token's claims, optionally verifying the signature.
+
         Args:
-            token (str): The JWT token string to decode.
-            verify_signature (bool): Whether to verify the signature using JWKS. Default is True.
+            token: Compact JWT string.
+            verify_signature: If True, verify signature using JWKS; if False, parse without verification.
         Returns:
-            Dict[str, Any]: The decoded claims of the JWT token, or None if not a JWT.
+            Decoded claims dict, or None if the input is not a compact JWT.
+        Raises:
+            AuthorizationBearerTokenMissingException: On failure while verifying signature.
+            AuthorizationBearerTokenInvalidException: On failure while parsing without verification.
+            RuntimeError: If JWKS is not available when verification is requested.
+        Security:
+            Avoid logging full tokens or payloads; only minimal error context is included.
+        Usage:
+            Call decode_token_async with a token; set verify_signature to True to validate signatures.
         """
         if not token:
             raise ValueError("Token must not be empty")
@@ -142,16 +182,21 @@ class TokenReader:
 
     async def verify_token_async(self, *, token: str) -> Token | None:
         """
-        Verify a JWT token asynchronously using the JWKS from the provided URI.
+        Verify a JWT token against JWKS and configured provider constraints.
 
         Args:
-            token: The JWT token string to validate.
+            token: Compact JWT string to validate.
         Returns:
-            The decoded claims if the token is valid.
-        Throws:
+            Token: A Token object if verification succeeds.
+        Raises:
             AuthorizationBearerTokenExpiredException: If the token has expired.
-            AuthorizationBearerTokenInvalidException: If the token is invalid for any other reason.
-
+            AuthorizationBearerTokenInvalidException: If issuer/audience mismatch or signature invalid.
+            ValueError: If token is empty.
+        Behavior:
+            - Validates expiration, audience presence, and matches against configured providers.
+            - Accepts client_id as audience for providers like AWS Cognito.
+        Usage:
+            Call verify_token_async with a token to perform full validation; handle typed exceptions on failure.
         """
         if not token:
             raise ValueError("Token must not be empty")
@@ -272,11 +317,16 @@ class TokenReader:
 
     async def is_token_valid_async(self, access_token: str) -> bool:
         """
-        Checks if the provided access token is valid (not expired and properly signed).
+        Check if a JWT is currently valid (signature and not expired).
+
         Args:
-            access_token (str): The JWT access token string.
+            access_token: Compact JWT string.
         Returns:
-            bool: True if the token is valid, False otherwise.
+            True if valid; False if expired or invalid.
+        Notes:
+            Useful for quick health checks; does not raise exceptions.
+        Usage:
+            Call is_token_valid_async with an access token to get a boolean validity result.
         """
         assert access_token, "Access token must not be empty"
         jwks: KeySet = await self._well_known_config_manager.get_jwks_async()

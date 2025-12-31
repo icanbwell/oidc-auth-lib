@@ -13,6 +13,9 @@ from oidcauthlib.auth.auth_manager import AuthManager
 from oidcauthlib.auth.config.auth_config import AuthConfig
 from oidcauthlib.auth.config.auth_config_reader import AuthConfigReader
 from oidcauthlib.auth.token_reader import TokenReader
+from oidcauthlib.auth.well_known_configuration.well_known_configuration_cache_result import (
+    WellKnownConfigurationCacheResult,
+)
 from oidcauthlib.auth.well_known_configuration.well_known_configuration_manager import (
     WellKnownConfigurationManager,
 )
@@ -178,10 +181,13 @@ class FastAPIAuthManager(AuthManager):
         end_session_endpoint = None
         if auth_config.well_known_uri:
             try:
-                well_known_config: (
-                    dict[str, Any] | None
+                well_known_result: (
+                    WellKnownConfigurationCacheResult | None
                 ) = await self.well_known_configuration_manager.get_async(
                     auth_config=auth_config
+                )
+                well_known_config: dict[str, Any] | None = (
+                    well_known_result.well_known_config if well_known_result else None
                 )
                 end_session_endpoint = (
                     well_known_config.get("end_session_endpoint")

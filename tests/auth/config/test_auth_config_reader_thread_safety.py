@@ -3,10 +3,12 @@ from typing import Dict, List, Optional, override
 
 from oidcauthlib.auth.config.auth_config import AuthConfig
 from oidcauthlib.auth.config.auth_config_reader import AuthConfigReader
-from oidcauthlib.utilities.environment.environment_variables import EnvironmentVariables
+from oidcauthlib.utilities.environment.oidc_environment_variables import (
+    OidcEnvironmentVariables,
+)
 
 
-class DummyEnvVars(EnvironmentVariables):
+class DummyEnvVars(OidcEnvironmentVariables):
     def __init__(self, providers: list[str]) -> None:
         self._providers: Optional[list[str]] = providers
 
@@ -58,7 +60,7 @@ class DummyEnvVars(EnvironmentVariables):
 
 
 class CountingAuthConfigReader(AuthConfigReader):
-    def __init__(self, *, environment_variables: EnvironmentVariables) -> None:
+    def __init__(self, *, environment_variables: OidcEnvironmentVariables) -> None:
         super().__init__(environment_variables=environment_variables)
         self._calls: Dict[str, int] = {}
 

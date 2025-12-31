@@ -5,7 +5,7 @@ simple_container.py - Your container with request scope support added
 import logging
 import threading
 from contextvars import ContextVar
-from typing import Any, Dict, cast, override
+from typing import Any, Dict, cast, override, overload
 from uuid import uuid4
 
 from oidcauthlib.container.interfaces import IContainer, ServiceFactory
@@ -84,7 +84,7 @@ class SimpleContainer(IContainer):
 
     @override
     def factory[T](
-        self, service_type: type[T], factory: ServiceFactory[T]
+        self, service_type: type[T] | type[Any], factory: ServiceFactory[T]
     ) -> "SimpleContainer":
         """
         Register a service factory.
@@ -107,8 +107,14 @@ class SimpleContainer(IContainer):
         )
         return self
 
+    @overload
+    def resolve[T](self, service_type: type[T]) -> T: ...
+
+    @overload
+    def resolve[T](self, service_type: type[T] | type[Any]) -> T: ...
+
     @override
-    def resolve[T](self, service_type: type[T]) -> T:
+    def resolve[T](self, service_type: type[T] | type[Any]) -> T:
         """
         Resolve a service instance
 
@@ -170,7 +176,7 @@ class SimpleContainer(IContainer):
         # NEW: Check if this is a request-scoped type
         if service_type in self._request_scoped_types:
             self._validate_request_scope_active(service_name=service_name)
-            return self._resolve_request_scoped(service_type, service_name)
+            return cast(T, self._resolve_request_scoped(service_type, service_name))
 
         # Transient service: create new instance without locking
         logger.info(
@@ -181,7 +187,9 @@ class SimpleContainer(IContainer):
         factory = self._factories[service_type]
         return cast(T, factory(self))
 
-    def _resolve_request_scoped[T](self, service_type: type[T], service_name: str) -> T:
+    def _resolve_request_scoped[T](
+        self, service_type: type[T] | type[Any], service_name: str
+    ) -> T:
         """
         Resolve request-scoped service with proper per-request isolation.
 
@@ -247,7 +255,7 @@ class SimpleContainer(IContainer):
 
     @override
     def singleton[T](
-        self, service_type: type[T], factory: ServiceFactory[T]
+        self, service_type: type[T] | type[Any], factory: ServiceFactory[T]
     ) -> "SimpleContainer":
         """
         Register a singleton instance (application scope).
@@ -271,7 +279,7 @@ class SimpleContainer(IContainer):
 
     @override
     def request_scoped[T](
-        self, service_type: type[T], factory: ServiceFactory[T]
+        self, service_type: type[T] | type[Any], factory: ServiceFactory[T]
     ) -> "SimpleContainer":
         """
         Register a request-scoped service

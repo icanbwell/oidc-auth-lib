@@ -2,16 +2,20 @@ import asyncio
 import respx
 import httpx
 import pytest
+from key_value.aio.stores.memory import MemoryStore
 
 from oidcauthlib.auth.config.auth_config import AuthConfig
 from oidcauthlib.auth.well_known_configuration.well_known_configuration_cache import (
     WellKnownConfigurationCache,
 )
+from oidcauthlib.auth.well_known_configuration.well_known_configuration_cache_result import (
+    WellKnownConfigurationCacheResult,
+)
 
 
 @pytest.mark.asyncio
 async def test_get_async_caches_on_first_call() -> None:
-    cache = WellKnownConfigurationCache()
+    cache = WellKnownConfigurationCache(well_known_store=MemoryStore())
     uri = "https://provider.example.com/.well-known/openid-configuration"
 
     with respx.mock(assert_all_called=True) as respx_mock:
@@ -36,12 +40,18 @@ async def test_get_async_caches_on_first_call() -> None:
             well_known_uri=uri,
             scope="openid profile email",
         )
-        result = await cache.read_async(auth_config=auth_config)
+        cache_result: WellKnownConfigurationCacheResult | None = await cache.read_async(
+            auth_config=auth_config
+        )
+        assert cache_result is not None
+        result = cache_result.well_known_config
         assert result is not None
         assert result["issuer"] == "https://provider.example.com"
         assert result["jwks_uri"] == "https://provider.example.com/jwks"
-        assert uri in cache._cache
-        assert cache.size() == 1
+        assert uri in [auth_config.well_known_uri]
+        # Use public API: ensure get_async returns the item and size reflects it
+        assert await cache.get_async(auth_config=auth_config) is not None
+        assert await cache.get_size_async() == 1
         assert route.called
         assert route.call_count == 1
         assert jwks_route.called
@@ -50,7 +60,7 @@ async def test_get_async_caches_on_first_call() -> None:
 
 @pytest.mark.asyncio
 async def test_get_async_uses_cache_on_subsequent_calls() -> None:
-    cache = WellKnownConfigurationCache()
+    cache = WellKnownConfigurationCache(well_known_store=MemoryStore())
     uri = "https://provider.example.com/.well-known/openid-configuration"
 
     with respx.mock(assert_all_called=True) as respx_mock:
@@ -83,12 +93,12 @@ async def test_get_async_uses_cache_on_subsequent_calls() -> None:
         assert route.call_count == 1
         assert jwks_route.called
         assert jwks_route.call_count == 1
-        assert cache.size() == 1
+        assert await cache.get_size_async() == 1
 
 
 @pytest.mark.asyncio
 async def test_get_async_concurrent_single_fetch() -> None:
-    cache = WellKnownConfigurationCache()
+    cache = WellKnownConfigurationCache(well_known_store=MemoryStore())
     uri = "https://provider.example.com/.well-known/openid-configuration"
 
     with respx.mock(assert_all_called=True) as respx_mock:
@@ -120,12 +130,12 @@ async def test_get_async_concurrent_single_fetch() -> None:
         assert route.call_count == 1, f"Expected 1 HTTP call, got {route.call_count}"
         assert jwks_route.called
         assert jwks_route.call_count == 1
-        assert cache.size() == 1
+        assert await cache.get_size_async() == 1
 
 
 @pytest.mark.asyncio
 async def test_get_async_multiple_uris_concurrent() -> None:
-    cache = WellKnownConfigurationCache()
+    cache = WellKnownConfigurationCache(well_known_store=MemoryStore())
     uri1 = "https://provider1.example.com/.well-known/openid-configuration"
     uri2 = "https://provider2.example.com/.well-known/openid-configuration"
 
@@ -179,8 +189,36 @@ async def test_get_async_multiple_uris_concurrent() -> None:
         results = await asyncio.gather(*tasks)
 
         assert len(results) == 60
-        assert cache.size() == 2
-        assert uri1 in cache._cache and uri2 in cache._cache
+        assert await cache.get_size_async() == 2
+        # Use public API to verify both URIs are present
+        assert (
+            await cache.get_async(
+                auth_config=AuthConfig(
+                    auth_provider="TEST_PROVIDER",
+                    friendly_name="Test Provider",
+                    audience="test_audience",
+                    issuer="https://provider.example.com",
+                    client_id="test_client_id",
+                    well_known_uri=uri1,
+                    scope="openid profile email",
+                )
+            )
+            is not None
+        )
+        assert (
+            await cache.get_async(
+                auth_config=AuthConfig(
+                    auth_provider="TEST_PROVIDER",
+                    friendly_name="Test Provider",
+                    audience="test_audience",
+                    issuer="https://provider.example.com",
+                    client_id="test_client_id",
+                    well_known_uri=uri2,
+                    scope="openid profile email",
+                )
+            )
+            is not None
+        )
         assert route1.call_count == 1, (
             f"Expected 1 HTTP call for uri1, got {route1.call_count}"
         )
@@ -195,7 +233,7 @@ async def test_get_async_multiple_uris_concurrent() -> None:
 
 @pytest.mark.asyncio
 async def test_clear_resets_cache() -> None:
-    cache = WellKnownConfigurationCache()
+    cache = WellKnownConfigurationCache(well_known_store=MemoryStore())
     uri = "https://provider.example.com/.well-known/openid-configuration"
 
     with respx.mock(assert_all_called=False) as respx_mock:
@@ -222,9 +260,9 @@ async def test_clear_resets_cache() -> None:
         )
         await cache.read_async(auth_config=auth_config)
 
-        assert cache.size() == 1
-        cache.clear()
-        assert cache.size() == 0
+        assert await cache.get_size_async() == 1
+        await cache.clear_async()
+        assert await cache.get_size_async() == 0
 
         # Fetch again after clear triggers new HTTP call
         await cache.read_async(auth_config=auth_config)
