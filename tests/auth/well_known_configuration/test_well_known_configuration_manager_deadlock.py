@@ -110,7 +110,7 @@ async def test_concurrent_initialization_no_deadlock() -> None:
 
         # Verify initialization completed successfully
         assert manager._loaded is True
-        assert cache.size() == 2
+        assert await cache.get_size_async() == 2
 
 
 @pytest.mark.asyncio

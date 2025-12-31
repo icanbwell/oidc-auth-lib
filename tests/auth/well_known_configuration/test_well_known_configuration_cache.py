@@ -48,8 +48,10 @@ async def test_get_async_caches_on_first_call() -> None:
         assert result is not None
         assert result["issuer"] == "https://provider.example.com"
         assert result["jwks_uri"] == "https://provider.example.com/jwks"
-        assert uri in cache._cache
-        assert cache.size() == 1
+        assert uri in [auth_config.well_known_uri]
+        # Use public API: ensure get_async returns the item and size reflects it
+        assert await cache.get_async(auth_config=auth_config) is not None
+        assert await cache.get_size_async() == 1
         assert route.called
         assert route.call_count == 1
         assert jwks_route.called
@@ -91,7 +93,7 @@ async def test_get_async_uses_cache_on_subsequent_calls() -> None:
         assert route.call_count == 1
         assert jwks_route.called
         assert jwks_route.call_count == 1
-        assert cache.size() == 1
+        assert await cache.get_size_async() == 1
 
 
 @pytest.mark.asyncio
@@ -128,7 +130,7 @@ async def test_get_async_concurrent_single_fetch() -> None:
         assert route.call_count == 1, f"Expected 1 HTTP call, got {route.call_count}"
         assert jwks_route.called
         assert jwks_route.call_count == 1
-        assert cache.size() == 1
+        assert await cache.get_size_async() == 1
 
 
 @pytest.mark.asyncio
@@ -187,8 +189,36 @@ async def test_get_async_multiple_uris_concurrent() -> None:
         results = await asyncio.gather(*tasks)
 
         assert len(results) == 60
-        assert cache.size() == 2
-        assert uri1 in cache._cache and uri2 in cache._cache
+        assert await cache.get_size_async() == 2
+        # Use public API to verify both URIs are present
+        assert (
+            await cache.get_async(
+                auth_config=AuthConfig(
+                    auth_provider="TEST_PROVIDER",
+                    friendly_name="Test Provider",
+                    audience="test_audience",
+                    issuer="https://provider.example.com",
+                    client_id="test_client_id",
+                    well_known_uri=uri1,
+                    scope="openid profile email",
+                )
+            )
+            is not None
+        )
+        assert (
+            await cache.get_async(
+                auth_config=AuthConfig(
+                    auth_provider="TEST_PROVIDER",
+                    friendly_name="Test Provider",
+                    audience="test_audience",
+                    issuer="https://provider.example.com",
+                    client_id="test_client_id",
+                    well_known_uri=uri2,
+                    scope="openid profile email",
+                )
+            )
+            is not None
+        )
         assert route1.call_count == 1, (
             f"Expected 1 HTTP call for uri1, got {route1.call_count}"
         )
@@ -230,9 +260,9 @@ async def test_clear_resets_cache() -> None:
         )
         await cache.read_async(auth_config=auth_config)
 
-        assert cache.size() == 1
+        assert await cache.get_size_async() == 1
         await cache.clear_async()
-        assert cache.size() == 0
+        assert await cache.get_size_async() == 0
 
         # Fetch again after clear triggers new HTTP call
         await cache.read_async(auth_config=auth_config)

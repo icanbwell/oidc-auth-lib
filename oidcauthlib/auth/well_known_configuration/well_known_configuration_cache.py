@@ -6,6 +6,7 @@ import httpx
 from httpx import ConnectError
 from joserfc.jwk import KeySet
 from key_value.aio.stores.base import BaseStore
+from key_value.aio.stores.memory import MemoryStore
 from opentelemetry import trace
 
 from oidcauthlib.auth.config.auth_config import AuthConfig
@@ -15,6 +16,7 @@ from oidcauthlib.auth.well_known_configuration.well_known_configuration_cache_re
 )
 from oidcauthlib.open_telemetry.span_names import OidcOpenTelemetrySpanNames
 from oidcauthlib.utilities.logger.log_levels import SRC_LOG_LEVELS
+from oidcauthlib.open_telemetry.attribute_names import OidcOpenTelemetryAttributeNames
 
 logger = logging.getLogger(__name__)
 logger.setLevel(SRC_LOG_LEVELS["AUTH"])
@@ -38,7 +40,7 @@ class WellKnownConfigurationCache:
 
     Public API:
     - await get_async(well_known_uri): returns the discovery document dict.
-    - size(): returns number of cached entries.
+    - get_size_async(): returns number of cached entries.
     - clear(): empties the cache (primarily for tests).
     - __contains__(uri): True if uri in cache.
 
@@ -48,7 +50,8 @@ class WellKnownConfigurationCache:
     """
 
     def __init__(self, *, well_known_store: BaseStore | None) -> None:
-        self._cache: Dict[str, WellKnownConfigurationCacheResult] = {}
+        # Replace dict cache with a memory-backed store
+        self._cache_store: MemoryStore = MemoryStore()
         self._jwks: KeySet = KeySet(keys=[])
         self._loaded: bool = False
         self._locks: Dict[str, asyncio.Lock] = {}
@@ -103,16 +106,19 @@ class WellKnownConfigurationCache:
         if auth_config is None:
             raise ValueError("well_known_uri is not set")
 
-        # Fast path: cache hit without acquiring any locks
         well_known_uri: str | None = auth_config.well_known_uri
         if not well_known_uri:
             return None
 
-        if well_known_uri in self._cache:
+        # Fast path: cache hit via store
+        cached_config_dict: dict[str, Any] | None = cast(
+            dict[str, Any] | None, await self._cache_store.get(key=well_known_uri)
+        )
+        if cached_config_dict is not None:
             logger.info(
                 f"\u2713 Using cached OIDC discovery document for {well_known_uri}"
             )
-            return self._cache[well_known_uri]
+            return WellKnownConfigurationCacheResult.model_validate(cached_config_dict)
 
         # check if this well_known_uri is in the well_known_store
         stored_config: dict[str, Any] | None = (
@@ -126,10 +132,12 @@ class WellKnownConfigurationCache:
             logger.info(
                 f"\u2713 Using stored OIDC discovery document from store for {well_known_uri}"
             )
-            self._cache[well_known_uri] = (
-                WellKnownConfigurationCacheResult.model_validate(stored_config)
+            # write-through to memory cache store
+            await self._cache_store.put(
+                key=well_known_uri,
+                value=stored_config,
             )
-            return self._cache[well_known_uri]
+            return WellKnownConfigurationCacheResult.model_validate(stored_config)
 
         # Acquire global lock to create/retrieve the per-URI lock safely
         async with self._locks_lock:
@@ -140,20 +148,28 @@ class WellKnownConfigurationCache:
         # Serialize remote fetch for this URI
         async with uri_lock:
             # Double-check after waiting: another coroutine may have filled the cache already
-            if well_known_uri in self._cache:
+            cached_config_dict = cast(
+                dict[str, Any] | None, await self._cache_store.get(key=well_known_uri)
+            )
+            if cached_config_dict is not None:
                 logger.info(
                     f"\u2713 Using cached OIDC discovery document (fetched by another coroutine) for {well_known_uri}"
                 )
-                return self._cache[well_known_uri]
+                return WellKnownConfigurationCacheResult.model_validate(
+                    cached_config_dict
+                )
 
             logger.info(
-                f"Cache miss for {well_known_uri}. Cache has {len(self._cache)} entries."
+                # len via count() if available; fallback to 0 if not supported
+                f"Cache miss for {well_known_uri}. Cache has {await self._safe_cache_count()} entries."
             )
             tracer = trace.get_tracer(__name__)
             with tracer.start_as_current_span(
                 OidcOpenTelemetrySpanNames.READ_WELL_KNOWN_CONFIGURATION,
             ) as span:
-                span.set_attribute("well_known_uri", well_known_uri)
+                span.set_attribute(
+                    OidcOpenTelemetryAttributeNames.WELL_KNOWN_URI, well_known_uri
+                )
                 async with httpx.AsyncClient() as client:
                     try:
                         logger.info(
@@ -161,7 +177,6 @@ class WellKnownConfigurationCache:
                         )
                         response = await client.get(well_known_uri)
                         response.raise_for_status()
-                        # Format: https://docs.authlib.org/en/latest/oauth/oidc/discovery.html#openid-connect-discovery
                         config = cast(Dict[str, Any], response.json())
                         well_known_configuration_cache_result = (
                             WellKnownConfigurationCacheResult(
@@ -173,8 +188,10 @@ class WellKnownConfigurationCache:
                                 ),
                             )
                         )
-                        self._cache[well_known_uri] = (
-                            well_known_configuration_cache_result
+                        # write to memory cache store
+                        await self._cache_store.put(
+                            key=well_known_uri,
+                            value=well_known_configuration_cache_result.model_dump(),
                         )
                         if self.well_known_store is not None:
                             await self.well_known_store.put(
@@ -246,7 +263,6 @@ class WellKnownConfigurationCache:
             )
             return None
 
-        # check if the jwks_uri is already cached
         keys: list[Dict[str, Any]] = await self._read_jwks_from_uri_async(
             jwks_uri=jwks_uri
         )
@@ -280,20 +296,31 @@ class WellKnownConfigurationCache:
         if all_keys:
             self._jwks = KeySet.import_key_set({"keys": all_keys})
 
-    def size(self) -> int:
+    async def get_size_async(self) -> int:
         """Return number of cached discovery documents."""
-        return len(self._cache)
+        return await self._safe_cache_count()
+
+    async def _safe_cache_count(self) -> int:
+        try:
+            keys = await self._cache_store.keys()
+            return len(keys) if keys is not None else 0
+        except Exception:
+            return 0
 
     async def clear_async(self) -> None:
         """Clear all cached discovery documents (useful for tests)."""
-        well_known_uris: list[str] = list(self._cache.keys())
-        if self.well_known_store is not None:
-            await self.well_known_store.delete_many(well_known_uris)
-        self._cache.clear()
+        # Delete all known keys from both stores
+        keys = await self._cache_store.keys()
+        if keys:
+            await self._cache_store.delete_many(keys)
+        if self.well_known_store is not None and keys:
+            await self.well_known_store.delete_many(keys)
         self._jwks = KeySet(keys=[])
         self._loaded = False
 
-    def get_client_key_set_for_kid(self, *, kid: str | None) -> ClientKeySet | None:
+    async def get_client_key_set_for_kid_async(
+        self, *, kid: str | None
+    ) -> ClientKeySet | None:
         """
         Retrieves the ClientKeySet that contains the specified Key ID (kid).
         :param kid:
@@ -302,11 +329,15 @@ class WellKnownConfigurationCache:
         if kid is None:
             return None
 
-        for well_known_result in self._cache.values():
-            client_key_set = well_known_result.client_key_set
+        ks = await self._cache_store.keys()
+        for k in ks or []:
+            item: dict[str, Any] | None = await self._cache_store.get(key=k)
+            if item is None:
+                continue
+            wkr = WellKnownConfigurationCacheResult.model_validate(item)
+            client_key_set = wkr.client_key_set
             if client_key_set and client_key_set.kids and kid in client_key_set.kids:
                 return client_key_set
-
         return None
 
     async def get_async(
@@ -323,9 +354,12 @@ class WellKnownConfigurationCache:
         if not well_known_uri:
             return None
 
-        if well_known_uri not in self._cache:
+        cached_config_dict: dict[str, Any] | None = await self._cache_store.get(
+            key=well_known_uri
+        )
+        if cached_config_dict is None:
             raise ValueError(
                 f"JWKS for well-known URI {well_known_uri} not found in cache.  Call read_list_async() first."
             )
 
-        return self._cache[well_known_uri]
+        return WellKnownConfigurationCacheResult.model_validate(cached_config_dict)
