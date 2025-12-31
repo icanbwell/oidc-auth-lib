@@ -48,6 +48,7 @@ from pymongo import AsyncMongoClient, UpdateOne
 from pymongo.asynchronous.collection import AsyncCollection
 from pymongo.asynchronous.command_cursor import AsyncCommandCursor
 from pymongo.errors import PyMongoError
+from pymongo.errors import CollectionInvalid
 from pymongo.results import DeleteResult
 
 
@@ -174,41 +175,31 @@ class MongoDBGridFSStore(MongoDBStore):
         # Sanitize the user-supplied name to ensure valid MongoDB identifiers
         sanitized_collection = self._sanitize_collection(collection=collection)
 
-        # Attempt to create the collection; if it already exists due to a race,
-        # fall back to getting a handle to the existing collection.
         new_collection: AsyncCollection[dict[str, Any]] | None = None
         try:
-            # Prefer direct create; Mongo will raise if it already exists
             new_collection = await self._db.create_collection(name=sanitized_collection)
-        except Exception:
-            # Collection likely already exists; obtain handle
+        except CollectionInvalid:
+            # Collection already exists; obtain handle
             new_collection = self._db[sanitized_collection]
 
-        # Register the collection handle by the logical name
         self._collections_by_name[collection] = new_collection
 
-        # Create required indexes; if they already exist (created elsewhere),
-        # index creation calls are idempotent or will raise benign errors which we ignore.
+        # Index creation: tolerate races; catch PyMongoError only
         try:
-            # Unique index on key prevents duplicates and speeds lookups
             _ = await new_collection.create_index(keys="key", unique=True)
-        except Exception:
-            # Ignore index creation races
+        except PyMongoError:
             pass
         try:
-            # TTL index expires metadata docs; GridFS file cleanup handled separately
             _ = await new_collection.create_index(
                 keys="expires_at", expireAfterSeconds=0
             )
-        except Exception:
+        except PyMongoError:
             pass
         try:
-            # Index on GridFS file id enables efficient maintenance operations
             _ = await new_collection.create_index(keys="gridfs_file_id")
-        except Exception:
+        except PyMongoError:
             pass
 
-        # Initialize a dedicated GridFS bucket per logical collection
         gridfs_bucket_name = f"{sanitized_collection}_fs"
         self._gridfs_buckets[collection] = AsyncGridFSBucket(
             self._db,
