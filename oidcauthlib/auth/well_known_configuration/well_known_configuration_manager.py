@@ -21,20 +21,34 @@ logger.setLevel(SRC_LOG_LEVELS["AUTH"])
 
 
 class WellKnownConfigurationManager:
-    """Manages retrieval and caching of OIDC well-known configs and JWKS.
+    """Coordinates retrieval and caching of OIDC well-known configurations and JWKS.
 
-    This wraps the previously inlined logic inside TokenReader for fetching
-    discovery documents and building a de-duplicated JWKS KeySet under high concurrency.
+    Purpose:
+    - Centralize initialization and refresh of discovery documents and JWKS.
+    - Provide a safe, deadlock-free orchestration layer over WellKnownConfigurationCache under high concurrency.
+
+    Responsibilities:
+    - Read well-known configurations for all configured providers once per lifecycle.
+    - Aggregate JWKS via the cache and expose it for token verification.
+    - Serialize refresh operations and guard initialization with an event to avoid deadlocks.
 
     Concurrency Strategy:
-    - Per-URI locking for well-known discovery handled by WellKnownConfigurationCache.
-    - A single JWKS initialization lock ensures JWKS is fetched only once.
+    - WellKnownConfigurationCache handles per-URI network fetch locking.
+    - Manager uses:
+      * _lock: guards state mutations (_loaded, _initializing) and event coordination.
+      * _init_event: notifies waiters when initialization completes (success or failure).
+      * _refresh_lock: serializes refresh operations to avoid racing with initialization.
+    - No network I/O is performed while holding _lock to prevent lock inversion with cache locks.
 
     Public API:
-    - ensure_initialized_async(): Fetch well-known configs + JWKS once.
-    - fetch_well_known_config_async(well_known_uri): Delegates to cache.
-    - refresh_async(): Force re-fetch (clears cache + jwks) (optional).
-    - Properties: jwks, well_known_configs, cached_well_known_configs.
+    - get_jwks_async(): Ensure initialized, then return de-duplicated JWKS KeySet.
+    - ensure_initialized_async(): Fetch well-known configs and JWKS once; deadlock-free.
+    - refresh_async(): Clear and re-initialize caches/JWKS, serialized across callers.
+    - get_async(auth_config): Retrieve a cached config for a specific provider.
+
+    Notes:
+    - OpenTelemetry spans use enums from oidcauthlib.open_telemetry.span_names.
+    - Logging avoids printing sensitive tokens or PII; only statuses and counts.
     """
 
     def __init__(
@@ -60,16 +74,29 @@ class WellKnownConfigurationManager:
         )  # Serializes refresh operations
 
     async def get_jwks_async(self) -> KeySet:
+        """Return the aggregated JWKS KeySet for configured providers.
+
+        Behavior:
+            - Ensures initialization has completed (well-known configs loaded).
+            - Returns the cache's combined JWKS KeySet.
+        Returns:
+            KeySet: Combined, de-duplicated JWKS suitable for token verification.
+        """
         await self.ensure_initialized_async()
         return self._cache.jwks
 
     async def ensure_initialized_async(self) -> None:
-        """Ensure well-known configs and JWKS are loaded exactly once.
+        """Initialize well-known configs and JWKS exactly once (deadlock-free).
 
-        Uses an event-based approach to prevent deadlock:
-        - Only one coroutine performs initialization
-        - Other coroutines wait on an event
-        - No locks held during I/O operations to prevent deadlock with cache locks
+        Strategy:
+            - Fast path: return if already loaded.
+            - Single initializer sets _initializing and clears _init_event.
+            - Waiters release _lock and wait on _init_event; on failure they retry.
+            - No locks held during network I/O to avoid deadlock with cache.
+
+        Error Handling:
+            - On exception during initialization, resets _initializing and sets _init_event
+              so waiters can wake and retry.
         """
         # Fast path - no lock needed for read
         if self._loaded:
@@ -130,9 +157,12 @@ class WellKnownConfigurationManager:
                 self._init_event.set()
 
     async def refresh_async(self) -> None:
-        """Force a refresh of well-known configs and JWKS (clears caches).
+        """Force a refresh of well-known configs and JWKS.
 
-        Serializes refresh operations to prevent race conditions.
+        Behavior:
+            - Serializes refresh operations to prevent races.
+            - Waits for any in-progress initialization to complete before clearing.
+            - Clears caches, resets state, and re-initializes.
         """
         # Serialize refresh operations - only one refresh at a time
         async with self._refresh_lock:
@@ -160,5 +190,14 @@ class WellKnownConfigurationManager:
     async def get_async(
         self, auth_config: AuthConfig
     ) -> WellKnownConfigurationCacheResult | None:
+        """Retrieve a cached well-known configuration for a specific provider.
+
+        Args:
+            auth_config: Provider configuration specifying well_known_uri.
+        Returns:
+            WellKnownConfigurationCacheResult if present, otherwise None.
+        Notes:
+            Ensures manager is initialized before reading from cache.
+        """
         await self.ensure_initialized_async()
         return await self._cache.get_async(auth_config=auth_config)
