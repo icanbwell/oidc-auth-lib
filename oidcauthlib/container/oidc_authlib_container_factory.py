@@ -17,7 +17,6 @@ from oidcauthlib.storage.storage_factory_creator import StorageFactoryCreator
 from oidcauthlib.utilities.environment.oidc_environment_variables import (
     OidcEnvironmentVariables,
 )
-from oidcauthlib.storage.memory_storage_factory import MemoryStorageFactory
 
 logger = logging.getLogger(__name__)
 
@@ -57,13 +56,12 @@ class OidcAuthLibContainerFactory:
             ),
         )
 
-        # Register the concrete MemoryStorageFactory instead of the StorageFactory Protocol
-        container.singleton(MemoryStorageFactory, lambda c: MemoryStorageFactory())
-
         container.singleton(
             WellKnownConfigurationCache,
             lambda c: WellKnownConfigurationCache(
-                well_known_store=c.resolve(MemoryStorageFactory).get_store(
+                well_known_store=c.resolve(StorageFactoryCreator)
+                .create_storage_factory()
+                .get_store(
                     namespace="well_known_configuration",
                 )
             ),
