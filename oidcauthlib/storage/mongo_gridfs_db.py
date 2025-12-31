@@ -165,37 +165,48 @@ class MongoDBGridFSStore(MongoDBStore):
 
     @override
     async def setup_collection(self, *, collection: str) -> None:
-        """Set up both metadata collection and GridFS bucket for a collection."""
+        """Set up both metadata collection and GridFS bucket for a collection.
+
+        Handles races where another process creates the collection or indexes
+        concurrently by attempting creation and gracefully falling back to
+        using the existing collection if already present.
+        """
         # Sanitize the user-supplied name to ensure valid MongoDB identifiers
         sanitized_collection = self._sanitize_collection(collection=collection)
 
-        # Determine whether the metadata collection already exists
-        collection_filter: dict[str, str] = {"name": sanitized_collection}
-        matching_collections: list[str] = await self._db.list_collection_names(
-            filter=collection_filter
-        )
+        # Attempt to create the collection; if it already exists due to a race,
+        # fall back to getting a handle to the existing collection.
+        new_collection: AsyncCollection[dict[str, Any]] | None = None
+        try:
+            # Prefer direct create; Mongo will raise if it already exists
+            new_collection = await self._db.create_collection(name=sanitized_collection)
+        except Exception:
+            # Collection likely already exists; obtain handle
+            new_collection = self._db[sanitized_collection]
 
-        if matching_collections:
-            # Reuse existing collection handle
-            self._collections_by_name[collection] = self._db[sanitized_collection]
-        else:
-            # Create new metadata collection and required indexes
-            new_collection: AsyncCollection[
-                dict[str, Any]
-            ] = await self._db.create_collection(name=sanitized_collection)
+        # Register the collection handle by the logical name
+        self._collections_by_name[collection] = new_collection
 
+        # Create required indexes; if they already exist (created elsewhere),
+        # index creation calls are idempotent or will raise benign errors which we ignore.
+        try:
             # Unique index on key prevents duplicates and speeds lookups
             _ = await new_collection.create_index(keys="key", unique=True)
-
+        except Exception:
+            # Ignore index creation races
+            pass
+        try:
             # TTL index expires metadata docs; GridFS file cleanup handled separately
             _ = await new_collection.create_index(
                 keys="expires_at", expireAfterSeconds=0
             )
-
+        except Exception:
+            pass
+        try:
             # Index on GridFS file id enables efficient maintenance operations
             _ = await new_collection.create_index(keys="gridfs_file_id")
-
-            self._collections_by_name[collection] = new_collection
+        except Exception:
+            pass
 
         # Initialize a dedicated GridFS bucket per logical collection
         gridfs_bucket_name = f"{sanitized_collection}_fs"
