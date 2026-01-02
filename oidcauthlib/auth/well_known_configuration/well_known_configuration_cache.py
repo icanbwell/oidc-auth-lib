@@ -77,7 +77,7 @@ class WellKnownConfigurationCache:
 
     async def read_list_async(
         self, *, auth_configs: list[AuthConfig]
-    ) -> list[WellKnownConfigurationCacheResult]:
+    ) -> None:
         """Fetch and cache discovery documents for multiple auth configs.
 
         Args:
@@ -88,20 +88,64 @@ class WellKnownConfigurationCache:
             - Populates the in-memory cache and optional backing store.
             - Aggregates JWKS into the class-level jwks KeySet.
         """
-        tasks = []
+        if self._loaded:
+            return None
+
+        # now check if the well-known configs are already in the disk store
+        results: list[WellKnownConfigurationCacheResult] = []
+        has_missing_well_known_cache: bool = False
         for auth_config in auth_configs:
-            tasks.append(self.read_async(auth_config=auth_config))
-        results: list[WellKnownConfigurationCacheResult] = [
-            result for result in await asyncio.gather(*tasks) if result is not None
-        ]
-        self.read_jwks_from_key_sets(
-            key_sets=[
-                result.client_key_set
-                for result in results
-                if result.client_key_set is not None
+            if not auth_config.well_known_uri:
+                raise ValueError(
+                    f"AuthConfig {auth_config} is missing well_known_uri"
+                )
+            well_known_uri: str | None = auth_config.well_known_uri
+            if not well_known_uri:
+                return None
+
+            # Fast path: cache hit via store
+            cached_config_dict: dict[str, Any] | None = await self.well_known_store.get(key=well_known_uri)
+            if cached_config_dict is None:
+                has_missing_well_known_cache = True
+            else:
+                results.append(
+                    WellKnownConfigurationCacheResult.model_validate(cached_config_dict)
+                )
+
+        if not has_missing_well_known_cache:
+            logger.info(
+                "All well-known configurations already cached; skipping read."
+            )
+            self.read_jwks_from_key_sets(
+                key_sets=[
+                    result.client_key_set
+                    for result in results
+                    if result.client_key_set is not None
+                ]
+            )
+            self._loaded = True
+            return None
+
+        # not found in memory cache or disk cache so fetch them
+        tracer = trace.get_tracer(__name__)
+        with tracer.start_as_current_span(
+            OidcOpenTelemetrySpanNames.POPULATE_WELL_KNOWN_CONFIG_CACHE,
+        ):
+            tasks = []
+            for auth_config in auth_configs:
+                tasks.append(self.read_async(auth_config=auth_config))
+            results = [
+                result for result in await asyncio.gather(*tasks) if result is not None
             ]
-        )
-        return results
+            self.read_jwks_from_key_sets(
+                key_sets=[
+                    result.client_key_set
+                    for result in results
+                    if result.client_key_set is not None
+                ]
+            )
+            self._loaded = True
+            return None
 
     async def read_async(
         self, *, auth_config: AuthConfig
@@ -119,11 +163,6 @@ class WellKnownConfigurationCache:
             - Uses fast-path cache hit from MemoryStore.
             - Falls back to optional backing store.
             - Serializes remote fetch per URI via asyncio.Lock.
-        Example:
-            >>> cache = WellKnownConfigurationCache(well_known_store=MemoryStore())
-            >>> cfg = AuthConfig(auth_provider="P1", friendly_name="P1", audience="aud", issuer="https://p1", client_id="c1", well_known_uri="https://p1/.well-known/openid-configuration", scope="openid")
-            >>> result = await cache.read_async(auth_config=cfg)
-            >>> assert result is not None
         """
         if auth_config is None:
             raise ValueError("well_known_uri is not set")
@@ -133,9 +172,7 @@ class WellKnownConfigurationCache:
             return None
 
         # Fast path: cache hit via store
-        cached_config_dict: dict[str, Any] | None = cast(
-            dict[str, Any] | None, await self._cache_store.get(key=well_known_uri)
-        )
+        cached_config_dict: dict[str, Any] | None = await self._cache_store.get(key=well_known_uri)
         if cached_config_dict is not None:
             logger.info(
                 f"\u2713 Using cached OIDC discovery document for {well_known_uri}"
@@ -169,9 +206,7 @@ class WellKnownConfigurationCache:
 
         async with uri_lock:
             # Double-check after waiting: another coroutine may have filled the cache already
-            cached_config_dict = cast(
-                dict[str, Any] | None, await self._cache_store.get(key=well_known_uri)
-            )
+            cached_config_dict = await self._cache_store.get(key=well_known_uri)
             if cached_config_dict is not None:
                 logger.info(
                     f"\u2713 Using cached OIDC discovery document (fetched by another coroutine) for {well_known_uri}"
@@ -255,7 +290,8 @@ class WellKnownConfigurationCache:
             )
         return jwks_uri
 
-    async def _read_jwks_from_uri_async(self, *, jwks_uri: str) -> list[Dict[str, Any]]:
+    @staticmethod
+    async def _read_jwks_from_uri_async(*, jwks_uri: str) -> list[Dict[str, Any]]:
         """Fetch JWKS keys from the given JWKS URI.
 
         Args:
@@ -348,9 +384,6 @@ class WellKnownConfigurationCache:
 
         Returns:
             Count of entries currently stored in the in-memory cache.
-        Example:
-            >>> count = await cache.get_size_async()
-            >>> assert isinstance(count, int)
         """
         return await self._safe_cache_count()
 
@@ -367,9 +400,6 @@ class WellKnownConfigurationCache:
         Behavior:
             - Deletes all keys from the in-memory store and optional backing store.
             - Resets jwks to an empty KeySet and loaded flag to False.
-        Example:
-            >>> await cache.clear_async()
-            >>> assert await cache.get_size_async() == 0
         """
         # Delete all known keys from both stores
         keys = await self._cache_store.keys()
@@ -417,10 +447,6 @@ class WellKnownConfigurationCache:
             WellKnownConfigurationCacheResult if present in cache, else None.
         Raises:
             ValueError: If not found in cache (suggest calling read_list_async() first).
-        Example:
-            >>> # after calling read_async or read_list_async
-            >>> cached = await cache.get_async(auth_config=cfg)
-            >>> assert cached is not None
         """
         well_known_uri: str | None = auth_config.well_known_uri
         if not well_known_uri:
