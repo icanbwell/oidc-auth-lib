@@ -3,12 +3,6 @@ url = "https://pypi.python.org/simple"
 verify_ssl = true
 name = "pypi"
 
-[[source]]
-name = "alpine-wheels"
-# https://github.com/imranq2/alpine-wheels/
-url = "https://imranq2.github.io/alpine-wheels/docs/"
-verify_ssl = true
-
 [packages]
 # httpx is a Python library for making HTTP requests
 httpx = ">=0.27.2"
@@ -28,17 +22,8 @@ fastapi = ">=0.115.8"
 starlette =  ">=0.49.1"
 # py-key-value-aio provides key-value storage
 py-key-value-aio = { version = ">=0.3.0", extras = ["mongodb", "pydantic", "redis", "memory"] }  # needed for fastmcp async storage
-# OpenTelemetry - Core SDK and auto-instrumentation (includes OTLP exporters for traces, metrics, and logs)
-opentelemetry-distro = { version = ">=0.60b0", extras = ["otlp"] }
 # opentelemetry-api is the OpenTelemetry API
 opentelemetry-api = ">=1.39.1"
-# opentelemetry-sdk is the core OpenTelemetry SDK
-opentelemetry-sdk = ">=1.39.1"
-# https://github.com/open-telemetry/opentelemetry-python-contrib/tree/main/instrumentation#readme
-opentelemetry-instrumentation-httpx = ">=0.60b0"
-opentelemetry-instrumentation-asyncio = ">=0.60b0"
-opentelemetry-instrumentation-pymongo = ">=0.60b0"
-opentelemetry-instrumentation-redis = ">=0.60b0"
 
 
 [dev-packages]
@@ -75,7 +60,15 @@ mongomock = ">=4.3.0"
 watchfiles= ">=1.1.1"
 # inotify is a Python library for monitoring filesystem events (Linux only).  Used by gunicorn reloader
 inotify = ">=0.2.12"
-
+# OpenTelemetry - Core SDK and auto-instrumentation (includes OTLP exporters for traces, metrics, and logs)
+opentelemetry-distro = { version = ">=0.60b0", extras = ["otlp"] }
+# opentelemetry-sdk is the core OpenTelemetry SDK
+opentelemetry-sdk = ">=1.39.1"
+# https://github.com/open-telemetry/opentelemetry-python-contrib/tree/main/instrumentation#readme
+opentelemetry-instrumentation-httpx = ">=0.60b0"
+opentelemetry-instrumentation-asyncio = ">=0.60b0"
+opentelemetry-instrumentation-pymongo = ">=0.60b0"
+opentelemetry-instrumentation-redis = ">=0.60b0"
 
 # These dependencies are required for pipenv-setup.  They conflict with ones above, so we install these
 # only when running pipenv-setup

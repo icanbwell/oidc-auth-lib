@@ -1,9 +1,7 @@
-import asyncio
 import logging
 from typing import List
 
 from joserfc.jwk import KeySet
-from opentelemetry import trace
 
 from oidcauthlib.auth.config.auth_config import AuthConfig
 from oidcauthlib.auth.config.auth_config_reader import AuthConfigReader
@@ -13,7 +11,6 @@ from oidcauthlib.auth.well_known_configuration.well_known_configuration_cache im
 from oidcauthlib.auth.well_known_configuration.well_known_configuration_cache_result import (
     WellKnownConfigurationCacheResult,
 )
-from oidcauthlib.open_telemetry.span_names import OidcOpenTelemetrySpanNames
 from oidcauthlib.utilities.logger.log_levels import SRC_LOG_LEVELS
 
 logger = logging.getLogger(__name__)
@@ -65,13 +62,7 @@ class WellKnownConfigurationManager:
             raise TypeError(
                 f"cache must be an instance of WellKnownConfigurationCache, got {type(self._cache).__name__}"
             )
-        self._lock = asyncio.Lock()
         self._loaded: bool = False
-        self._initializing: bool = False
-        self._init_event: asyncio.Event = asyncio.Event()
-        self._refresh_lock: asyncio.Lock = (
-            asyncio.Lock()
-        )  # Serializes refresh operations
 
     async def get_jwks_async(self) -> KeySet:
         """Return the aggregated JWKS KeySet for configured providers.
@@ -86,77 +77,15 @@ class WellKnownConfigurationManager:
         return self._cache.jwks
 
     async def ensure_initialized_async(self) -> None:
-        """Initialize well-known configs and JWKS exactly once (deadlock-free).
-
-        Strategy:
-            - Fast path: return if already loaded.
-            - Single initializer sets _initializing and clears _init_event.
-            - Waiters release _lock and wait on _init_event; on failure they retry.
-            - No locks held during network I/O to avoid deadlock with cache.
-
-        Error Handling:
-            - On exception during initialization, resets _initializing and sets _init_event
-              so waiters can wake and retry.
-        """
-        # Fast path - no lock needed for read
+        """Initialize well-known configs and JWKS exactly once (deadlock-free)."""
         if self._loaded:
             return None
 
-        async with self._lock:
-            # Double-check after acquiring lock
-            if self._loaded:
-                logger.debug(
-                    "JWKS already initialized by another coroutine (manager fast path)."
-                )
-                return None
-
-            # If already initializing, release lock and wait
-            if self._initializing:
-                # Need to wait outside the lock
-                should_wait = True
-            else:
-                # We're the first, mark as initializing
-                self._initializing = True
-                self._init_event.clear()
-                should_wait = False
-
-        # Wait for initialization if another coroutine is doing it
-        if should_wait:
-            await self._init_event.wait()
-            # After waking, check if initialization succeeded
-            # If it failed, we need to retry (become the new initializer)
-            if not self._loaded:
-                return await self.ensure_initialized_async()
-            return None
-
-        # We are the initializer
-        tracer = trace.get_tracer(__name__)
-        with tracer.start_as_current_span(
-            OidcOpenTelemetrySpanNames.POPULATE_WELL_KNOWN_CONFIG_CACHE,
-        ):
-            try:
-                logger.debug("Manager fetching well-known configurations and JWKS.")
-                # Load configs WITHOUT holding the manager lock to avoid deadlock
-                # The cache has its own locking mechanism
-                configs_to_load = [c for c in self._auth_configs if c.well_known_uri]
-
-                await self._cache.read_list_async(auth_configs=configs_to_load)
-
-                # Mark as loaded (acquire lock to prevent race with refresh)
-                async with self._lock:
-                    self._loaded = True
-                    # Initialization completed successfully; reset flag
-                    self._initializing = False
-                logger.debug("Manager initialization complete.")
-            except Exception:
-                # Reset initializing flag so next coroutine can retry
-                self._initializing = False
-                # Set event to unblock waiting coroutines (they will retry)
-                self._init_event.set()
-                raise
-            else:
-                # Success: signal all waiting coroutines
-                self._init_event.set()
+        logger.debug("Manager fetching well-known configurations and JWKS.")
+        configs_to_load = [c for c in self._auth_configs if c.well_known_uri]
+        await self._cache.read_list_async(auth_configs=configs_to_load)
+        self._loaded = True
+        return None
 
     async def refresh_async(self) -> None:
         """Force a refresh of well-known configs and JWKS.
@@ -166,29 +95,12 @@ class WellKnownConfigurationManager:
             - Waits for any in-progress initialization to complete before clearing.
             - Clears caches, resets state, and re-initializes.
         """
-        # Serialize refresh operations - only one refresh at a time
-        async with self._refresh_lock:
-            # First, wait for any in-progress initialization to complete
-            # This prevents race conditions with concurrent initializations
-            async with self._lock:
-                if self._initializing:
-                    should_wait = True
-                else:
-                    should_wait = False
+        # Reset manager state before clearing the underlying cache to keep flags consistent.
+        self._loaded = False
+        # Now clear and reset - no concurrent initialization can be running
+        await self._cache.clear_async()
 
-            if should_wait:
-                # Wait outside the lock for initialization to complete
-                await self._init_event.wait()
-
-            # Now clear and reset - no concurrent initialization can be running
-            # Avoid performing I/O while holding the manager lock
-            await self._cache.clear_async()
-            async with self._lock:
-                self._loaded = False
-                self._initializing = False
-                self._init_event.clear()
-
-            await self.ensure_initialized_async()
+        await self.ensure_initialized_async()
 
     async def get_async(
         self, auth_config: AuthConfig
