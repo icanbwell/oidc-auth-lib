@@ -95,6 +95,8 @@ class WellKnownConfigurationManager:
             - Waits for any in-progress initialization to complete before clearing.
             - Clears caches, resets state, and re-initializes.
         """
+        # Reset manager state before clearing the underlying cache to keep flags consistent.
+        self._loaded = False
         # Now clear and reset - no concurrent initialization can be running
         await self._cache.clear_async()
 
