@@ -1,7 +1,6 @@
 import asyncio
 import logging
 from typing import Dict, Any, cast
-from urllib.parse import urlparse
 
 import httpx
 from httpx import ConnectError
@@ -177,7 +176,6 @@ class WellKnownConfigurationCache:
         well_known_uri: str | None = auth_config.well_known_uri
         if not well_known_uri:
             return None
-        self._validate_https_uri(uri=well_known_uri, context="well_known_uri")
 
         # Fast path: cache hit via store
         cached_config_dict: dict[str, Any] | None = await self._cache_store.get(
@@ -314,9 +312,6 @@ class WellKnownConfigurationCache:
         Security:
             - Keys are not logged; only counts are logged to avoid PII/token leakage.
         """
-        WellKnownConfigurationCache._validate_https_uri(
-            uri=jwks_uri, context="jwks_uri"
-        )
         async with httpx.AsyncClient() as client:
             try:
                 logger.info(f"Fetching JWKS from {jwks_uri}")
@@ -391,12 +386,6 @@ class WellKnownConfigurationCache:
         all_keys = new_keys + [ek.as_dict() for ek in self._jwks]
         if all_keys:
             self._jwks = KeySet.import_key_set({"keys": all_keys})
-
-    @staticmethod
-    def _validate_https_uri(*, uri: str, context: str) -> None:
-        parsed_uri = urlparse(uri)
-        if parsed_uri.scheme.lower() != "https":
-            raise ValueError(f"{context} must use HTTPS: {uri}")
 
     async def get_size_async(self) -> int:
         """Return the number of cached discovery documents.

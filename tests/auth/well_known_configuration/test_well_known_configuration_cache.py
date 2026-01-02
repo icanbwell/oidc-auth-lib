@@ -271,53 +271,6 @@ async def test_clear_resets_cache() -> None:
 
 
 @pytest.mark.asyncio
-async def test_get_async_rejects_non_https_well_known_uri() -> None:
-    cache = WellKnownConfigurationCache(well_known_store=MemoryStore())
-    uri = "http://provider.example.com/.well-known/openid-configuration"
-    auth_config: AuthConfig = AuthConfig(
-        auth_provider="TEST_PROVIDER",
-        friendly_name="Test Provider",
-        audience="test_audience",
-        issuer="http://provider.example.com",
-        client_id="test_client_id",
-        well_known_uri=uri,
-        scope="openid profile email",
-    )
-    with pytest.raises(ValueError) as exc_info:
-        await cache.read_async(auth_config=auth_config)
-    assert "must use HTTPS" in str(exc_info.value)
-
-
-@pytest.mark.asyncio
-async def test_read_async_rejects_non_https_jwks_uri() -> None:
-    cache = WellKnownConfigurationCache(well_known_store=MemoryStore())
-    uri = "https://provider.example.com/.well-known/openid-configuration"
-
-    with respx.mock(assert_all_called=True) as respx_mock:
-        respx_mock.get(uri).mock(
-            return_value=httpx.Response(
-                200,
-                json={
-                    "issuer": "https://provider.example.com",
-                    "jwks_uri": "http://provider.example.com/jwks",
-                },
-            )
-        )
-        auth_config: AuthConfig = AuthConfig(
-            auth_provider="TEST_PROVIDER",
-            friendly_name="Test Provider",
-            audience="test_audience",
-            issuer="https://provider.example.com",
-            client_id="test_client_id",
-            well_known_uri=uri,
-            scope="openid profile email",
-        )
-        with pytest.raises(ValueError) as exc_info:
-            await cache.read_async(auth_config=auth_config)
-        assert "jwks_uri must use HTTPS" in str(exc_info.value)
-
-
-@pytest.mark.asyncio
 async def test_read_list_async_handles_missing_backing_store() -> None:
     cache = WellKnownConfigurationCache(well_known_store=None)
     uri = "https://provider.example.com/.well-known/openid-configuration"
