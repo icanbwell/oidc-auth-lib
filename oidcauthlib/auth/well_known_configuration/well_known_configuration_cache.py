@@ -1,6 +1,7 @@
 import asyncio
 import logging
 from typing import Dict, Any, cast
+from urllib.parse import urlparse
 
 import httpx
 from httpx import ConnectError
@@ -75,9 +76,7 @@ class WellKnownConfigurationCache:
         """
         return self._jwks
 
-    async def read_list_async(
-        self, *, auth_configs: list[AuthConfig]
-    ) -> None:
+    async def read_list_async(self, *, auth_configs: list[AuthConfig]) -> None:
         """Fetch and cache discovery documents for multiple auth configs.
 
         Args:
@@ -92,39 +91,47 @@ class WellKnownConfigurationCache:
             return None
 
         # now check if the well-known configs are already in the disk store
-        results: list[WellKnownConfigurationCacheResult] = []
-        has_missing_well_known_cache: bool = False
-        for auth_config in auth_configs:
-            if not auth_config.well_known_uri:
-                raise ValueError(
-                    f"AuthConfig {auth_config} is missing well_known_uri"
+        if self.well_known_store is not None:
+            results: list[WellKnownConfigurationCacheResult] = []
+            has_missing_well_known_cache: bool = False
+            for auth_config in auth_configs:
+                if not auth_config.well_known_uri:
+                    raise ValueError(
+                        f"AuthConfig {auth_config} is missing well_known_uri"
+                    )
+                well_known_uri: str | None = auth_config.well_known_uri
+                if not well_known_uri:
+                    return None
+
+                # Fast path: cache hit via store
+                cached_config_dict: (
+                    dict[str, Any] | None
+                ) = await self.well_known_store.get(key=well_known_uri)
+                if cached_config_dict is None:
+                    has_missing_well_known_cache = True
+                else:
+                    result = WellKnownConfigurationCacheResult.model_validate(
+                        cached_config_dict
+                    )
+                    results.append(result)
+                    await self._cache_store.put(
+                        key=well_known_uri,
+                        value=result.model_dump(),
+                    )
+
+            if not has_missing_well_known_cache:
+                logger.info(
+                    "All well-known configurations already cached; skipping read."
                 )
-            well_known_uri: str | None = auth_config.well_known_uri
-            if not well_known_uri:
+                self.read_jwks_from_key_sets(
+                    key_sets=[
+                        result.client_key_set
+                        for result in results
+                        if result.client_key_set is not None
+                    ]
+                )
+                self._loaded = True
                 return None
-
-            # Fast path: cache hit via store
-            cached_config_dict: dict[str, Any] | None = await self.well_known_store.get(key=well_known_uri)
-            if cached_config_dict is None:
-                has_missing_well_known_cache = True
-            else:
-                results.append(
-                    WellKnownConfigurationCacheResult.model_validate(cached_config_dict)
-                )
-
-        if not has_missing_well_known_cache:
-            logger.info(
-                "All well-known configurations already cached; skipping read."
-            )
-            self.read_jwks_from_key_sets(
-                key_sets=[
-                    result.client_key_set
-                    for result in results
-                    if result.client_key_set is not None
-                ]
-            )
-            self._loaded = True
-            return None
 
         # not found in memory cache or disk cache so fetch them
         tracer = trace.get_tracer(__name__)
@@ -170,9 +177,12 @@ class WellKnownConfigurationCache:
         well_known_uri: str | None = auth_config.well_known_uri
         if not well_known_uri:
             return None
+        self._validate_https_uri(uri=well_known_uri, context="well_known_uri")
 
         # Fast path: cache hit via store
-        cached_config_dict: dict[str, Any] | None = await self._cache_store.get(key=well_known_uri)
+        cached_config_dict: dict[str, Any] | None = await self._cache_store.get(
+            key=well_known_uri
+        )
         if cached_config_dict is not None:
             logger.info(
                 f"\u2713 Using cached OIDC discovery document for {well_known_uri}"
@@ -304,6 +314,9 @@ class WellKnownConfigurationCache:
         Security:
             - Keys are not logged; only counts are logged to avoid PII/token leakage.
         """
+        WellKnownConfigurationCache._validate_https_uri(
+            uri=jwks_uri, context="jwks_uri"
+        )
         async with httpx.AsyncClient() as client:
             try:
                 logger.info(f"Fetching JWKS from {jwks_uri}")
@@ -378,6 +391,12 @@ class WellKnownConfigurationCache:
         all_keys = new_keys + [ek.as_dict() for ek in self._jwks]
         if all_keys:
             self._jwks = KeySet.import_key_set({"keys": all_keys})
+
+    @staticmethod
+    def _validate_https_uri(*, uri: str, context: str) -> None:
+        parsed_uri = urlparse(uri)
+        if parsed_uri.scheme.lower() != "https":
+            raise ValueError(f"{context} must use HTTPS: {uri}")
 
     async def get_size_async(self) -> int:
         """Return the number of cached discovery documents.

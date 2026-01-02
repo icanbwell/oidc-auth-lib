@@ -268,3 +268,128 @@ async def test_clear_resets_cache() -> None:
         await cache.read_async(auth_config=auth_config)
         assert route.call_count == 2
         assert jwks_route.call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_get_async_rejects_non_https_well_known_uri() -> None:
+    cache = WellKnownConfigurationCache(well_known_store=MemoryStore())
+    uri = "http://provider.example.com/.well-known/openid-configuration"
+    auth_config: AuthConfig = AuthConfig(
+        auth_provider="TEST_PROVIDER",
+        friendly_name="Test Provider",
+        audience="test_audience",
+        issuer="http://provider.example.com",
+        client_id="test_client_id",
+        well_known_uri=uri,
+        scope="openid profile email",
+    )
+    with pytest.raises(ValueError) as exc_info:
+        await cache.read_async(auth_config=auth_config)
+    assert "must use HTTPS" in str(exc_info.value)
+
+
+@pytest.mark.asyncio
+async def test_read_async_rejects_non_https_jwks_uri() -> None:
+    cache = WellKnownConfigurationCache(well_known_store=MemoryStore())
+    uri = "https://provider.example.com/.well-known/openid-configuration"
+
+    with respx.mock(assert_all_called=True) as respx_mock:
+        respx_mock.get(uri).mock(
+            return_value=httpx.Response(
+                200,
+                json={
+                    "issuer": "https://provider.example.com",
+                    "jwks_uri": "http://provider.example.com/jwks",
+                },
+            )
+        )
+        auth_config: AuthConfig = AuthConfig(
+            auth_provider="TEST_PROVIDER",
+            friendly_name="Test Provider",
+            audience="test_audience",
+            issuer="https://provider.example.com",
+            client_id="test_client_id",
+            well_known_uri=uri,
+            scope="openid profile email",
+        )
+        with pytest.raises(ValueError) as exc_info:
+            await cache.read_async(auth_config=auth_config)
+        assert "jwks_uri must use HTTPS" in str(exc_info.value)
+
+
+@pytest.mark.asyncio
+async def test_read_list_async_handles_missing_backing_store() -> None:
+    cache = WellKnownConfigurationCache(well_known_store=None)
+    uri = "https://provider.example.com/.well-known/openid-configuration"
+
+    with respx.mock(assert_all_called=True) as respx_mock:
+        route = respx_mock.get(uri).mock(
+            return_value=httpx.Response(
+                200,
+                json={
+                    "issuer": "https://provider.example.com",
+                    "jwks_uri": "https://provider.example.com/jwks",
+                },
+            )
+        )
+        jwks_route = respx_mock.get("https://provider.example.com/jwks").mock(
+            return_value=httpx.Response(200, json={"keys": []})
+        )
+        auth_config: AuthConfig = AuthConfig(
+            auth_provider="TEST_PROVIDER",
+            friendly_name="Test Provider",
+            audience="test_audience",
+            issuer="https://provider.example.com",
+            client_id="test_client_id",
+            well_known_uri=uri,
+            scope="openid profile email",
+        )
+        await cache.read_list_async(auth_configs=[auth_config])
+        # After load, get_async should succeed even without backing store
+        assert await cache.get_async(auth_config=auth_config) is not None
+        assert await cache.get_size_async() == 1
+        assert route.call_count == 1
+        assert jwks_route.call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_read_list_async_hydrates_cache_from_backing_store() -> None:
+    backing_store = MemoryStore()
+    cache = WellKnownConfigurationCache(well_known_store=backing_store)
+    uri = "https://provider.example.com/.well-known/openid-configuration"
+
+    stored_result = WellKnownConfigurationCacheResult(
+        well_known_uri=uri,
+        well_known_config={
+            "issuer": "https://provider.example.com",
+            "jwks_uri": "https://provider.example.com/jwks",
+        },
+        client_key_set=None,
+    )
+    await backing_store.put(key=uri, value=stored_result.model_dump())
+
+    auth_config: AuthConfig = AuthConfig(
+        auth_provider="TEST_PROVIDER",
+        friendly_name="Test Provider",
+        audience="test_audience",
+        issuer="https://provider.example.com",
+        client_id="test_client_id",
+        well_known_uri=uri,
+        scope="openid profile email",
+    )
+
+    with respx.mock(assert_all_called=False) as respx_mock:
+        respx_mock.get(uri).mock(
+            side_effect=AssertionError("Should not fetch well-known URI")
+        )
+        respx_mock.get("https://provider.example.com/jwks").mock(
+            side_effect=AssertionError(
+                "Should not fetch JWKS when backing store hydrated"
+            ),
+        )
+        await cache.read_list_async(auth_configs=[auth_config])
+
+    cached = await cache.get_async(auth_config=auth_config)
+    assert cached is not None
+    assert cached.well_known_uri == uri
+    assert await cache.get_size_async() == 1
