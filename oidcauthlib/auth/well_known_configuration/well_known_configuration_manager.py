@@ -1,9 +1,7 @@
-import asyncio
 import logging
 from typing import List
 
 from joserfc.jwk import KeySet
-from opentelemetry import trace
 
 from oidcauthlib.auth.config.auth_config import AuthConfig
 from oidcauthlib.auth.config.auth_config_reader import AuthConfigReader
@@ -13,7 +11,6 @@ from oidcauthlib.auth.well_known_configuration.well_known_configuration_cache im
 from oidcauthlib.auth.well_known_configuration.well_known_configuration_cache_result import (
     WellKnownConfigurationCacheResult,
 )
-from oidcauthlib.open_telemetry.span_names import OidcOpenTelemetrySpanNames
 from oidcauthlib.utilities.logger.log_levels import SRC_LOG_LEVELS
 
 logger = logging.getLogger(__name__)
@@ -89,7 +86,6 @@ class WellKnownConfigurationManager:
         await self._cache.read_list_async(auth_configs=configs_to_load)
         self._loaded = True
         return None
-
 
     async def refresh_async(self) -> None:
         """Force a refresh of well-known configs and JWKS.
