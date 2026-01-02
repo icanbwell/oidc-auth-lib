@@ -98,9 +98,7 @@ class WellKnownConfigurationCache:
                     raise ValueError(
                         f"AuthConfig {auth_config} is missing well_known_uri"
                     )
-                well_known_uri: str | None = auth_config.well_known_uri
-                if not well_known_uri:
-                    return None
+                well_known_uri: str = auth_config.well_known_uri
 
                 # Fast path: cache hit via store
                 cached_config_dict: (
