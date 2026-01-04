@@ -43,18 +43,13 @@ from key_value.aio.stores.mongodb import MongoDBStore
 from key_value.shared.errors import DeserializationError
 from key_value.shared.utils.managed_entry import ManagedEntry
 from key_value.shared.utils.sanitization import SanitizationStrategy
-from pydantic import BaseModel, Field
-from pymongo import AsyncMongoClient, UpdateOne
-from pymongo.asynchronous.collection import AsyncCollection
-from pymongo.asynchronous.command_cursor import AsyncCommandCursor
-from pymongo.errors import PyMongoError
-from pymongo.errors import CollectionInvalid
-from pymongo.results import DeleteResult
-
-
-# OpenTelemetry imports
 from opentelemetry import trace
 from opentelemetry.trace import Tracer
+from pydantic import BaseModel, Field
+from pymongo import AsyncMongoClient, UpdateOne
+from pymongo.asynchronous.command_cursor import AsyncCommandCursor
+from pymongo.errors import PyMongoError
+from pymongo.results import DeleteResult
 
 from oidcauthlib.open_telemetry.attribute_names import OidcOpenTelemetryAttributeNames
 from oidcauthlib.open_telemetry.span_names import OidcOpenTelemetrySpanNames
@@ -165,43 +160,25 @@ class MongoDBGridFSStore(MongoDBStore):
         self._tracer: Tracer = trace.get_tracer("oidcauthlib.storage.mongo_gridfs_db")
 
     @override
-    async def setup_collection(self, *, collection: str) -> None:
+    async def _setup_collection(self, *, collection: str) -> None:
         """Set up both metadata collection and GridFS bucket for a collection.
 
         Handles races where another process creates the collection or indexes
         concurrently by attempting creation and gracefully falling back to
         using the existing collection if already present.
         """
-        # Sanitize the user-supplied name to ensure valid MongoDB identifiers
-        sanitized_collection = self._sanitize_collection(collection=collection)
+        sanitized_collection_name = self._sanitize_collection(collection=collection)
+        collection_exists: bool = sanitized_collection_name in self._collections_by_name
+        await super()._setup_collection(collection=sanitized_collection_name)
+        if not collection_exists:
+            new_collection = super()._collections_by_name[sanitized_collection_name]
+            try:
+                _ = await new_collection.create_index(keys="gridfs_file_id")
+            except PyMongoError:
+                pass
 
-        new_collection: AsyncCollection[dict[str, Any]] | None = None
-        try:
-            new_collection = await self._db.create_collection(name=sanitized_collection)
-        except CollectionInvalid:
-            # Collection already exists; obtain handle
-            new_collection = self._db[sanitized_collection]
-
-        self._collections_by_name[collection] = new_collection
-
-        # Index creation: tolerate races; catch PyMongoError only
-        try:
-            _ = await new_collection.create_index(keys="key", unique=True)
-        except PyMongoError:
-            pass
-        try:
-            _ = await new_collection.create_index(
-                keys="expires_at", expireAfterSeconds=0
-            )
-        except PyMongoError:
-            pass
-        try:
-            _ = await new_collection.create_index(keys="gridfs_file_id")
-        except PyMongoError:
-            pass
-
-        gridfs_bucket_name = f"{sanitized_collection}_fs"
-        self._gridfs_buckets[collection] = AsyncGridFSBucket(
+        gridfs_bucket_name = f"{sanitized_collection_name}_fs"
+        self._gridfs_buckets[sanitized_collection_name] = AsyncGridFSBucket(
             self._db,
             bucket_name=gridfs_bucket_name,
             chunk_size_bytes=self._gridfs_chunk_size_kb * 1024,
