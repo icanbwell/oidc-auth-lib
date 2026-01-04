@@ -49,7 +49,6 @@ from pydantic import BaseModel, Field
 from pymongo import AsyncMongoClient, UpdateOne
 from pymongo.asynchronous.command_cursor import AsyncCommandCursor
 from pymongo.errors import PyMongoError
-from pymongo.results import DeleteResult
 
 from oidcauthlib.open_telemetry.attribute_names import OidcOpenTelemetryAttributeNames
 from oidcauthlib.open_telemetry.span_names import OidcOpenTelemetrySpanNames
@@ -586,11 +585,7 @@ class MongoDBGridFSStore(MongoDBStore):
                 ) from e
 
         # Delete metadata
-        result: DeleteResult = await self._collections_by_name[collection].delete_one(
-            filter={"key": key}
-        )
-
-        return bool(result.deleted_count)
+        return await super()._delete_managed_entry(key=key, collection=collection)
 
     @override
     async def _delete_managed_entries(
@@ -627,11 +622,7 @@ class MongoDBGridFSStore(MongoDBStore):
                     pass
 
         # Delete all metadata documents in one operation
-        result: DeleteResult = await self._collections_by_name[collection].delete_many(
-            filter={"key": {"$in": list(keys)}}
-        )
-
-        return result.deleted_count
+        return await super()._delete_managed_entries(keys=keys, collection=collection)
 
     @override
     async def _delete_collection(self, *, collection: str) -> bool:
@@ -648,7 +639,6 @@ class MongoDBGridFSStore(MongoDBStore):
         Returns:
             True if the collection was deleted successfully.
         """
-        collection_name = self._collections_by_name[collection].name
         gridfs_bucket = self._gridfs_buckets[collection]
 
         # Get all metadata documents to find GridFS file IDs
@@ -659,9 +649,6 @@ class MongoDBGridFSStore(MongoDBStore):
                     await gridfs_bucket.delete(gridfs_file_id)
                 except Exception:
                     pass
-
-        # Drop the metadata collection
-        _ = await self._db.drop_collection(name_or_collection=collection_name)
 
         # Drop the GridFS collections (bucket_name.files and bucket_name.chunks)
         sanitized_collection = self._sanitize_collection(collection=collection)
@@ -674,10 +661,9 @@ class MongoDBGridFSStore(MongoDBStore):
             pass
 
         # Clean up internal references so future operations fail fast
-        self._collections_by_name.pop(collection, None)
         self._gridfs_buckets.pop(collection, None)
 
-        return True
+        return await super()._delete_collection(collection=collection)
 
     async def get_gridfs_stats(self, *, collection: str) -> dict[str, Any]:
         """Get statistics about GridFS storage for a collection.
