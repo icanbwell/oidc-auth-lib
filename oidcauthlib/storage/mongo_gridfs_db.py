@@ -663,7 +663,10 @@ class MongoDBGridFSStore(MongoDBStore):
         # Clean up internal references so future operations fail fast
         self._gridfs_buckets.pop(collection, None)
 
-        return await super()._delete_collection(collection=collection)
+        result: bool = await super()._delete_collection(collection=collection)
+        # The base method does not clear this state
+        self._setup_collection_complete.pop(collection, None)
+        return result
 
     async def get_gridfs_stats(self, *, collection: str) -> dict[str, Any]:
         """Get statistics about GridFS storage for a collection.
