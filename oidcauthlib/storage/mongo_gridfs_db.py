@@ -167,15 +167,25 @@ class MongoDBGridFSStore(MongoDBStore):
         concurrently by attempting creation and gracefully falling back to
         using the existing collection if already present.
         """
+        if collection in self._collections_by_name:
+            return  # Already set up
+
         sanitized_collection_name = self._sanitize_collection(collection=collection)
-        collection_exists: bool = sanitized_collection_name in self._collections_by_name
-        await super()._setup_collection(collection=sanitized_collection_name)
-        if not collection_exists:
-            new_collection = super()._collections_by_name[sanitized_collection_name]
+        collection_filter: dict[str, str] = {"name": sanitized_collection_name}
+        # check if collection existed before we call super()._setup_collection
+        matching_collections: list[str] = await self._db.list_collection_names(
+            filter=collection_filter
+        )
+
+        await super()._setup_collection(collection=collection)
+
+        if not matching_collections:
+            new_collection = self._collections_by_name[collection]
             _ = await new_collection.create_index(keys="gridfs_file_id")
 
+        # now setup the GridFS bucket for this collection
         gridfs_bucket_name = f"{sanitized_collection_name}_fs"
-        self._gridfs_buckets[sanitized_collection_name] = AsyncGridFSBucket(
+        self._gridfs_buckets[collection] = AsyncGridFSBucket(
             self._db,
             bucket_name=gridfs_bucket_name,
             chunk_size_bytes=self._gridfs_chunk_size_kb * 1024,
