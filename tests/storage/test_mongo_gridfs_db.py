@@ -16,7 +16,7 @@ from oidcauthlib.utilities.environment.oidc_environment_variables import (
 TEST_CACHE = "test_cache"
 
 
-class TestCacheToCollectionMapper(CacheToCollectionMapper):
+class CacheToCollectionMapperTester(CacheToCollectionMapper):
     def __init__(
         self,
         *,
@@ -44,7 +44,7 @@ async def test_inline_store_and_get_roundtrip(test_container: IContainer) -> Non
     """
     test_container.singleton(
         CacheToCollectionMapper,
-        lambda c: TestCacheToCollectionMapper(
+        lambda c: CacheToCollectionMapperTester(
             environment_variables=c.resolve(OidcEnvironmentVariables)
         ),
     )
@@ -75,7 +75,7 @@ async def test_gridfs_store_and_get_roundtrip(test_container: IContainer) -> Non
     """
     test_container.singleton(
         CacheToCollectionMapper,
-        lambda c: TestCacheToCollectionMapper(
+        lambda c: CacheToCollectionMapperTester(
             environment_variables=c.resolve(OidcEnvironmentVariables)
         ),
     )
@@ -106,7 +106,7 @@ async def test_update_cleanup_old_gridfs_file(test_container: IContainer) -> Non
     """
     test_container.singleton(
         CacheToCollectionMapper,
-        lambda c: TestCacheToCollectionMapper(
+        lambda c: CacheToCollectionMapperTester(
             environment_variables=c.resolve(OidcEnvironmentVariables)
         ),
     )
@@ -168,7 +168,7 @@ async def test_batch_get_mixed_inline_and_gridfs(test_container: IContainer) -> 
     """
     test_container.singleton(
         CacheToCollectionMapper,
-        lambda c: TestCacheToCollectionMapper(
+        lambda c: CacheToCollectionMapperTester(
             environment_variables=c.resolve(OidcEnvironmentVariables)
         ),
     )
@@ -210,7 +210,7 @@ async def test_batch_get_all_missing_returns_nones(test_container: IContainer) -
     """
     test_container.singleton(
         CacheToCollectionMapper,
-        lambda c: TestCacheToCollectionMapper(
+        lambda c: CacheToCollectionMapperTester(
             environment_variables=c.resolve(OidcEnvironmentVariables)
         ),
     )
@@ -235,7 +235,7 @@ async def test_delete_managed_entries_bulk(test_container: IContainer) -> None:
     """
     test_container.singleton(
         CacheToCollectionMapper,
-        lambda c: TestCacheToCollectionMapper(
+        lambda c: CacheToCollectionMapperTester(
             environment_variables=c.resolve(OidcEnvironmentVariables)
         ),
     )
@@ -282,7 +282,7 @@ async def test_delete_managed_entry_single_path(test_container: IContainer) -> N
     """
     test_container.singleton(
         CacheToCollectionMapper,
-        lambda c: TestCacheToCollectionMapper(
+        lambda c: CacheToCollectionMapperTester(
             environment_variables=c.resolve(OidcEnvironmentVariables)
         ),
     )
@@ -330,7 +330,7 @@ async def test_gridfs_stats_and_delete_collection(test_container: IContainer) ->
     """
     test_container.singleton(
         CacheToCollectionMapper,
-        lambda c: TestCacheToCollectionMapper(
+        lambda c: CacheToCollectionMapperTester(
             environment_variables=c.resolve(OidcEnvironmentVariables)
         ),
     )

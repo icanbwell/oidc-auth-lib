@@ -43,18 +43,12 @@ from key_value.aio.stores.mongodb import MongoDBStore
 from key_value.shared.errors import DeserializationError
 from key_value.shared.utils.managed_entry import ManagedEntry
 from key_value.shared.utils.sanitization import SanitizationStrategy
-from pydantic import BaseModel, Field
-from pymongo import AsyncMongoClient, UpdateOne
-from pymongo.asynchronous.collection import AsyncCollection
-from pymongo.asynchronous.command_cursor import AsyncCommandCursor
-from pymongo.errors import PyMongoError
-from pymongo.errors import CollectionInvalid
-from pymongo.results import DeleteResult
-
-
-# OpenTelemetry imports
 from opentelemetry import trace
 from opentelemetry.trace import Tracer
+from pydantic import BaseModel, Field
+from pymongo import AsyncMongoClient, UpdateOne
+from pymongo.asynchronous.command_cursor import AsyncCommandCursor
+from pymongo.errors import PyMongoError
 
 from oidcauthlib.open_telemetry.attribute_names import OidcOpenTelemetryAttributeNames
 from oidcauthlib.open_telemetry.span_names import OidcOpenTelemetrySpanNames
@@ -165,42 +159,31 @@ class MongoDBGridFSStore(MongoDBStore):
         self._tracer: Tracer = trace.get_tracer("oidcauthlib.storage.mongo_gridfs_db")
 
     @override
-    async def setup_collection(self, *, collection: str) -> None:
+    async def _setup_collection(self, *, collection: str) -> None:
         """Set up both metadata collection and GridFS bucket for a collection.
 
         Handles races where another process creates the collection or indexes
         concurrently by attempting creation and gracefully falling back to
         using the existing collection if already present.
         """
-        # Sanitize the user-supplied name to ensure valid MongoDB identifiers
-        sanitized_collection = self._sanitize_collection(collection=collection)
+        if collection in self._collections_by_name:
+            return  # Already set up
 
-        new_collection: AsyncCollection[dict[str, Any]] | None = None
-        try:
-            new_collection = await self._db.create_collection(name=sanitized_collection)
-        except CollectionInvalid:
-            # Collection already exists; obtain handle
-            new_collection = self._db[sanitized_collection]
+        sanitized_collection_name = self._sanitize_collection(collection=collection)
+        collection_filter: dict[str, str] = {"name": sanitized_collection_name}
+        # check if collection existed before we call super()._setup_collection
+        matching_collections: list[str] = await self._db.list_collection_names(
+            filter=collection_filter
+        )
 
-        self._collections_by_name[collection] = new_collection
+        await super()._setup_collection(collection=collection)
 
-        # Index creation: tolerate races; catch PyMongoError only
-        try:
-            _ = await new_collection.create_index(keys="key", unique=True)
-        except PyMongoError:
-            pass
-        try:
-            _ = await new_collection.create_index(
-                keys="expires_at", expireAfterSeconds=0
-            )
-        except PyMongoError:
-            pass
-        try:
+        if not matching_collections:
+            new_collection = self._collections_by_name[collection]
             _ = await new_collection.create_index(keys="gridfs_file_id")
-        except PyMongoError:
-            pass
 
-        gridfs_bucket_name = f"{sanitized_collection}_fs"
+        # now setup the GridFS bucket for this collection
+        gridfs_bucket_name = f"{sanitized_collection_name}_fs"
         self._gridfs_buckets[collection] = AsyncGridFSBucket(
             self._db,
             bucket_name=gridfs_bucket_name,
@@ -602,11 +585,7 @@ class MongoDBGridFSStore(MongoDBStore):
                 ) from e
 
         # Delete metadata
-        result: DeleteResult = await self._collections_by_name[collection].delete_one(
-            filter={"key": key}
-        )
-
-        return bool(result.deleted_count)
+        return await super()._delete_managed_entry(key=key, collection=collection)
 
     @override
     async def _delete_managed_entries(
@@ -643,11 +622,7 @@ class MongoDBGridFSStore(MongoDBStore):
                     pass
 
         # Delete all metadata documents in one operation
-        result: DeleteResult = await self._collections_by_name[collection].delete_many(
-            filter={"key": {"$in": list(keys)}}
-        )
-
-        return result.deleted_count
+        return await super()._delete_managed_entries(keys=keys, collection=collection)
 
     @override
     async def _delete_collection(self, *, collection: str) -> bool:
@@ -664,7 +639,6 @@ class MongoDBGridFSStore(MongoDBStore):
         Returns:
             True if the collection was deleted successfully.
         """
-        collection_name = self._collections_by_name[collection].name
         gridfs_bucket = self._gridfs_buckets[collection]
 
         # Get all metadata documents to find GridFS file IDs
@@ -675,9 +649,6 @@ class MongoDBGridFSStore(MongoDBStore):
                     await gridfs_bucket.delete(gridfs_file_id)
                 except Exception:
                     pass
-
-        # Drop the metadata collection
-        _ = await self._db.drop_collection(name_or_collection=collection_name)
 
         # Drop the GridFS collections (bucket_name.files and bucket_name.chunks)
         sanitized_collection = self._sanitize_collection(collection=collection)
@@ -690,10 +661,12 @@ class MongoDBGridFSStore(MongoDBStore):
             pass
 
         # Clean up internal references so future operations fail fast
-        self._collections_by_name.pop(collection, None)
         self._gridfs_buckets.pop(collection, None)
 
-        return True
+        result: bool = await super()._delete_collection(collection=collection)
+        # The base method does not clear this state
+        self._setup_collection_complete.pop(collection, None)
+        return result
 
     async def get_gridfs_stats(self, *, collection: str) -> dict[str, Any]:
         """Get statistics about GridFS storage for a collection.
