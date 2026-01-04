@@ -63,7 +63,8 @@ class OidcAuthLibContainerFactory:
                 .create_storage_factory()
                 .get_store(
                     namespace="well_known_configuration",
-                )
+                ),
+                environment_variables=c.resolve(OidcEnvironmentVariables),
             ),
         )
 

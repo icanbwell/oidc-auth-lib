@@ -15,6 +15,10 @@ from oidcauthlib.auth.well_known_configuration.well_known_configuration_cache_re
 from oidcauthlib.auth.well_known_configuration.well_known_configuration_manager import (
     WellKnownConfigurationManager,
 )
+from oidcauthlib.container.interfaces import IContainer
+from oidcauthlib.utilities.environment.oidc_environment_variables import (
+    OidcEnvironmentVariables,
+)
 
 
 @dataclass
@@ -58,8 +62,13 @@ def auth_config_reader(auth_configs: list[AuthConfig]) -> MagicMock:
 
 
 @pytest.fixture
-def cache_double() -> CacheDouble:
-    cache = WellKnownConfigurationCache(well_known_store=None)
+def cache_double(test_container: IContainer) -> CacheDouble:
+    environment_variables: OidcEnvironmentVariables = test_container.resolve(
+        OidcEnvironmentVariables
+    )
+    cache = WellKnownConfigurationCache(
+        well_known_store=None, environment_variables=environment_variables
+    )
     cache._jwks = KeySet.import_key_set(
         {"keys": [{"kty": "oct", "kid": "kid-1", "k": "abc"}]}
     )
