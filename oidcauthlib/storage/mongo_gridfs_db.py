@@ -172,10 +172,7 @@ class MongoDBGridFSStore(MongoDBStore):
         await super()._setup_collection(collection=sanitized_collection_name)
         if not collection_exists:
             new_collection = super()._collections_by_name[sanitized_collection_name]
-            try:
-                _ = await new_collection.create_index(keys="gridfs_file_id")
-            except PyMongoError:
-                pass
+            _ = await new_collection.create_index(keys="gridfs_file_id")
 
         gridfs_bucket_name = f"{sanitized_collection_name}_fs"
         self._gridfs_buckets[sanitized_collection_name] = AsyncGridFSBucket(
