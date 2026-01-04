@@ -216,7 +216,7 @@ class OidcEnvironmentVariables(AbstractEnvironmentVariables):
         when retrieving well-known configurations.
 
         Set via WELL_KNOWN_CONFIG_HTTP_TIMEOUT_SECONDS environment variable.
-        Defaults to 10 seconds.
+        Defaults to 30 seconds.
 
         Returns:
             Timeout in seconds
