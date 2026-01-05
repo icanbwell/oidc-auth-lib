@@ -11,11 +11,20 @@ from oidcauthlib.auth.well_known_configuration.well_known_configuration_cache im
 from oidcauthlib.auth.well_known_configuration.well_known_configuration_cache_result import (
     WellKnownConfigurationCacheResult,
 )
+from oidcauthlib.container.interfaces import IContainer
+from oidcauthlib.utilities.environment.oidc_environment_variables import (
+    OidcEnvironmentVariables,
+)
 
 
 @pytest.mark.asyncio
-async def test_get_async_caches_on_first_call() -> None:
-    cache = WellKnownConfigurationCache(well_known_store=MemoryStore())
+async def test_get_async_caches_on_first_call(test_container: IContainer) -> None:
+    environment_variables: OidcEnvironmentVariables = test_container.resolve(
+        OidcEnvironmentVariables
+    )
+    cache = WellKnownConfigurationCache(
+        well_known_store=MemoryStore(), environment_variables=environment_variables
+    )
     uri = "https://provider.example.com/.well-known/openid-configuration"
 
     with respx.mock(assert_all_called=True) as respx_mock:
@@ -59,8 +68,15 @@ async def test_get_async_caches_on_first_call() -> None:
 
 
 @pytest.mark.asyncio
-async def test_get_async_uses_cache_on_subsequent_calls() -> None:
-    cache = WellKnownConfigurationCache(well_known_store=MemoryStore())
+async def test_get_async_uses_cache_on_subsequent_calls(
+    test_container: IContainer,
+) -> None:
+    environment_variables: OidcEnvironmentVariables = test_container.resolve(
+        OidcEnvironmentVariables
+    )
+    cache = WellKnownConfigurationCache(
+        well_known_store=MemoryStore(), environment_variables=environment_variables
+    )
     uri = "https://provider.example.com/.well-known/openid-configuration"
 
     with respx.mock(assert_all_called=True) as respx_mock:
@@ -97,8 +113,13 @@ async def test_get_async_uses_cache_on_subsequent_calls() -> None:
 
 
 @pytest.mark.asyncio
-async def test_get_async_concurrent_single_fetch() -> None:
-    cache = WellKnownConfigurationCache(well_known_store=MemoryStore())
+async def test_get_async_concurrent_single_fetch(test_container: IContainer) -> None:
+    environment_variables: OidcEnvironmentVariables = test_container.resolve(
+        OidcEnvironmentVariables
+    )
+    cache = WellKnownConfigurationCache(
+        well_known_store=MemoryStore(), environment_variables=environment_variables
+    )
     uri = "https://provider.example.com/.well-known/openid-configuration"
 
     with respx.mock(assert_all_called=True) as respx_mock:
@@ -134,8 +155,13 @@ async def test_get_async_concurrent_single_fetch() -> None:
 
 
 @pytest.mark.asyncio
-async def test_get_async_multiple_uris_concurrent() -> None:
-    cache = WellKnownConfigurationCache(well_known_store=MemoryStore())
+async def test_get_async_multiple_uris_concurrent(test_container: IContainer) -> None:
+    environment_variables: OidcEnvironmentVariables = test_container.resolve(
+        OidcEnvironmentVariables
+    )
+    cache = WellKnownConfigurationCache(
+        well_known_store=MemoryStore(), environment_variables=environment_variables
+    )
     uri1 = "https://provider1.example.com/.well-known/openid-configuration"
     uri2 = "https://provider2.example.com/.well-known/openid-configuration"
 
@@ -232,8 +258,13 @@ async def test_get_async_multiple_uris_concurrent() -> None:
 
 
 @pytest.mark.asyncio
-async def test_clear_resets_cache() -> None:
-    cache = WellKnownConfigurationCache(well_known_store=MemoryStore())
+async def test_clear_resets_cache(test_container: IContainer) -> None:
+    environment_variables: OidcEnvironmentVariables = test_container.resolve(
+        OidcEnvironmentVariables
+    )
+    cache = WellKnownConfigurationCache(
+        well_known_store=MemoryStore(), environment_variables=environment_variables
+    )
     uri = "https://provider.example.com/.well-known/openid-configuration"
 
     with respx.mock(assert_all_called=False) as respx_mock:
@@ -271,8 +302,15 @@ async def test_clear_resets_cache() -> None:
 
 
 @pytest.mark.asyncio
-async def test_read_list_async_handles_missing_backing_store() -> None:
-    cache = WellKnownConfigurationCache(well_known_store=None)
+async def test_read_list_async_handles_missing_backing_store(
+    test_container: IContainer,
+) -> None:
+    environment_variables: OidcEnvironmentVariables = test_container.resolve(
+        OidcEnvironmentVariables
+    )
+    cache = WellKnownConfigurationCache(
+        well_known_store=None, environment_variables=environment_variables
+    )
     uri = "https://provider.example.com/.well-known/openid-configuration"
 
     with respx.mock(assert_all_called=True) as respx_mock:
@@ -306,9 +344,16 @@ async def test_read_list_async_handles_missing_backing_store() -> None:
 
 
 @pytest.mark.asyncio
-async def test_read_list_async_hydrates_cache_from_backing_store() -> None:
+async def test_read_list_async_hydrates_cache_from_backing_store(
+    test_container: IContainer,
+) -> None:
+    environment_variables: OidcEnvironmentVariables = test_container.resolve(
+        OidcEnvironmentVariables
+    )
     backing_store = MemoryStore()
-    cache = WellKnownConfigurationCache(well_known_store=backing_store)
+    cache = WellKnownConfigurationCache(
+        well_known_store=backing_store, environment_variables=environment_variables
+    )
     uri = "https://provider.example.com/.well-known/openid-configuration"
 
     stored_result = WellKnownConfigurationCacheResult(

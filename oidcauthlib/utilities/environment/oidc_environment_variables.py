@@ -207,3 +207,26 @@ class OidcEnvironmentVariables(AbstractEnvironmentVariables):
             raise ValueError(
                 "MAX_MONGO_INLINE_SIZE_KB must be a positive integer representing bytes"
             )
+
+    @property
+    def well_known_config_http_timeout_seconds(self) -> int:
+        """HTTP timeout in seconds for fetching well-known configurations.
+
+        Controls the maximum time to wait for HTTP requests
+        when retrieving well-known configurations.
+
+        Set via WELL_KNOWN_CONFIG_HTTP_TIMEOUT_SECONDS environment variable.
+        Defaults to 30 seconds.
+
+        Returns:
+            Timeout in seconds
+        """
+        try:
+            timeout = int(
+                os.environ.get("WELL_KNOWN_CONFIG_HTTP_TIMEOUT_SECONDS", "30")
+            )
+            return timeout
+        except ValueError:
+            raise ValueError(
+                "WELL_KNOWN_CONFIG_HTTP_TIMEOUT_SECONDS must be a positive integer representing seconds"
+            )

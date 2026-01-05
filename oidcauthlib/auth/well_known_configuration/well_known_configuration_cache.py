@@ -15,6 +15,9 @@ from oidcauthlib.auth.well_known_configuration.well_known_configuration_cache_re
     WellKnownConfigurationCacheResult,
 )
 from oidcauthlib.open_telemetry.span_names import OidcOpenTelemetrySpanNames
+from oidcauthlib.utilities.environment.oidc_environment_variables import (
+    OidcEnvironmentVariables,
+)
 from oidcauthlib.utilities.logger.log_levels import SRC_LOG_LEVELS
 from oidcauthlib.open_telemetry.attribute_names import OidcOpenTelemetryAttributeNames
 
@@ -51,7 +54,12 @@ class WellKnownConfigurationCache:
     - OpenTelemetry span and attribute names are sourced from enums to avoid hardcoded strings.
     """
 
-    def __init__(self, *, well_known_store: BaseStore | None) -> None:
+    def __init__(
+        self,
+        *,
+        well_known_store: BaseStore | None,
+        environment_variables: OidcEnvironmentVariables,
+    ) -> None:
         # Replace dict cache with a memory-backed store
         self._cache_store: MemoryStore = MemoryStore()
         self._jwks: KeySet = KeySet(keys=[])
@@ -62,6 +70,12 @@ class WellKnownConfigurationCache:
         if well_known_store is not None and not isinstance(well_known_store, BaseStore):
             raise TypeError(
                 f"well_known_store must be an instance of BaseStore: {type(well_known_store)}"
+            )
+
+        self.environment_variables: OidcEnvironmentVariables = environment_variables
+        if not isinstance(environment_variables, OidcEnvironmentVariables):
+            raise TypeError(
+                f"environment_variables must be an instance of OidcEnvironmentVariables, got {type(environment_variables).__name__}"
             )
 
     @property
@@ -237,7 +251,10 @@ class WellKnownConfigurationCache:
                         logger.info(
                             f"Fetching OIDC discovery document from {well_known_uri}"
                         )
-                        response = await client.get(well_known_uri)
+                        response = await client.get(
+                            well_known_uri,
+                            timeout=self.environment_variables.well_known_config_http_timeout_seconds,
+                        )
                         response.raise_for_status()
                         config = cast(Dict[str, Any], response.json())
                         well_known_configuration_cache_result = (
@@ -295,42 +312,6 @@ class WellKnownConfigurationCache:
                 f"issuer not found in well-known configuration: {well_known_config}"
             )
         return jwks_uri
-
-    @staticmethod
-    async def _read_jwks_from_uri_async(*, jwks_uri: str) -> list[Dict[str, Any]]:
-        """Fetch JWKS keys from the given JWKS URI.
-
-        Args:
-            jwks_uri: HTTPS URL to retrieve JWKS.
-        Returns:
-            A list of key dicts (deduplicated by kid) from the JWKS response.
-        Raises:
-            ValueError: Non-2xx HTTP status.
-            ConnectionError: When unable to reach the JWKS endpoint.
-        Security:
-            - Keys are not logged; only counts are logged to avoid PII/token leakage.
-        """
-        async with httpx.AsyncClient() as client:
-            try:
-                logger.info(f"Fetching JWKS from {jwks_uri}")
-                response = await client.get(jwks_uri)
-                response.raise_for_status()
-                jwks_data: Dict[str, Any] = response.json()
-                keys: list[Dict[str, Any]] = []
-                for key in jwks_data.get("keys", []):
-                    if not any([k.get("kid") == key.get("kid") for k in keys]):
-                        keys.append(key)
-                logger.info(
-                    f"Successfully fetched JWKS from {jwks_uri}, keys= {len(keys)}"
-                )
-                return keys
-            except httpx.HTTPStatusError as e:
-                logger.exception(e)
-                raise ValueError(
-                    f"Failed to fetch JWKS from {jwks_uri} with status {e.response.status_code} : {e}"
-                )
-            except ConnectError as e:
-                raise ConnectionError(f"Failed to connect to JWKS URI: {jwks_uri}: {e}")
 
     async def _read_jwks_async(
         self, *, auth_config: AuthConfig, well_known_config: dict[str, Any]
@@ -467,3 +448,41 @@ class WellKnownConfigurationCache:
             )
 
         return WellKnownConfigurationCacheResult.model_validate(cached_config_dict)
+
+    async def _read_jwks_from_uri_async(self, *, jwks_uri: str) -> list[Dict[str, Any]]:
+        """Fetch JWKS keys from the given JWKS URI.
+
+        Args:
+            jwks_uri: HTTPS URL to retrieve JWKS.
+        Returns:
+            A list of key dicts (deduplicated by kid) from the JWKS response.
+        Raises:
+            ValueError: Non-2xx HTTP status.
+            ConnectionError: When unable to reach the JWKS endpoint.
+        Security:
+            - Keys are not logged; only counts are logged to avoid PII/token leakage.
+        """
+        async with httpx.AsyncClient() as client:
+            try:
+                logger.info(f"Fetching JWKS from {jwks_uri}")
+                response = await client.get(
+                    jwks_uri,
+                    timeout=self.environment_variables.well_known_config_http_timeout_seconds,
+                )
+                response.raise_for_status()
+                jwks_data: Dict[str, Any] = response.json()
+                keys: list[Dict[str, Any]] = []
+                for key in jwks_data.get("keys", []):
+                    if not any([k.get("kid") == key.get("kid") for k in keys]):
+                        keys.append(key)
+                logger.info(
+                    f"Successfully fetched JWKS from {jwks_uri}, keys= {len(keys)}"
+                )
+                return keys
+            except httpx.HTTPStatusError as e:
+                logger.exception(e)
+                raise ValueError(
+                    f"Failed to fetch JWKS from {jwks_uri} with status {e.response.status_code} : {e}"
+                )
+            except ConnectError as e:
+                raise ConnectionError(f"Failed to connect to JWKS URI: {jwks_uri}: {e}")
