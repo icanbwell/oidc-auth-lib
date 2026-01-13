@@ -4,8 +4,10 @@ from typing import Set, Optional
 from opentelemetry import trace
 from opentelemetry.sdk.trace import TracerProvider
 from oidcauthlib.open_telemetry.filtering_span_processor import FilteringSpanProcessor
+from oidcauthlib.utilities.logger.log_levels import SRC_LOG_LEVELS
 
 logger = logging.getLogger(__name__)
+logger.setLevel(SRC_LOG_LEVELS["OPEN_TELEMETRY"])
 
 
 def get_excluded_span_names() -> Set[str]:
