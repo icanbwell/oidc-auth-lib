@@ -69,6 +69,7 @@ class FilteringSpanProcessor(SpanProcessor):
     def on_start(self, span: Span, parent_context: Optional[Context] = None) -> None:
         """Called when a span is started."""
         self.wrapped_processor.on_start(span, parent_context)
+        logger.debug(f"FilteringSpanProcessor: on_start called for span: {span.name}")
 
     def _is_root_span(self, span: ReadableSpan) -> bool:
         """Check if a span is a root span (has no parent)."""
@@ -97,7 +98,7 @@ class FilteringSpanProcessor(SpanProcessor):
         Only forward spans that pass all filters.
         """
         span_name = span.name
-
+        logger.debug(f"FilteringSpanProcessor: on_end called for span: {span.name}")
         # Filter 1: Check exact name match
         if (
             self.excluded_span_names is not None
