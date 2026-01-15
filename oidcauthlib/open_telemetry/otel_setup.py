@@ -3,6 +3,7 @@ import os
 from typing import Set, Optional
 from opentelemetry import trace
 from opentelemetry.sdk.trace import TracerProvider
+
 from oidcauthlib.open_telemetry.filtering_span_processor import FilteringSpanProcessor
 from oidcauthlib.utilities.logger.log_levels import SRC_LOG_LEVELS
 
@@ -18,7 +19,8 @@ def get_excluded_span_names() -> Set[str]:
     Format: Comma-separated list of span names to exclude
     Example: OTEL_EXCLUDED_SPAN_NAMES="saslStart,saslContinue,isMaster,ping"
     """
-    default_excluded = {"saslStart", "saslContinue", "isMaster", "ping"}
+    # default_excluded = {"saslStart", "saslContinue", "isMaster", "ping"}
+    default_excluded: Set[str] = set()
 
     env_excluded = os.environ.get("OTEL_EXCLUDED_SPAN_NAMES", "")
     if env_excluded:
