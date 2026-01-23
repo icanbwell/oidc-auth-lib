@@ -1,6 +1,6 @@
 import logging
 from abc import abstractmethod, ABCMeta
-from typing import Any, Dict, Optional, Type, Callable
+from typing import Any, Dict, Optional, Type, Callable, Generic, TypeVar
 
 from bson import ObjectId
 
@@ -10,8 +10,10 @@ from oidcauthlib.utilities.logger.log_levels import SRC_LOG_LEVELS
 logger = logging.getLogger(__name__)
 logger.setLevel(SRC_LOG_LEVELS["DATABASE"])
 
+T = TypeVar("T", bound=BaseDbModel)
 
-class AsyncBaseRepository[T: BaseDbModel](metaclass=ABCMeta):
+
+class AsyncBaseRepository(Generic[T], metaclass=ABCMeta):
     """
     Async MongoDB repository for Pydantic models with comprehensive async support.
     """
@@ -90,5 +92,26 @@ class AsyncBaseRepository[T: BaseDbModel](metaclass=ABCMeta):
             on_insert (Callable[[T], T]): Function to apply on insert
         Returns:
             ObjectId: The ID of the inserted or updated document
+        """
+        ...
+
+    @abstractmethod
+    async def insert_or_replace_many(
+        self,
+        *,
+        collection_name: str,
+        items: list[T],
+        key_fields: list[str],
+    ) -> Any:
+        """
+        Bulk insert-or-replace:
+          - if a doc matching key_fields exists -> replace it entirely
+          - else -> insert new doc
+        Args:
+            collection_name (str): Name of the collection
+            items (list[T]): List of Pydantic model instances to insert or replace
+            key_fields (list[str]): Fields that uniquely identify each document
+        Returns:
+            Any: The result of the bulk write operation (implementation-specific)
         """
         ...

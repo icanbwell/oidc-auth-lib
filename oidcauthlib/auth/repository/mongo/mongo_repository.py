@@ -2,10 +2,10 @@ import logging
 from typing import Any, Dict, Optional, Type, Mapping, cast, override, Callable
 
 from bson import ObjectId
-from pymongo import AsyncMongoClient
+from pymongo import AsyncMongoClient, ReplaceOne
 
 from pydantic import BaseModel
-from pymongo.results import InsertOneResult, UpdateResult
+from pymongo.results import InsertOneResult, UpdateResult, BulkWriteResult
 
 from oidcauthlib.auth.models.base_db_model import BaseDbModel
 from oidcauthlib.auth.repository.base_repository import (
@@ -377,3 +377,46 @@ class AsyncMongoRepository[T: BaseDbModel](AsyncBaseRepository[T]):
                 f"Document inserted with ID: {insert_result.inserted_id} in collection {collection_name} with data:\n{document}\nresult: {insert_result}"
             )
             return cast(ObjectId, insert_result.inserted_id)
+
+    @override
+    async def insert_or_replace_many(
+        self,
+        *,
+        collection_name: str,
+        items: list[T],
+        key_fields: list[str],
+    ) -> BulkWriteResult:
+        """
+        Bulk insert-or-replace:
+          - if a doc matching key_fields exists -> replace it entirely
+          - else -> insert new doc
+        """
+        if not key_fields:
+            raise ValueError("key_fields must not be empty")
+
+        collection = self._db[collection_name]
+        ops: list[Any] = []
+
+        for item in items:
+            d = self._convert_model_to_dict(item)
+            d = {k: v for k, v in d.items() if v is not None}
+
+            # Build a SAFE filter (must include all key fields)
+            missing = [k for k in key_fields if k not in d or d[k] is None]
+            if missing:
+                raise ValueError(
+                    f"Missing key_fields {missing}; refusing to build unsafe filter"
+                )
+
+            filter_dict = {k: d[k] for k in key_fields}
+
+            # Ensure the replacement doc still contains the key fields (since it's a full replacement)
+            # (If your model already includes them, this is redundant but harmless.)
+            replacement = {**d, **filter_dict}
+
+            ops.append(ReplaceOne(filter_dict, replacement, upsert=True))
+
+        if not ops:
+            raise ValueError("items must not be empty")
+
+        return await collection.bulk_write(ops, ordered=False)
