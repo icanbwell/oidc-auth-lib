@@ -378,6 +378,7 @@ class AsyncMongoRepository[T: BaseDbModel](AsyncBaseRepository[T]):
             )
             return cast(ObjectId, insert_result.inserted_id)
 
+    @override
     async def insert_or_replace_many(
         self,
         *,
