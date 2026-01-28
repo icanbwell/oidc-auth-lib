@@ -128,3 +128,51 @@ async def test_insert_or_replace_many_insert_and_replace(
     assert found_alice_updated is not None
     assert found_alice_updated.name == "Alice Updated"
     assert found_alice_updated.age == 29
+
+
+@pytest.mark.asyncio
+async def test_insert_or_update_many_insert_and_update(
+    mongo_repo: AsyncMongoRepository[TestModel],
+) -> None:
+    collection = "test_collection"
+    # Insert two new documents
+    items = [
+        TestModel(name="Alice", email="alice@example.com", age=28),
+        TestModel(name="Bob", email="bob@example.com", age=32),
+    ]
+    result = await mongo_repo.insert_or_update_many(
+        collection_name=collection,
+        items=items,
+        key_fields=["email"],
+    )
+    assert result.acknowledged
+    # Query by email (key field) instead of id, since bulk_write does not update model ids
+    found_alice = await mongo_repo.find_by_fields(
+        collection, TestModel, {"email": "alice@example.com"}
+    )
+    found_bob = await mongo_repo.find_by_fields(
+        collection, TestModel, {"email": "bob@example.com"}
+    )
+    assert found_alice is not None
+    assert found_bob is not None
+    assert found_alice.name == "Alice"
+    assert found_bob.name == "Bob"
+    assert found_alice.email == "alice@example.com"
+    assert found_bob.email == "bob@example.com"
+    assert found_alice.age == 28
+    assert found_bob.age == 32
+
+    # Update Alice's document (partial update - only name and email, age should be preserved)
+    updated_alice = TestModel(name="Alice Updated", email="alice@example.com", age=29)
+    result2 = await mongo_repo.insert_or_update_many(
+        collection_name=collection,
+        items=[updated_alice],
+        key_fields=["email"],
+    )
+    assert result2.acknowledged
+    found_alice_updated = await mongo_repo.find_by_fields(
+        collection, TestModel, {"email": "alice@example.com"}
+    )
+    assert found_alice_updated is not None
+    assert found_alice_updated.name == "Alice Updated"
+    assert found_alice_updated.age == 29

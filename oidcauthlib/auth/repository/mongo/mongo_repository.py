@@ -2,7 +2,7 @@ import logging
 from typing import Any, Dict, Optional, Type, Mapping, cast, override, Callable
 
 from bson import ObjectId
-from pymongo import AsyncMongoClient, ReplaceOne
+from pymongo import AsyncMongoClient, ReplaceOne, UpdateOne
 
 from pydantic import BaseModel
 from pymongo.results import InsertOneResult, UpdateResult, BulkWriteResult
@@ -415,6 +415,52 @@ class AsyncMongoRepository[T: BaseDbModel](AsyncBaseRepository[T]):
             replacement = {**d, **filter_dict}
 
             ops.append(ReplaceOne(filter_dict, replacement, upsert=True))
+
+        if not ops:
+            raise ValueError("items must not be empty")
+
+        return await collection.bulk_write(ops, ordered=False)
+
+    @override
+    async def insert_or_update_many(
+        self,
+        *,
+        collection_name: str,
+        items: list[T],
+        key_fields: list[str],
+    ) -> BulkWriteResult:
+        """
+        Bulk insert-or-update (partial update using $set):
+          - if a doc matching key_fields exists -> update only the provided fields
+          - else -> insert new doc (upsert)
+        """
+        if not key_fields:
+            raise ValueError("key_fields must not be empty")
+
+        collection = self._db[collection_name]
+        ops: list[Any] = []
+
+        for item in items:
+            d = self._convert_model_to_dict(item)
+            d = {k: v for k, v in d.items() if v is not None}
+
+            # Build a SAFE filter (must include all key fields)
+            missing = [k for k in key_fields if k not in d or d[k] is None]
+            if missing:
+                raise ValueError(
+                    f"Missing key_fields {missing}; refusing to build unsafe filter"
+                )
+
+            filter_dict = {k: d[k] for k in key_fields}
+
+            # Use $set for partial update, with $setOnInsert for key fields on insert
+            ops.append(
+                UpdateOne(
+                    filter_dict,
+                    {"$set": d},
+                    upsert=True,
+                )
+            )
 
         if not ops:
             raise ValueError("items must not be empty")
