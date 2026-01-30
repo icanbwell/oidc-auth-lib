@@ -353,9 +353,9 @@ class AsyncMongoRepository[T: BaseDbModel](AsyncBaseRepository[T]):
         document = self._convert_model_to_dict(item)
         document = {k: v for k, v in document.items() if v is not None}
         if existing_item:
-            update_result: UpdateResult = await collection.replace_one(
+            update_result: UpdateResult = await collection.update_one(
                 filter={"_id": existing_item.id},
-                replacement=document,
+                update={"$set": document},
             )
             if update_result.modified_count == 0:
                 logger.debug(

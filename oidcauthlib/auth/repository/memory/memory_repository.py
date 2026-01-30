@@ -214,11 +214,22 @@ class AsyncMemoryRepository[T: BaseDbModel](AsyncBaseRepository[T]):
                     found = obj
                     break
             if found:
-                # Partial update: merge item fields into an existing object
-                update_data = item.model_dump(exclude_unset=True)
-                existing_data = found.model_dump()
-                merged_data = {**existing_data, **update_data}
-                updated_item = type(found)(**merged_data)
+                # Partial update: copy attributes from item to found, preserving finds id
+                # Get the set of fields that were explicitly set on the item
+                updated_fields = (
+                    item.model_fields_set
+                    if hasattr(item, "model_fields_set")
+                    else set(item.model_dump(exclude_unset=True).keys())
+                )
+
+                # Create an update dict by directly accessing attributes (no serialization)
+                update_dict = {}
+                for field_name in updated_fields:
+                    if field_name != "id":  # Never update the id
+                        update_dict[field_name] = getattr(item, field_name)
+
+                # Use model_copy with the update dict
+                updated_item = found.model_copy(update=update_dict)
                 self._storage[found.id] = updated_item
                 result_ids.append(found.id)
             else:
