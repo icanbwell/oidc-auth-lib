@@ -115,3 +115,24 @@ class AsyncBaseRepository(Generic[T], metaclass=ABCMeta):
             Any: The result of the bulk write operation (implementation-specific)
         """
         ...
+
+    @abstractmethod
+    async def insert_or_update_many(
+        self,
+        *,
+        collection_name: str,
+        items: list[T],
+        key_fields: list[str],
+    ) -> Any:
+        """
+        Bulk insert-or-update (partial update using $set):
+          - if a doc matching key_fields exists -> update only the provided fields
+          - else -> insert new doc
+        Args:
+            collection_name (str): Name of the collection
+            items (list[T]): List of Pydantic model instances to insert or update
+            key_fields (list[str]): Fields that uniquely identify each document
+        Returns:
+            Any: The result of the bulk write operation (implementation-specific)
+        """
+        ...

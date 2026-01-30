@@ -188,3 +188,52 @@ class AsyncMemoryRepository[T: BaseDbModel](AsyncBaseRepository[T]):
                 self._storage[item.id] = item
                 result_ids.append(item.id)
         return result_ids
+
+    @override
+    async def insert_or_update_many(
+        self,
+        *,
+        collection_name: str,
+        items: list[T],
+        key_fields: list[str],
+    ) -> list[ObjectId]:
+        """
+        Bulk insert-or-update (partial update) for in-memory storage.
+        If a doc matching key_fields exists -> update only the provided fields
+        else -> insert new doc
+        Returns a list of ObjectIds for the inserted/updated items.
+        """
+        if not key_fields:
+            raise ValueError("key_fields must not be empty")
+        result_ids: list[ObjectId] = []
+        for item in items:
+            # Find existing by key_fields
+            found = None
+            for obj in self._storage.values():
+                if all(getattr(obj, k) == getattr(item, k) for k in key_fields):
+                    found = obj
+                    break
+            if found:
+                # Partial update: copy attributes from item to found, preserving finds id
+                # Get the set of fields that were explicitly set on the item
+                updated_fields = (
+                    item.model_fields_set
+                    if hasattr(item, "model_fields_set")
+                    else set(item.model_dump(exclude_unset=True).keys())
+                )
+
+                # Create an update dict by directly accessing attributes (no serialization)
+                update_dict = {}
+                for field_name in updated_fields:
+                    if field_name != "id":  # Never update the id
+                        update_dict[field_name] = getattr(item, field_name)
+
+                # Use model_copy with the update dict
+                updated_item = found.model_copy(update=update_dict)
+                self._storage[found.id] = updated_item
+                result_ids.append(found.id)
+            else:
+                # Insert
+                self._storage[item.id] = item
+                result_ids.append(item.id)
+        return result_ids

@@ -82,6 +82,10 @@ class AsyncMongoMockCollection:
         """Find and update a document."""
         return self._sync_collection.find_one_and_update(filter, update, **kwargs)
 
+    async def update_one(self, filter: Any, update: Any, **kwargs: Any) -> Any:
+        """Update a single document."""
+        return self._sync_collection.update_one(filter, update, **kwargs)
+
     async def replace_one(self, filter: Any, replacement: Any, **kwargs: Any) -> Any:
         """Replace a document."""
         return self._sync_collection.replace_one(filter, replacement, **kwargs)
