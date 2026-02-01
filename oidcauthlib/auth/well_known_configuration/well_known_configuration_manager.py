@@ -1,3 +1,4 @@
+import base64
 import logging
 from typing import List
 
@@ -5,6 +6,7 @@ from joserfc.jwk import KeySet
 
 from oidcauthlib.auth.config.auth_config import AuthConfig
 from oidcauthlib.auth.config.auth_config_reader import AuthConfigReader
+from oidcauthlib.auth.models.client_key_set import ClientKeySet
 from oidcauthlib.auth.well_known_configuration.well_known_configuration_cache import (
     WellKnownConfigurationCache,
 )
@@ -63,6 +65,7 @@ class WellKnownConfigurationManager:
                 f"cache must be an instance of WellKnownConfigurationCache, got {type(self._cache).__name__}"
             )
         self._loaded: bool = False
+        self._hmac_keys_added: bool = False
 
     async def get_jwks_async(self) -> KeySet:
         """Return the aggregated JWKS KeySet for configured providers.
@@ -74,6 +77,9 @@ class WellKnownConfigurationManager:
             KeySet: Combined, de-duplicated JWKS suitable for token verification.
         """
         await self.ensure_initialized_async()
+        if not self._hmac_keys_added:
+            self._append_hmac_jwks()
+            self._hmac_keys_added = True
         return self._cache.jwks
 
     async def ensure_initialized_async(self) -> None:
@@ -97,6 +103,7 @@ class WellKnownConfigurationManager:
         """
         # Reset manager state before clearing the underlying cache to keep flags consistent.
         self._loaded = False
+        self._hmac_keys_added = False
         # Now clear and reset - no concurrent initialization can be running
         await self._cache.clear_async()
 
@@ -116,3 +123,43 @@ class WellKnownConfigurationManager:
         """
         await self.ensure_initialized_async()
         return await self._cache.get_async(auth_config=auth_config)
+
+    def _append_hmac_jwks(self) -> None:
+        symmetric_configs = [
+            config
+            for config in self._auth_configs
+            if config.hmac_secret and "HS256" in config.signing_algorithms
+        ]
+        if not symmetric_configs:
+            return
+
+        key_sets: list[ClientKeySet] = []
+        for config in symmetric_configs:
+            if not config.hmac_secret:
+                raise ValueError(
+                    f"HMAC secret is required for auth provider {config.auth_provider} to create HS256 JWK."
+                )
+            kid = config.hmac_key_id or f"{config.auth_provider}-hs256"
+            jwk = {
+                "kty": "oct",
+                "k": self._encode_hmac_secret(config.hmac_secret),
+                "alg": "HS256",
+                "use": "sig",
+                "kid": kid,
+            }
+            key_sets.append(
+                ClientKeySet(
+                    auth_config=config,
+                    well_known_config=None,
+                    kids=[kid],
+                    keys=[jwk],
+                )
+            )
+
+        self._cache.read_jwks_from_key_sets(key_sets=key_sets)
+
+    @staticmethod
+    def _encode_hmac_secret(secret: str) -> str:
+        raw_bytes = secret.encode("utf-8")
+        encoded = base64.urlsafe_b64encode(raw_bytes).decode("utf-8")
+        return encoded.rstrip("=")

@@ -1,6 +1,7 @@
 import logging
 import os
 import threading
+from typing import ClassVar
 
 from oidcauthlib.auth.config.auth_config import AuthConfig
 from oidcauthlib.utilities.environment.abstract_environment_variables import (
@@ -16,6 +17,11 @@ class AuthConfigReader:
     """
     A class to read authentication configurations from environment variables.
     """
+
+    _SUPPORTED_SIGNING_ALGORITHMS: ClassVar[frozenset[str]] = frozenset(
+        {"RS256", "HS256"}
+    )
+    _DEFAULT_SIGNING_ALGORITHMS: ClassVar[list[str]] = ["RS256"]
 
     def __init__(self, *, environment_variables: AbstractEnvironmentVariables) -> None:
         """
@@ -180,6 +186,16 @@ class AuthConfigReader:
         if not scope:
             scope = "openid profile email"
 
+        signing_algorithms: list[str] = self._parse_signing_algorithms(
+            raw_algorithms=os.getenv(f"AUTH_SIGNING_ALGORITHMS_{auth_provider_upper}"),
+        )
+        hmac_secret, hmac_key_id = self._resolve_hmac_settings(
+            auth_provider=auth_provider,
+            algorithms=signing_algorithms,
+            secret=os.getenv(f"AUTH_HS256_SECRET_{auth_provider_upper}"),
+            key_id=os.getenv(f"AUTH_HS256_KEY_ID_{auth_provider_upper}"),
+        )
+
         logger.info(f"Successfully read config for auth provider: {auth_provider}")
         return AuthConfig(
             auth_provider=auth_provider,
@@ -190,7 +206,53 @@ class AuthConfigReader:
             client_secret=auth_client_secret,
             well_known_uri=auth_well_known_uri,
             scope=scope,
+            signing_algorithms=signing_algorithms,
+            hmac_secret=hmac_secret,
+            hmac_key_id=hmac_key_id,
         )
+
+    def _parse_signing_algorithms(self, *, raw_algorithms: str | None) -> list[str]:
+        """Return a normalized list of signing algorithms for a provider."""
+        if not raw_algorithms:
+            return list(self._DEFAULT_SIGNING_ALGORITHMS)
+        parsed = [
+            alg.strip().upper() for alg in raw_algorithms.split(",") if alg.strip()
+        ]
+        if not parsed:
+            return list(self._DEFAULT_SIGNING_ALGORITHMS)
+        invalid = [
+            alg for alg in parsed if alg not in self._SUPPORTED_SIGNING_ALGORITHMS
+        ]
+        if invalid:
+            raise ValueError(
+                f"Unsupported signing algorithm(s) configured: {', '.join(invalid)}"
+            )
+        return parsed
+
+    def _resolve_hmac_settings(
+        self,
+        *,
+        auth_provider: str,
+        algorithms: list[str],
+        secret: str | None,
+        key_id: str | None,
+    ) -> tuple[str | None, str | None]:
+        """Validate and return HS256 secret material when required."""
+        if "HS256" not in algorithms:
+            if secret:
+                logger.warning(
+                    "Ignoring HS256 secret for provider %s because HS256 is not enabled",
+                    auth_provider,
+                )
+            return None, None
+
+        if not secret:
+            raise ValueError(
+                f"Provider {auth_provider} enables HS256 but AUTH_HS256_SECRET_{auth_provider.upper()} is not set"
+            )
+
+        derived_key_id = key_id or f"{auth_provider}-hs256"
+        return secret, derived_key_id
 
     def get_audience_for_provider(self, *, auth_provider: str) -> str:
         """

@@ -2,6 +2,11 @@ from pydantic import BaseModel, ConfigDict, Field
 from typing import Optional
 
 
+def _default_signing_algorithms() -> list[str]:
+    """Default to RS256-only verification when not explicitly configured."""
+    return ["RS256"]
+
+
 class AuthConfig(BaseModel):
     """
     Represent the configuration for an auth provider.  Usually read from environment variables.
@@ -41,4 +46,16 @@ class AuthConfig(BaseModel):
     scope: str = Field(
         ...,
         description="The scopes requested for the auth provider, typically a space-separated list of scopes.",
+    )
+    signing_algorithms: list[str] = Field(
+        default_factory=_default_signing_algorithms,
+        description="Allowed JWT signing algorithms for this provider (e.g., RS256, HS256).",
+    )
+    hmac_secret: Optional[str] = Field(
+        default=None,
+        description="Symmetric key material used to construct HS256 JWK entries when required.",
+    )
+    hmac_key_id: Optional[str] = Field(
+        default=None,
+        description="Optional kid to associate with the symmetric HS256 key.",
     )

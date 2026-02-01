@@ -83,7 +83,6 @@ class TokenReader:
             Create a TokenReader with allowed algorithms, an AuthConfigReader, and a WellKnownConfigurationManager.
         """
         self.uuid: UUID = uuid.uuid4()
-        self.algorithms: List[str] | None = algorithms or None
 
         self.auth_config_reader: AuthConfigReader = auth_config_reader
         if self.auth_config_reader is None:
@@ -109,6 +108,14 @@ class TokenReader:
             raise TypeError(
                 "well_known_config_manager must be an instance of WellKnownConfigurationManager"
             )
+
+        self.algorithms: list[str] = (
+            list(algorithms)
+            if algorithms is not None
+            else self._collect_algorithms_from_configs()
+        )
+        if not self.algorithms:
+            self.algorithms = ["RS256"]
 
     @staticmethod
     def extract_token(*, authorization_header: str | None) -> Optional[str]:
@@ -344,3 +351,13 @@ class TokenReader:
         except Exception as e:
             logger.exception(f"Token is invalid: {e}")
             return False
+
+    def _collect_algorithms_from_configs(self) -> list[str]:
+        """Derive a unique list of algorithms across configured providers."""
+        unique_algorithms = {
+            alg
+            for config in self.auth_configs
+            for alg in config.signing_algorithms
+            if alg
+        }
+        return sorted(unique_algorithms)
