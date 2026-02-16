@@ -12,7 +12,6 @@ from joserfc.jwk import KeySet
 
 from zoneinfo import ZoneInfo
 
-
 from oidcauthlib.auth.config.auth_config import AuthConfig
 from oidcauthlib.auth.config.auth_config_reader import (
     AuthConfigReader,
@@ -203,6 +202,10 @@ class TokenReader:
 
         jwks: KeySet = await self._well_known_config_manager.get_jwks_async()
 
+        # get kids from jwks for logging
+        jwks_kids = [key.get("kid") for key in jwks.keys]
+        well_known_urls = await self._well_known_config_manager.get_well_known_urls()
+
         exp_str: str = "None"
         now_str: str = "None"
         issuer: Optional[str] = None
@@ -257,7 +260,8 @@ class TokenReader:
                     f"do not match any configured auth provider"
                 )
                 raise AuthorizationBearerTokenInvalidException(
-                    message=f"Token issuer '{issuer}' and audience '{audience}' do not match any configured auth provider",
+                    message=f"Token issuer '{issuer}' and audience '{audience}' do not match any configured auth provider"
+                    f". JWKS Kids: {jwks_kids}. Configured well-known URLs: {well_known_urls}",
                     token=token,
                 )
 
@@ -311,7 +315,12 @@ class TokenReader:
             raise
         except Exception as e:
             raise AuthorizationBearerTokenInvalidException(
-                message=f"Invalid token provided. Exp: {exp_str}, Now: {now_str}. Please check the token:\n{token}.",
+                message=f"{type(e)}: Invalid token provided."
+                f" Exp: {exp_str}, Now: {now_str}."
+                f" Please check the token:\n{token}."
+                f"\nIssuer: {issuer}, Audience: {audience}. "
+                f"\nJWKS Kids: {jwks_kids}"
+                f"\nConfigured well-known URLs: {well_known_urls}",
                 token=token,
             ) from e
 
