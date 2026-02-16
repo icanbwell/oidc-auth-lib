@@ -116,3 +116,7 @@ class WellKnownConfigurationManager:
         """
         await self.ensure_initialized_async()
         return await self._cache.get_async(auth_config=auth_config)
+
+    async def get_well_known_urls(self) -> List[str]:
+        """Return a list of well-known URLs for all configured providers."""
+        return [c.well_known_uri for c in self._auth_configs if c.well_known_uri]
