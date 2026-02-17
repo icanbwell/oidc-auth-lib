@@ -43,12 +43,7 @@ class AuthConfig(BaseModel):
         description="The scopes requested for the auth provider, typically a space-separated list of scopes.",
     )
 
-    login_url: str | None = Field(
+    extra_info: dict[str, str] | None = Field(
         default=None,
-        description="The URL to redirect users to for login, if applicable.",
-    )
-
-    client_keys: dict[str, str] | None = Field(
-        default=None,
-        description="A dictionary of client keys for the auth provider, used for token exchange or other authentication flows.",
+        description="A dictionary of extra information for the auth provider, which can include any additional configuration or metadata needed for authentication.",
     )
