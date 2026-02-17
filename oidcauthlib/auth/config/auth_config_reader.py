@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 import threading
@@ -181,6 +182,13 @@ class AuthConfigReader:
             scope = "openid profile email"
 
         logger.info(f"Successfully read config for auth provider: {auth_provider}")
+        login_url: str | None = os.getenv(f"AUTH_LOGIN_URL_{auth_provider_upper}")
+        client_keys_text: str | None = os.getenv(
+            f"AUTH_CLIENT_KEYS_{auth_provider_upper}"
+        )
+        client_keys_dict: dict[str, str] | None = (
+            json.loads(client_keys_text) if client_keys_text else None
+        )
         return AuthConfig(
             auth_provider=auth_provider,
             friendly_name=friendly_name,
@@ -190,6 +198,8 @@ class AuthConfigReader:
             client_secret=auth_client_secret,
             well_known_uri=auth_well_known_uri,
             scope=scope,
+            login_url=login_url,
+            client_keys=client_keys_dict,
         )
 
     def get_audience_for_provider(self, *, auth_provider: str) -> str:
