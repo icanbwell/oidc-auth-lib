@@ -185,9 +185,24 @@ class AuthConfigReader:
         extra_info_text: str | None = os.getenv(
             f"AUTH_EXTRA_INFO_{auth_provider_upper}"
         )
-        extra_info_dict: dict[str, str] | None = (
-            json.loads(extra_info_text) if extra_info_text else None
-        )
+        extra_info_dict: dict[str, str] | None
+        if extra_info_text:
+            try:
+                extra_info_raw: object = json.loads(extra_info_text)
+            except json.JSONDecodeError as exc:
+                raise ValueError(
+                    f"Invalid JSON in AUTH_EXTRA_INFO_{auth_provider_upper}: {exc.msg}"
+                ) from exc
+            if not isinstance(extra_info_raw, dict):
+                raise ValueError(
+                    f"AUTH_EXTRA_INFO_{auth_provider_upper} must be a JSON object "
+                    "mapping strings to strings"
+                )
+            extra_info_dict = {
+                str(key): str(value) for key, value in extra_info_raw.items()
+            }
+        else:
+            extra_info_dict = None
         return AuthConfig(
             auth_provider=auth_provider,
             friendly_name=friendly_name,

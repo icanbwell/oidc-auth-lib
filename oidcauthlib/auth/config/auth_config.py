@@ -1,5 +1,5 @@
 from pydantic import BaseModel, ConfigDict, Field
-from typing import Optional
+from typing import Optional, Any
 
 
 class AuthConfig(BaseModel):
@@ -43,7 +43,11 @@ class AuthConfig(BaseModel):
         description="The scopes requested for the auth provider, typically a space-separated list of scopes.",
     )
 
-    extra_info: dict[str, str] | None = Field(
+    extra_info: dict[str, Any] | None = Field(
         default=None,
-        description="A dictionary of extra information for the auth provider, which can include any additional configuration or metadata needed for authentication.",
+        description=(
+            "A dictionary of extra string configuration values for the auth provider. "
+            "Keys and values must be strings (for example, settings derived from environment "
+            "variables or other string-based configuration sources)."
+        ),
     )
