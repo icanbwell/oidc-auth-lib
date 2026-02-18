@@ -196,8 +196,7 @@ class AuthConfigReader:
                 ) from exc
             if not isinstance(extra_info_raw, dict):
                 raise ValueError(
-                    f"AUTH_EXTRA_INFO_{auth_provider_upper} must be a JSON object "
-                    "mapping strings to strings"
+                    f"AUTH_EXTRA_INFO_{auth_provider_upper} must be a JSON object"
                 )
             extra_info_dict = {str(key): value for key, value in extra_info_raw.items()}
         else:
