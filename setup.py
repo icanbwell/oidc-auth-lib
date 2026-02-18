@@ -64,7 +64,7 @@ setup(
         "python-snappy>=0.7.3",
         "fastapi>=0.115.8",
         "starlette>=0.49.1",
-        "py-key-value-aio[memory,mongodb,pydantic,redis]>=0.3.0",
+        "py-key-value-aio[memory,mongodb,pydantic,redis]>=0.4.4",
         "opentelemetry-api>=1.39.1",
     ],
     classifiers=[
