@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import threading
+from typing import Any
 
 from oidcauthlib.auth.config.auth_config import AuthConfig
 from oidcauthlib.utilities.environment.abstract_environment_variables import (
@@ -185,7 +186,7 @@ class AuthConfigReader:
         extra_info_text: str | None = os.getenv(
             f"AUTH_EXTRA_INFO_{auth_provider_upper}"
         )
-        extra_info_dict: dict[str, str] | None
+        extra_info_dict: dict[str, Any] | None
         if extra_info_text:
             try:
                 extra_info_raw: object = json.loads(extra_info_text)
@@ -198,9 +199,7 @@ class AuthConfigReader:
                     f"AUTH_EXTRA_INFO_{auth_provider_upper} must be a JSON object "
                     "mapping strings to strings"
                 )
-            extra_info_dict = {
-                str(key): str(value) for key, value in extra_info_raw.items()
-            }
+            extra_info_dict = {str(key): value for key, value in extra_info_raw.items()}
         else:
             extra_info_dict = None
         return AuthConfig(
