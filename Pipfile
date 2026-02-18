@@ -21,7 +21,7 @@ fastapi = ">=0.115.8"
 # starlette is a Python library for building ASGI applications
 starlette =  ">=0.49.1"
 # py-key-value-aio provides key-value storage
-py-key-value-aio = { version = ">=0.3.0", extras = ["mongodb", "pydantic", "redis", "memory"] }  # needed for fastmcp async storage
+py-key-value-aio = { version = ">=0.4.4", extras = ["mongodb", "pydantic", "redis", "memory"] }  # needed for fastmcp async storage
 # opentelemetry-api is the OpenTelemetry API
 opentelemetry-api = ">=1.39.1"
 

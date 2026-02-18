@@ -54,7 +54,7 @@ async def test_concurrent_setup_collection_is_race_safe(
 
     # Basic smoke: perform a trivial put/get to verify collection is usable
     from datetime import datetime, UTC
-    from key_value.shared.utils.managed_entry import ManagedEntry
+    from key_value.aio._utils.managed_entry import ManagedEntry
 
     entry = ManagedEntry(
         value={"ok": True}, created_at=datetime.now(UTC), expires_at=None

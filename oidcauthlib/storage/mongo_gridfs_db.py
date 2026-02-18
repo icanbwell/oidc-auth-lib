@@ -40,9 +40,9 @@ from typing import Any, Sequence, override
 from bson import ObjectId
 from gridfs import AsyncGridFSBucket
 from key_value.aio.stores.mongodb import MongoDBStore
-from key_value.shared.errors import DeserializationError
-from key_value.shared.utils.managed_entry import ManagedEntry
-from key_value.shared.utils.sanitization import SanitizationStrategy
+from key_value.aio.errors import DeserializationError
+from key_value.aio._utils.managed_entry import ManagedEntry
+from key_value.aio._utils.sanitization import SanitizationStrategy
 from opentelemetry import trace
 from opentelemetry.trace import Tracer
 from pydantic import BaseModel, Field
