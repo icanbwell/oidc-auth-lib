@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 import threading
@@ -181,6 +182,27 @@ class AuthConfigReader:
             scope = "openid profile email"
 
         logger.info(f"Successfully read config for auth provider: {auth_provider}")
+        extra_info_text: str | None = os.getenv(
+            f"AUTH_EXTRA_INFO_{auth_provider_upper}"
+        )
+        extra_info_dict: dict[str, str] | None
+        if extra_info_text:
+            try:
+                extra_info_raw: object = json.loads(extra_info_text)
+            except json.JSONDecodeError as exc:
+                raise ValueError(
+                    f"Invalid JSON in AUTH_EXTRA_INFO_{auth_provider_upper}: {exc.msg}"
+                ) from exc
+            if not isinstance(extra_info_raw, dict):
+                raise ValueError(
+                    f"AUTH_EXTRA_INFO_{auth_provider_upper} must be a JSON object "
+                    "mapping strings to strings"
+                )
+            extra_info_dict = {
+                str(key): str(value) for key, value in extra_info_raw.items()
+            }
+        else:
+            extra_info_dict = None
         return AuthConfig(
             auth_provider=auth_provider,
             friendly_name=friendly_name,
@@ -190,6 +212,7 @@ class AuthConfigReader:
             client_secret=auth_client_secret,
             well_known_uri=auth_well_known_uri,
             scope=scope,
+            extra_info=extra_info_dict,
         )
 
     def get_audience_for_provider(self, *, auth_provider: str) -> str:
