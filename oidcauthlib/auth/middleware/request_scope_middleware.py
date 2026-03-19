@@ -10,7 +10,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
 
-from oidcauthlib.container.container_registry import ContainerRegistry
+from simple_container.container.container_registry import ContainerRegistry
 from oidcauthlib.utilities.logger.log_levels import SRC_LOG_LEVELS
 
 logger = logging.getLogger(__name__)

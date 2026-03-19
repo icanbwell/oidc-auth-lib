@@ -15,7 +15,7 @@ from oidcauthlib.auth.well_known_configuration.well_known_configuration_cache_re
 from oidcauthlib.auth.well_known_configuration.well_known_configuration_manager import (
     WellKnownConfigurationManager,
 )
-from oidcauthlib.container.interfaces import IContainer
+from simple_container.container.interfaces import IContainer
 from oidcauthlib.utilities.environment.oidc_environment_variables import (
     OidcEnvironmentVariables,
 )

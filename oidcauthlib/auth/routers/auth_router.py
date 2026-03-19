@@ -17,7 +17,7 @@ from oidcauthlib.auth.config.auth_config_reader import (
     AuthConfigReader,
 )
 from oidcauthlib.auth.fastapi_auth_manager import FastAPIAuthManager
-from oidcauthlib.container.inject import Inject
+from simple_container.container.inject import Inject
 from oidcauthlib.utilities.environment.oidc_environment_variables import (
     OidcEnvironmentVariables,
 )

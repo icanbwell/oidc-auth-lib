@@ -3,7 +3,7 @@ from typing import cast, override
 
 import pytest
 
-from oidcauthlib.container.interfaces import IContainer
+from simple_container.container.interfaces import IContainer
 from oidcauthlib.storage.storage_factory import StorageFactory
 from oidcauthlib.storage.mongo_gridfs_db import MongoDBGridFSStore
 from oidcauthlib.utilities.environment.oidc_environment_variables import (

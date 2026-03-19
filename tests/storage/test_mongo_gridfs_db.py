@@ -4,7 +4,7 @@ from typing import cast, override, Mapping
 import pytest
 from bson import ObjectId
 from key_value.aio._utils.managed_entry import ManagedEntry
-from oidcauthlib.container.interfaces import IContainer
+from simple_container.container.interfaces import IContainer
 from oidcauthlib.storage.cache_to_collection_mapper import CacheToCollectionMapper
 from oidcauthlib.storage.storage_factory import StorageFactory
 
