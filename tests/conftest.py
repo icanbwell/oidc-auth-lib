@@ -7,8 +7,9 @@ from typing import List, override, AsyncGenerator, Any
 import pytest
 from pymongo import AsyncMongoClient
 
-from oidcauthlib.container.container_registry import ContainerRegistry
-from oidcauthlib.container.interfaces import IContainer
+from simple_container.container.container_registry import ContainerRegistry
+from simple_container.container.interfaces import IContainer
+
 from oidcauthlib.container.oidc_authlib_container_factory import (
     OidcAuthLibContainerFactory,
 )

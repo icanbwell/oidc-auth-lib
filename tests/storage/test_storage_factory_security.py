@@ -11,7 +11,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from oidcauthlib.container.interfaces import IContainer
+from simple_container.container.interfaces import IContainer
 from oidcauthlib.storage.cache_to_collection_mapper import CacheToCollectionMapper
 from oidcauthlib.storage.mongo_storage_factory import MongoStoreFactory
 from oidcauthlib.storage.storage_factory import StorageFactory

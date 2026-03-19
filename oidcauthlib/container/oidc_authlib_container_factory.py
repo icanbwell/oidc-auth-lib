@@ -1,5 +1,8 @@
 import logging
 
+from simple_container.container.interfaces import IContainer
+from simple_container.container.simple_container import SimpleContainer
+
 from oidcauthlib.auth.auth_manager import AuthManager
 from oidcauthlib.auth.config.auth_config_reader import AuthConfigReader
 from oidcauthlib.auth.fastapi_auth_manager import FastAPIAuthManager
@@ -10,7 +13,6 @@ from oidcauthlib.auth.well_known_configuration.well_known_configuration_cache im
 from oidcauthlib.auth.well_known_configuration.well_known_configuration_manager import (
     WellKnownConfigurationManager,
 )
-from oidcauthlib.container.simple_container import SimpleContainer
 from oidcauthlib.storage.cache_to_collection_mapper import CacheToCollectionMapper
 from oidcauthlib.storage.storage_factory import StorageFactory
 from oidcauthlib.storage.storage_factory_creator import StorageFactoryCreator
@@ -23,10 +25,10 @@ logger = logging.getLogger(__name__)
 
 class OidcAuthLibContainerFactory:
     @classmethod
-    def create_container(cls) -> SimpleContainer:
+    def create_container(cls) -> IContainer:
         logger.info("Initializing DI container")
 
-        container = SimpleContainer()
+        container: IContainer = SimpleContainer()
 
         container = OidcAuthLibContainerFactory().register_services_in_container(
             container=container
@@ -34,9 +36,7 @@ class OidcAuthLibContainerFactory:
         return container
 
     @staticmethod
-    def register_services_in_container(
-        *, container: SimpleContainer
-    ) -> SimpleContainer:
+    def register_services_in_container(*, container: IContainer) -> IContainer:
         """
         Register services in the DI container
 

@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 from oidcauthlib.auth.middleware.request_scope_middleware import (
     RequestScopeMiddleware,
 )
-from oidcauthlib.container.container_registry import ContainerRegistry
+from simple_container.container.container_registry import ContainerRegistry
 
 
 def _build_app() -> FastAPI:
