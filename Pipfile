@@ -25,7 +25,7 @@ py-key-value-aio = { version = ">=0.4.4", extras = ["mongodb", "pydantic", "redi
 # opentelemetry-api is the OpenTelemetry API
 opentelemetry-api = ">=1.39.1"
 # simple-container is a Python library for working with containers
-simple-container = ">=1.0.1"
+simple-container = ">=1.0.2"
 
 
 [dev-packages]

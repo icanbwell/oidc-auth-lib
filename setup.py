@@ -66,7 +66,7 @@ setup(
         "starlette>=0.49.1",
         "py-key-value-aio[memory,mongodb,pydantic,redis]>=0.4.4",
         "opentelemetry-api>=1.39.1",
-        "simple-container>=1.0.1",
+        "simple-container>=1.0.2",
     ],
     classifiers=[
         "Development Status :: 4 - Beta",
