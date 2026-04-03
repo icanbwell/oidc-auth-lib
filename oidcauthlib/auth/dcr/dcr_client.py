@@ -39,13 +39,19 @@ class DcrClient:
 
         logger.info("Performing DCR at '%s'", registration_url)
 
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=10) as client:
             response = await client.post(
                 registration_url,
                 json=payload,
                 headers={"Content-Type": "application/json"},
             )
-            response.raise_for_status()
+            try:
+                response.raise_for_status()
+            except httpx.HTTPStatusError as e:
+                raise ValueError(
+                    f"DCR registration failed at '{registration_url}' "
+                    f"with status {e.response.status_code}"
+                ) from e
             dcr_response: dict[str, Any] = response.json()
 
         if "client_id" not in dcr_response:

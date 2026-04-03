@@ -117,3 +117,40 @@ async def test_insert_or_update_many_insert_and_update() -> None:
     assert found_alice_updated.value == "updated_value_alice"
     # The created field should be updated since it's provided in the update
     assert found_alice_updated.created == new_created_time
+
+
+@pytest.mark.asyncio
+async def test_insert_or_update_matches_by_keys_not_id() -> None:
+    """insert_or_update should find existing items by keys, not by item.id."""
+    repo: AsyncMemoryRepository[CacheItem] = AsyncMemoryRepository()
+    collection = "cache"
+
+    # Insert an item
+    original = CacheItem(key="alice", value="original", created=datetime.now(UTC))
+    original_id = await repo.insert_or_update(
+        collection_name=collection,
+        model_class=CacheItem,
+        item=original,
+        keys={"key": "alice"},
+    )
+
+    # Update with a new item that has a DIFFERENT ObjectId but same key
+    updated = CacheItem(
+        _id=ObjectId(),  # different ID
+        key="alice",
+        value="updated",
+        created=datetime.now(UTC),
+    )
+    returned_id = await repo.insert_or_update(
+        collection_name=collection,
+        model_class=CacheItem,
+        item=updated,
+        keys={"key": "alice"},
+    )
+
+    # Should reuse the original ID, not create a duplicate
+    assert returned_id == original_id
+    all_items = await repo.find_many(collection, CacheItem)
+    assert len(all_items) == 1
+    assert all_items[0].value == "updated"
+    assert all_items[0].id == original_id

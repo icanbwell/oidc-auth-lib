@@ -22,9 +22,6 @@ from oidcauthlib.auth.exceptions.authorization_needed_exception import (
     AuthorizationNeededException,
 )
 from oidcauthlib.auth.token_reader import TokenReader
-from oidcauthlib.auth.well_known_configuration.well_known_configuration_cache_result import (
-    WellKnownConfigurationCacheResult,
-)
 from oidcauthlib.auth.well_known_configuration.well_known_configuration_manager import (
     WellKnownConfigurationManager,
 )
@@ -131,41 +128,11 @@ class AuthManager:
     async def ensure_initialized_async(self) -> None:
         auth_config: AuthConfig
         for auth_config in self.auth_configs:
-            well_known_result: (
-                WellKnownConfigurationCacheResult | None
-            ) = await self.well_known_configuration_manager.get_async(
-                auth_config=auth_config
-            )
-            server_metadata: dict[str, Any] | None = (
-                well_known_result.well_known_config if well_known_result else None
-            )
-            logger.debug(
-                f"Registering OAuth client for auth provider {auth_config.auth_provider}"
-                + (
-                    f" with well-known configuration: {server_metadata}"
-                    if server_metadata is not None
-                    else f" from {auth_config.well_known_uri}"
+            if auth_config.well_known_uri:
+                await self.well_known_configuration_manager.get_async(
+                    auth_config=auth_config
                 )
-            )
-            self._oauth.register(
-                name=auth_config.auth_provider.lower(),
-                client_id=auth_config.client_id,
-                client_secret=auth_config.client_secret,
-                server_metadata_url=auth_config.well_known_uri,
-                # server_metadata_url=auth_config.well_known_uri
-                # if server_metadata is None
-                # else None,
-                # server_metadata=server_metadata,
-                client_kwargs={
-                    "scope": auth_config.scope,
-                    **(
-                        {"code_challenge_method": auth_config.pkce_method or "S256"}
-                        if auth_config.use_pkce
-                        else {}
-                    ),
-                    "transport": LoggingTransport(httpx.AsyncHTTPTransport()),
-                },
-            )
+            await self.register_dynamic_provider(auth_config=auth_config)
 
     async def register_dynamic_provider(
         self,

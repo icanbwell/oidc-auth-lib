@@ -27,6 +27,7 @@ class DcrManager:
         environment_variables: AbstractEnvironmentVariables,
         collection_name: str,
         redirect_uri: str,
+        dcr_client: DcrClient | None = None,
     ) -> None:
         self._collection_name = collection_name
         self._redirect_uri = redirect_uri
@@ -36,7 +37,7 @@ class DcrManager:
                 environment_variables=environment_variables,
             )
         )
-        self._dcr_client = DcrClient()
+        self._dcr_client = dcr_client or DcrClient()
 
     async def resolve_dcr_credentials(
         self,

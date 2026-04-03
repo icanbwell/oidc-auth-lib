@@ -1,5 +1,5 @@
 from typing import Any, AsyncGenerator
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from simple_container.container.interfaces import IContainer
@@ -36,6 +36,7 @@ def _make_auth_manager() -> AuthManager:
     manager.auth_configs = []
     manager.token_reader = MagicMock()
     manager.well_known_configuration_manager = MagicMock()
+    manager.well_known_configuration_manager.get_async = AsyncMock(return_value=None)
     manager.cache = MagicMock()
     manager.redirect_uri = "http://localhost:5050/auth/callback"
     manager._oauth = MagicMock()
@@ -169,3 +170,96 @@ class TestRegisterDynamicProviderDeduplication:
         )
         await manager.register_dynamic_provider(auth_config=config)
         assert config in manager.auth_configs
+
+
+class TestEnsureInitializedDelegatesToRegisterDynamic:
+    async def test_explicit_endpoints_skip_well_known(self) -> None:
+        """ensure_initialized_async should not call well_known_manager for explicit-endpoint configs."""
+        manager = _make_auth_manager()
+        config = AuthConfig(
+            auth_provider="explicit",
+            friendly_name="Explicit",
+            audience="aud",
+            client_id="cid",
+            scope="openid",
+            authorization_endpoint="https://auth.example.com/authorize",
+            token_endpoint="https://auth.example.com/token",
+        )
+        manager.auth_configs = [config]
+
+        await manager.ensure_initialized_async()
+
+        manager.well_known_configuration_manager.get_async.assert_not_called()  # type: ignore[attr-defined]
+        call_kwargs = _mock_register(manager).call_args[1]
+        assert call_kwargs["authorize_url"] == "https://auth.example.com/authorize"
+        assert call_kwargs["access_token_url"] == "https://auth.example.com/token"
+        assert "server_metadata_url" not in call_kwargs
+
+    async def test_well_known_config_calls_manager(self) -> None:
+        """ensure_initialized_async should call well_known_manager for discovery configs."""
+        manager = _make_auth_manager()
+        config = AuthConfig(
+            auth_provider="discovery",
+            friendly_name="Discovery",
+            audience="aud",
+            client_id="cid",
+            scope="openid",
+            well_known_uri="https://idp.example.com/.well-known/openid-configuration",
+        )
+        manager.auth_configs = [config]
+
+        await manager.ensure_initialized_async()
+
+        manager.well_known_configuration_manager.get_async.assert_called_once_with(  # type: ignore[attr-defined]
+            auth_config=config
+        )
+        call_kwargs = _mock_register(manager).call_args[1]
+        assert call_kwargs["server_metadata_url"] == config.well_known_uri
+
+    async def test_deduplication_across_ensure_and_register(self) -> None:
+        """Providers registered via ensure_initialized should not be re-registered by register_dynamic_provider."""
+        manager = _make_auth_manager()
+        config = AuthConfig(
+            auth_provider="test",
+            friendly_name="Test",
+            audience="aud",
+            client_id="cid",
+            scope="openid",
+            authorization_endpoint="https://auth.example.com/authorize",
+            token_endpoint="https://auth.example.com/token",
+        )
+        manager.auth_configs = [config]
+
+        await manager.ensure_initialized_async()
+        await manager.register_dynamic_provider(auth_config=config)
+
+        assert _mock_register(manager).call_count == 1
+
+    async def test_mixed_configs(self) -> None:
+        """ensure_initialized_async handles a mix of discovery and explicit-endpoint configs."""
+        manager = _make_auth_manager()
+        discovery_config = AuthConfig(
+            auth_provider="discovery",
+            friendly_name="Discovery",
+            audience="aud",
+            client_id="cid1",
+            scope="openid",
+            well_known_uri="https://idp.example.com/.well-known/openid-configuration",
+        )
+        explicit_config = AuthConfig(
+            auth_provider="explicit",
+            friendly_name="Explicit",
+            audience="aud",
+            client_id="cid2",
+            scope="openid",
+            authorization_endpoint="https://auth.example.com/authorize",
+            token_endpoint="https://auth.example.com/token",
+        )
+        manager.auth_configs = [discovery_config, explicit_config]
+
+        await manager.ensure_initialized_async()
+
+        assert _mock_register(manager).call_count == 2
+        manager.well_known_configuration_manager.get_async.assert_called_once_with(  # type: ignore[attr-defined]
+            auth_config=discovery_config
+        )
