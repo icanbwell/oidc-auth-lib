@@ -10,8 +10,14 @@ logger = logging.getLogger(__name__)
 logger.setLevel(SRC_LOG_LEVELS["AUTH"])
 
 
+_DEFAULT_TIMEOUT_SECONDS: int = 10
+
+
 class DcrClient:
     """RFC 7591 Dynamic Client Registration HTTP client."""
+
+    def __init__(self, *, timeout_seconds: int = _DEFAULT_TIMEOUT_SECONDS) -> None:
+        self._timeout_seconds = timeout_seconds
 
     async def register(
         self,
@@ -42,7 +48,7 @@ class DcrClient:
 
         logger.info("Performing DCR at '%s'", registration_url)
 
-        async with httpx.AsyncClient(timeout=10) as client:
+        async with httpx.AsyncClient(timeout=self._timeout_seconds) as client:
             response = await client.post(
                 registration_url,
                 json=payload,

@@ -41,6 +41,15 @@ _BLOCKED_HOSTNAMES = frozenset(
 )
 
 
+def _is_ip_address(value: str) -> bool:
+    """Return True if the string is a valid IPv4 or IPv6 address."""
+    try:
+        ipaddress.ip_address(value)
+    except ValueError:
+        return False
+    return True
+
+
 def _is_private_ip(addr: str) -> bool:
     """Check whether an IP address falls in a blocked network range."""
     try:
@@ -85,13 +94,8 @@ def validate_url(url: str, *, allow_http: bool = False) -> str:
     # --- reject raw IP addresses as hostnames ---
     # SSL/TLS certificates are issued for domain names, not IPs.
     # A raw IP bypasses proper certificate validation.
-    try:
-        ipaddress.ip_address(hostname)
+    if _is_ip_address(hostname):
         raise ValueError(f"URL must use a hostname, not a raw IP address: '{hostname}'")
-    except ValueError as exc:
-        if "raw IP address" in str(exc):
-            raise
-        # Not an IP → it's a proper hostname, continue
 
     # --- resolve DNS and check all IPs ---
     try:

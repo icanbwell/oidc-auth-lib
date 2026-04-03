@@ -92,10 +92,11 @@ class WellKnownConfigurationCache:
     async def read_list_async(self, *, auth_configs: list[AuthConfig]) -> None:
         """Fetch and cache discovery documents for multiple auth configs.
 
+        Configs without a ``well_known_uri`` (e.g. explicit-endpoint configs)
+        are silently skipped.
+
         Args:
-            auth_configs: List of OIDC authorization configurations (must have well_known_uri).
-        Returns:
-            A list of WellKnownConfigurationCacheResult for successfully fetched configs.
+            auth_configs: List of OIDC authorization configurations.
         Notes:
             - Populates the in-memory cache and optional backing store.
             - Aggregates JWKS into the class-level jwks KeySet.

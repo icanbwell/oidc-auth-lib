@@ -136,7 +136,7 @@ class DcrManager:
             item.updated = now
             return item
 
-        await self._repository.insert_or_update(
+        persisted_id = await self._repository.insert_or_update(
             collection_name=self._collection_name,
             item=registration,
             keys={
@@ -148,4 +148,5 @@ class DcrManager:
             on_update=on_update,
         )
 
-        return registration
+        # Return with the actual persisted ID (may differ on update)
+        return registration.model_copy(update={"id": persisted_id})
