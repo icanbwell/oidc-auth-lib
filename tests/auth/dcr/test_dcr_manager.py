@@ -1,12 +1,17 @@
 import time
 from datetime import UTC, datetime
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from bson import ObjectId
 
 from oidcauthlib.auth.dcr.dcr_manager import DcrManager
 from oidcauthlib.auth.dcr.dcr_registration import DcrRegistration
+
+# All tests patch validate_url because the repository and dcr_client are
+# already mocked — no real network calls are made, so DNS resolution of
+# test hostnames is irrelevant.
+_PATCH_VALIDATE = "oidcauthlib.auth.dcr.dcr_manager.validate_url"
 
 
 def _make_manager(
@@ -36,7 +41,8 @@ class TestPreRegisteredPassthrough:
 
 
 class TestCachedCredentials:
-    async def test_returns_cached_registration(self) -> None:
+    @patch(_PATCH_VALIDATE)
+    async def test_returns_cached_registration(self, _mock_validate: object) -> None:
         cached = DcrRegistration(
             _id=ObjectId(),
             created=datetime.now(UTC),
@@ -60,7 +66,8 @@ class TestCachedCredentials:
 
 
 class TestExpiredCredentials:
-    async def test_re_registers_when_expired(self) -> None:
+    @patch(_PATCH_VALIDATE)
+    async def test_re_registers_when_expired(self, _mock_validate: object) -> None:
         expired = DcrRegistration(
             _id=ObjectId(),
             created=datetime.now(UTC),
@@ -92,7 +99,8 @@ class TestExpiredCredentials:
 
 
 class TestNewRegistration:
-    async def test_performs_dcr_and_persists(self) -> None:
+    @patch(_PATCH_VALIDATE)
+    async def test_performs_dcr_and_persists(self, _mock_validate: object) -> None:
         manager = _make_manager()
         manager._dcr_client.register = AsyncMock(  # type: ignore[method-assign]
             return_value={
@@ -124,3 +132,35 @@ class TestMissingRegistrationUrl:
                 auth_provider="test",
                 registration_url=None,
             )
+
+
+class TestUrlValidation:
+    async def test_validates_url_before_cache_lookup(self) -> None:
+        """URL validation must fire before any cache or HTTP work."""
+        manager = _make_manager()
+        with pytest.raises(ValueError, match="blocked"):
+            await manager.resolve_dcr_credentials(
+                auth_provider="test",
+                registration_url="https://localhost/register",
+            )
+        # No cache lookup or HTTP call should have been attempted
+        manager._repository.find_many.assert_not_called()  # type: ignore[attr-defined]
+        manager._dcr_client.register.assert_not_called()  # type: ignore[attr-defined]
+
+    async def test_rejects_private_ip_hostname(self) -> None:
+        manager = _make_manager()
+        with pytest.raises(ValueError, match="raw IP address"):
+            await manager.resolve_dcr_credentials(
+                auth_provider="test",
+                registration_url="https://10.0.0.1/register",
+            )
+        manager._repository.find_many.assert_not_called()  # type: ignore[attr-defined]
+
+    async def test_rejects_http_scheme(self) -> None:
+        manager = _make_manager()
+        with pytest.raises(ValueError, match="scheme must be https"):
+            await manager.resolve_dcr_credentials(
+                auth_provider="test",
+                registration_url="http://auth.example.com/register",
+            )
+        manager._repository.find_many.assert_not_called()  # type: ignore[attr-defined]

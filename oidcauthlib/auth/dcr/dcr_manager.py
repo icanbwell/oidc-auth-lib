@@ -13,6 +13,7 @@ from oidcauthlib.utilities.environment.abstract_environment_variables import (
     AbstractEnvironmentVariables,
 )
 from oidcauthlib.utilities.logger.log_levels import SRC_LOG_LEVELS
+from oidcauthlib.utilities.url_validator import validate_url
 
 logger = logging.getLogger(__name__)
 logger.setLevel(SRC_LOG_LEVELS["AUTH"])
@@ -58,6 +59,8 @@ class DcrManager:
                 f"registration_url is required for DCR when client_id is not "
                 f"provided (auth_provider='{auth_provider}')"
             )
+
+        validate_url(registration_url)
 
         cached = await self._find_cached(
             auth_provider=auth_provider,
