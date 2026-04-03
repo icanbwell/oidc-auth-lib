@@ -109,9 +109,11 @@ class WellKnownConfigurationCache:
             has_missing_well_known_cache: bool = False
             for auth_config in auth_configs:
                 if not auth_config.well_known_uri:
-                    raise ValueError(
-                        f"AuthConfig {auth_config} is missing well_known_uri"
+                    logger.debug(
+                        "Skipping AuthConfig '%s' in read_list_async — no well_known_uri",
+                        auth_config.auth_provider,
                     )
+                    continue
                 well_known_uri: str = auth_config.well_known_uri
 
                 # Fast path: cache hit via store
