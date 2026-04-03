@@ -1413,6 +1413,14 @@
             "markers": "python_version >= '3.9'",
             "version": "==4.4.0"
         },
+        "jeepney": {
+            "hashes": [
+                "sha256:97e5714520c16fc0a45695e5365a2e11b81ea79bba796e26f9f1d178cb182683",
+                "sha256:cf0e9e845622b81e4a28df94c40345400256ec608d0e55bb8a3feaa9163f5732"
+            ],
+            "markers": "python_version >= '3.7'",
+            "version": "==0.9.0"
+        },
         "keyring": {
             "hashes": [
                 "sha256:be4a0b195f149690c166e850609a477c532ddbfbaed96a404d4e43f8d5e2689f",
@@ -2109,6 +2117,14 @@
             "index": "pypi",
             "markers": "python_version >= '3.7'",
             "version": "==0.15.9"
+        },
+        "secretstorage": {
+            "hashes": [
+                "sha256:0ce65888c0725fcb2c5bc0fdb8e5438eece02c523557ea40ce0703c266248137",
+                "sha256:f04b8e4689cbce351744d5537bf6b1329c6fc68f91fa666f60a380edddcd11be"
+            ],
+            "markers": "python_version >= '3.10'",
+            "version": "==3.5.0"
         },
         "sentinels": {
             "hashes": [
