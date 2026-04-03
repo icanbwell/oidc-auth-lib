@@ -1,5 +1,5 @@
 from pydantic import BaseModel, ConfigDict, Field
-from typing import Optional, Any
+from typing import Optional, Any, Literal
 
 
 class AuthConfig(BaseModel):
@@ -50,4 +50,25 @@ class AuthConfig(BaseModel):
             "Keys and values must be strings (for example, settings derived from environment "
             "variables or other string-based configuration sources)."
         ),
+    )
+
+    authorization_endpoint: Optional[str] = Field(
+        default=None,
+        description="The authorization endpoint URL (explicit-endpoints flow).",
+    )
+    token_endpoint: Optional[str] = Field(
+        default=None,
+        description="The token endpoint URL (explicit-endpoints flow).",
+    )
+    use_pkce: bool = Field(
+        default=True,
+        description="Whether to use PKCE. Defaults to True (OAuth 2.1 standard).",
+    )
+    pkce_method: Literal["S256", "plain"] | None = Field(
+        default="S256",
+        description="PKCE challenge method. Defaults to S256.",
+    )
+    registration_url: Optional[str] = Field(
+        default=None,
+        description="RFC 7591 Dynamic Client Registration endpoint URL.",
     )
