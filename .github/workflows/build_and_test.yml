@@ -18,7 +18,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version: '3.13'
 
       - name: Pull docker images
         run: docker compose pull
@@ -68,7 +68,7 @@ jobs:
       # Publish all test results in the GitHub UI
       - name: Surface failing tests
         if: always()
-        uses: pmeier/pytest-results-action@main # https://github.com/pmeier/pytest-results-action
+        uses: pmeier/pytest-results-action@v1 # https://github.com/pmeier/pytest-results-action
         with:
           # A list of JUnit XML files, directories containing the former, and wildcard
           # patterns to process.
