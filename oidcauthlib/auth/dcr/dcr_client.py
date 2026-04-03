@@ -49,9 +49,10 @@ class DcrClient:
             dcr_response: dict[str, Any] = response.json()
 
         if "client_id" not in dcr_response:
+            response_keys: list[str] = sorted(dcr_response.keys())
             raise ValueError(
-                f"DCR response from '{registration_url}' missing 'client_id': "
-                f"{dcr_response}"
+                f"DCR response from '{registration_url}' missing 'client_id'. "
+                f"Response keys: {response_keys}"
             )
 
         logger.info(
