@@ -164,3 +164,35 @@ class TestUrlValidation:
                 registration_url="http://auth.example.com/register",
             )
         manager._repository.find_many.assert_not_called()  # type: ignore[attr-defined]
+
+
+class TestPersistNoDuplicates:
+    """Verify that re-registration updates rather than duplicates."""
+
+    @patch(_PATCH_VALIDATE)
+    async def test_persist_uses_keys_not_id(self, _mock_validate: object) -> None:
+        """Two persists for the same provider/url should call insert_or_update
+        with matching keys, ensuring upsert rather than duplicate insert."""
+        manager = _make_manager()
+        manager._dcr_client.register = AsyncMock(  # type: ignore[method-assign]
+            return_value={
+                "client_id": "id-1",
+                "client_secret": "secret-1",
+                "client_secret_expires_at": 0,
+            }
+        )
+        manager._repository.insert_or_update = AsyncMock(  # type: ignore[method-assign]
+            return_value=ObjectId()
+        )
+
+        await manager.resolve_dcr_credentials(
+            auth_provider="test",
+            registration_url="https://auth.example.com/register",
+        )
+
+        # Verify insert_or_update was called with keys for upsert matching
+        call_kwargs = manager._repository.insert_or_update.call_args[1]
+        assert call_kwargs["keys"] == {
+            "auth_provider": "test",
+            "registration_url": "https://auth.example.com/register",
+        }
