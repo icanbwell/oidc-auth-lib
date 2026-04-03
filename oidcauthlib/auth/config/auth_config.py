@@ -1,5 +1,5 @@
-from pydantic import BaseModel, ConfigDict, Field
-from typing import Optional, Any, Literal
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+from typing import Optional, Any, Literal, Self
 
 
 class AuthConfig(BaseModel):
@@ -25,9 +25,9 @@ class AuthConfig(BaseModel):
         default=None,
         description="The issuer of the token, typically the URL of the auth provider.",
     )
-    client_id: str = Field(
-        ...,
-        description="The client ID for the auth provider, used to identify the application making the request.",
+    client_id: Optional[str] = Field(
+        default=None,
+        description="The client ID for the auth provider. Optional when using DCR (registration_url).",
     )
     client_secret: Optional[str] = Field(
         default=None,
@@ -72,3 +72,12 @@ class AuthConfig(BaseModel):
         default=None,
         description="RFC 7591 Dynamic Client Registration endpoint URL.",
     )
+
+    @model_validator(mode="after")
+    def _require_client_id_or_registration_url(self) -> Self:
+        if not self.client_id and not self.registration_url:
+            raise ValueError(
+                f"AuthConfig for '{self.auth_provider}' must have either "
+                f"client_id or registration_url (for DCR)"
+            )
+        return self

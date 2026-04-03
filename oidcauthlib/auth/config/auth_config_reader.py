@@ -130,13 +130,6 @@ class AuthConfigReader:
         logger.debug(f"Standardized auth provider name to: {auth_provider_upper}")
         # read client_id and client_secret from the environment variables
         auth_client_id: str | None = os.getenv(f"AUTH_CLIENT_ID_{auth_provider_upper}")
-        if auth_client_id is None:
-            logger.error(
-                f"AUTH_CLIENT_ID_{auth_provider_upper} environment variable is not set"
-            )
-            raise ValueError(
-                f"AUTH_CLIENT_ID_{auth_provider_upper} environment variable must be set"
-            )
         auth_client_secret: str | None = os.getenv(
             f"AUTH_CLIENT_SECRET_{auth_provider_upper}"
         )
@@ -147,13 +140,6 @@ class AuthConfigReader:
         auth_well_known_uri: str | None = os.getenv(
             f"AUTH_WELL_KNOWN_URI_{auth_provider_upper}"
         )
-        if auth_well_known_uri is None:
-            logger.error(
-                f"AUTH_WELL_KNOWN_URI_{auth_provider_upper} environment variable is not set"
-            )
-            raise ValueError(
-                f"AUTH_WELL_KNOWN_URI_{auth_provider_upper} environment variable must be set"
-            )
         issuer: str | None = os.getenv(f"AUTH_ISSUER_{auth_provider_upper}")
         logger.debug(
             f"Issuer for {auth_provider_upper}: {issuer if issuer else 'not set'}"
@@ -201,6 +187,16 @@ class AuthConfigReader:
             extra_info_dict = {str(key): value for key, value in extra_info_raw.items()}
         else:
             extra_info_dict = None
+        authorization_endpoint: str | None = os.getenv(
+            f"AUTH_AUTHORIZATION_ENDPOINT_{auth_provider_upper}"
+        )
+        token_endpoint: str | None = os.getenv(
+            f"AUTH_TOKEN_ENDPOINT_{auth_provider_upper}"
+        )
+        registration_url: str | None = os.getenv(
+            f"AUTH_REGISTRATION_URL_{auth_provider_upper}"
+        )
+
         return AuthConfig(
             auth_provider=auth_provider,
             friendly_name=friendly_name,
@@ -211,6 +207,9 @@ class AuthConfigReader:
             well_known_uri=auth_well_known_uri,
             scope=scope,
             extra_info=extra_info_dict,
+            authorization_endpoint=authorization_endpoint,
+            token_endpoint=token_endpoint,
+            registration_url=registration_url,
         )
 
     def get_audience_for_provider(self, *, auth_provider: str) -> str:

@@ -6,6 +6,7 @@ from simple_container.container.interfaces import IContainer
 
 from oidcauthlib.auth.auth_manager import AuthManager
 from oidcauthlib.auth.config.auth_config import AuthConfig
+from oidcauthlib.auth.dcr.dcr_registration import DcrRegistration
 
 pytestmark = pytest.mark.asyncio
 
@@ -27,7 +28,7 @@ def _mock_register(manager: AuthManager) -> Any:
     return manager._oauth.register
 
 
-def _make_auth_manager() -> AuthManager:
+def _make_auth_manager(*, dcr_manager: Any = None) -> AuthManager:
     """Create AuthManager with mocked dependencies."""
     manager = object.__new__(AuthManager)
     manager.environment_variables = MagicMock()
@@ -42,6 +43,7 @@ def _make_auth_manager() -> AuthManager:
     manager._oauth = MagicMock()
     manager._oauth.register = MagicMock()
     manager._registered_dynamic_providers = set()
+    manager._dcr_manager = dcr_manager
     return manager
 
 
@@ -263,3 +265,84 @@ class TestEnsureInitializedDelegatesToRegisterDynamic:
         manager.well_known_configuration_manager.get_async.assert_called_once_with(  # type: ignore[attr-defined]
             auth_config=discovery_config
         )
+
+
+class TestRegisterDynamicProviderDCR:
+    """Tests for the DCR integration in register_dynamic_provider."""
+
+    async def test_dcr_resolves_client_id_when_missing(self) -> None:
+        """When client_id is None and DcrManager is provided, DCR should be called."""
+        from datetime import UTC, datetime
+
+        from bson import ObjectId
+
+        dcr_result = DcrRegistration(
+            _id=ObjectId(),
+            created=datetime.now(UTC),
+            auth_provider="dcr-provider",
+            registration_url="https://auth.example.com/register",
+            client_id="dcr-resolved-id",
+            client_secret="dcr-resolved-secret",  # pragma: allowlist secret
+            client_secret_expires_at=0,
+            registration_response={},
+        )
+        mock_dcr_manager = MagicMock()
+        mock_dcr_manager.resolve_dcr_credentials = AsyncMock(return_value=dcr_result)
+
+        manager = _make_auth_manager(dcr_manager=mock_dcr_manager)
+        config = AuthConfig(
+            auth_provider="dcr-provider",
+            friendly_name="DCR Provider",
+            audience="aud",
+            scope="openid",
+            registration_url="https://auth.example.com/register",
+            well_known_uri="https://idp.example.com/.well-known/openid-configuration",
+        )
+
+        await manager.register_dynamic_provider(auth_config=config)
+
+        mock_dcr_manager.resolve_dcr_credentials.assert_called_once_with(
+            auth_provider="dcr-provider",
+            registration_url="https://auth.example.com/register",
+        )
+        call_kwargs = _mock_register(manager).call_args[1]
+        assert call_kwargs["client_id"] == "dcr-resolved-id"
+        assert (
+            call_kwargs["client_secret"] == "dcr-resolved-secret"
+        )  # pragma: allowlist secret
+
+    async def test_dcr_raises_when_no_dcr_manager(self) -> None:
+        """When client_id is None and no DcrManager, should raise ValueError."""
+        manager = _make_auth_manager(dcr_manager=None)
+        config = AuthConfig(
+            auth_provider="no-dcr",
+            friendly_name="No DCR",
+            audience="aud",
+            scope="openid",
+            registration_url="https://auth.example.com/register",
+            well_known_uri="https://idp.example.com/.well-known/openid-configuration",
+        )
+
+        with pytest.raises(ValueError, match="no DcrManager is configured"):
+            await manager.register_dynamic_provider(auth_config=config)
+
+    async def test_dcr_not_called_when_client_id_present(self) -> None:
+        """When client_id is provided, DCR should not be invoked."""
+        mock_dcr_manager = MagicMock()
+        mock_dcr_manager.resolve_dcr_credentials = AsyncMock()
+
+        manager = _make_auth_manager(dcr_manager=mock_dcr_manager)
+        config = AuthConfig(
+            auth_provider="pre-registered",
+            friendly_name="Pre-registered",
+            audience="aud",
+            client_id="existing-id",
+            scope="openid",
+            well_known_uri="https://idp.example.com/.well-known/openid-configuration",
+        )
+
+        await manager.register_dynamic_provider(auth_config=config)
+
+        mock_dcr_manager.resolve_dcr_credentials.assert_not_called()
+        call_kwargs = _mock_register(manager).call_args[1]
+        assert call_kwargs["client_id"] == "existing-id"
