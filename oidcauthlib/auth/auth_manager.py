@@ -122,6 +122,7 @@ class AuthManager:
             raise ValueError("AUTH_REDIRECT_URI environment variable must be set")
         # https://docs.authlib.org/en/latest/client/frameworks.html#frameworks-clients
         self._oauth: OAuth = OAuth(cache=self.cache)
+        self._registered_dynamic_providers: set[str] = set()
         # read AUTH_PROVIDERS comma separated list from the environment variable and register the OIDC provider for each provider
         self.auth_configs: List[AuthConfig] = (
             self.auth_config_reader.get_auth_configs_for_all_auth_providers()
@@ -157,10 +158,82 @@ class AuthManager:
                 # server_metadata=server_metadata,
                 client_kwargs={
                     "scope": auth_config.scope,
-                    "code_challenge_method": "S256",
+                    **(
+                        {"code_challenge_method": auth_config.pkce_method or "S256"}
+                        if auth_config.use_pkce
+                        else {}
+                    ),
                     "transport": LoggingTransport(httpx.AsyncHTTPTransport()),
                 },
             )
+
+    async def register_dynamic_provider(
+        self,
+        *,
+        auth_config: AuthConfig,
+    ) -> None:
+        """Register an OAuth provider dynamically at runtime.
+
+        Handles explicit endpoints, discovery, configurable PKCE, and deduplication.
+        """
+        provider_name = auth_config.auth_provider.lower()
+
+        if provider_name in self._registered_dynamic_providers:
+            return
+
+        client_kwargs: dict[str, Any] = {
+            "scope": auth_config.scope,
+            "transport": LoggingTransport(httpx.AsyncHTTPTransport()),
+        }
+
+        if auth_config.use_pkce and auth_config.pkce_method:
+            pkce_method = auth_config.pkce_method
+            if pkce_method not in ("S256", "plain"):
+                logger.warning(
+                    "Invalid pkce_method '%s' for provider '%s', defaulting to S256",
+                    pkce_method,
+                    auth_config.auth_provider,
+                )
+                pkce_method = "S256"
+            client_kwargs["code_challenge_method"] = pkce_method
+        elif auth_config.use_pkce:
+            client_kwargs["code_challenge_method"] = "S256"
+
+        register_kwargs: dict[str, Any] = {
+            "name": provider_name,
+            "client_id": auth_config.client_id,
+            "client_secret": auth_config.client_secret,
+            "client_kwargs": client_kwargs,
+        }
+
+        if auth_config.authorization_endpoint and auth_config.token_endpoint:
+            register_kwargs["authorize_url"] = auth_config.authorization_endpoint
+            register_kwargs["access_token_url"] = auth_config.token_endpoint
+        elif auth_config.well_known_uri:
+            register_kwargs["server_metadata_url"] = auth_config.well_known_uri
+        else:
+            raise ValueError(
+                f"AuthConfig for '{auth_config.auth_provider}' must have either "
+                f"well_known_uri or both authorization_endpoint and token_endpoint"
+            )
+
+        self._oauth.register(**register_kwargs)
+        self._registered_dynamic_providers.add(provider_name)
+
+        if auth_config not in self.auth_configs:
+            self.auth_configs.append(auth_config)
+
+        logger.info(
+            "Dynamically registered OAuth provider '%s' "
+            "(client_id=%s, well_known=%s, authorize=%s, token=%s, pkce=%s/%s)",
+            auth_config.auth_provider,
+            auth_config.client_id,
+            auth_config.well_known_uri,
+            auth_config.authorization_endpoint,
+            auth_config.token_endpoint,
+            auth_config.use_pkce,
+            auth_config.pkce_method,
+        )
 
     async def create_authorization_url(
         self,
