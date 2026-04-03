@@ -4,6 +4,7 @@ from typing import Any
 import httpx
 
 from oidcauthlib.utilities.logger.log_levels import SRC_LOG_LEVELS
+from oidcauthlib.utilities.url_validator import validate_url
 
 logger = logging.getLogger(__name__)
 logger.setLevel(SRC_LOG_LEVELS["AUTH"])
@@ -22,6 +23,8 @@ class DcrClient:
         logo_uri: str | None = None,
         contacts: list[str] | None = None,
     ) -> dict[str, Any]:
+        validate_url(registration_url)
+
         payload: dict[str, Any] = {
             "redirect_uris": [redirect_uri],
             "grant_types": ["authorization_code", "refresh_token"],

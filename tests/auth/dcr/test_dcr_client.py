@@ -3,6 +3,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from oidcauthlib.auth.dcr.dcr_client import DcrClient
 
+# All tests patch validate_url because httpx is also mocked — no real
+# network calls are made, so DNS resolution of test hostnames is irrelevant.
+_PATCH_VALIDATE = "oidcauthlib.auth.dcr.dcr_client.validate_url"
+
 
 class TestDcrClient:
     async def test_register_sends_correct_payload(self) -> None:
@@ -12,7 +16,10 @@ class TestDcrClient:
             "client_secret": "new-secret",
             "client_secret_expires_at": 0,
         }
-        with patch("oidcauthlib.auth.dcr.dcr_client.httpx.AsyncClient") as mock_httpx:
+        with (
+            patch(_PATCH_VALIDATE),
+            patch("oidcauthlib.auth.dcr.dcr_client.httpx.AsyncClient") as mock_httpx,
+        ):
             mock_response = MagicMock()
             mock_response.status_code = 201
             mock_response.json.return_value = dcr_response
@@ -49,7 +56,10 @@ class TestDcrClient:
     async def test_register_without_optional_metadata(self) -> None:
         client = DcrClient()
         dcr_response = {"client_id": "new-id", "client_secret_expires_at": 0}
-        with patch("oidcauthlib.auth.dcr.dcr_client.httpx.AsyncClient") as mock_httpx:
+        with (
+            patch(_PATCH_VALIDATE),
+            patch("oidcauthlib.auth.dcr.dcr_client.httpx.AsyncClient") as mock_httpx,
+        ):
             mock_response = MagicMock()
             mock_response.status_code = 201
             mock_response.json.return_value = dcr_response
@@ -73,7 +83,10 @@ class TestDcrClient:
 
     async def test_register_raises_on_missing_client_id(self) -> None:
         client = DcrClient()
-        with patch("oidcauthlib.auth.dcr.dcr_client.httpx.AsyncClient") as mock_httpx:
+        with (
+            patch(_PATCH_VALIDATE),
+            patch("oidcauthlib.auth.dcr.dcr_client.httpx.AsyncClient") as mock_httpx,
+        ):
             mock_response = MagicMock()
             mock_response.status_code = 201
             mock_response.json.return_value = {"no_client_id": True}
@@ -91,3 +104,26 @@ class TestDcrClient:
                     registration_url="https://auth.example.com/register",
                     redirect_uri="http://localhost:5050/auth/callback",
                 )
+
+    async def test_register_calls_validate_url(self) -> None:
+        """Verify SSRF protection is invoked before any HTTP request."""
+        client = DcrClient()
+        with patch(_PATCH_VALIDATE) as mock_validate:
+            mock_validate.side_effect = ValueError("blocked")
+            with pytest.raises(ValueError, match="blocked"):
+                await client.register(
+                    registration_url="http://169.254.169.254/latest/meta-data/",
+                    redirect_uri="http://localhost:5050/auth/callback",
+                )
+            mock_validate.assert_called_once_with(
+                "http://169.254.169.254/latest/meta-data/"
+            )
+
+    async def test_register_rejects_private_url(self) -> None:
+        """End-to-end: validate_url (unpatched) blocks localhost."""
+        client = DcrClient()
+        with pytest.raises(ValueError, match="blocked"):
+            await client.register(
+                registration_url="https://localhost/register",
+                redirect_uri="http://localhost:5050/auth/callback",
+            )
