@@ -52,17 +52,38 @@ class TestHostnameValidation:
         with pytest.raises(ValueError, match="blocked"):
             validate_url("https://localhost.localdomain/register")
 
-    def test_metadata_endpoint_rejected(self) -> None:
-        with pytest.raises(ValueError, match="blocked"):
-            validate_url("https://169.254.169.254/latest/meta-data/")
-
     def test_gcp_metadata_rejected(self) -> None:
         with pytest.raises(ValueError, match="blocked"):
             validate_url("https://metadata.google.internal/computeMetadata/")
 
 
-class TestPrivateIPRanges:
-    """Validate that all RFC 1918 and reserved ranges are rejected."""
+class TestRawIPRejection:
+    """SSL/TLS certs are issued for hostnames, not IPs. Raw IPs must be rejected."""
+
+    def test_public_ipv4_rejected(self) -> None:
+        with pytest.raises(ValueError, match="raw IP address"):
+            validate_url("https://93.184.216.34/register")
+
+    def test_private_ipv4_rejected(self) -> None:
+        with pytest.raises(ValueError, match="raw IP address"):
+            validate_url("https://10.0.0.1/register")
+
+    def test_loopback_ipv4_rejected(self) -> None:
+        with pytest.raises(ValueError, match="raw IP address"):
+            validate_url("https://127.0.0.1/register")
+
+    def test_metadata_ip_rejected(self) -> None:
+        """AWS/GCP/Azure metadata endpoint as raw IP (caught by hostname blocklist)."""
+        with pytest.raises(ValueError, match="blocked"):
+            validate_url("https://169.254.169.254/latest/meta-data/")
+
+    def test_ipv6_rejected(self) -> None:
+        with pytest.raises(ValueError, match="raw IP address"):
+            validate_url("https://[::1]/register")
+
+
+class TestDNSRebindingProtection:
+    """Hostnames that resolve to private IPs are rejected after DNS resolution."""
 
     @pytest.mark.parametrize(
         "ip",
@@ -80,7 +101,7 @@ class TestPrivateIPRanges:
             "100.64.0.1",
         ],
     )
-    def test_private_ipv4_rejected(self, ip: str) -> None:
+    def test_private_ipv4_resolved_rejected(self, ip: str) -> None:
         with patch(
             "oidcauthlib.utilities.url_validator.socket.getaddrinfo"
         ) as mock_gai:
@@ -96,7 +117,7 @@ class TestPrivateIPRanges:
             "fe80::1",
         ],
     )
-    def test_private_ipv6_rejected(self, ip: str) -> None:
+    def test_private_ipv6_resolved_rejected(self, ip: str) -> None:
         with patch(
             "oidcauthlib.utilities.url_validator.socket.getaddrinfo"
         ) as mock_gai:
@@ -105,7 +126,7 @@ class TestPrivateIPRanges:
                 validate_url("https://some-external-host.com/register")
 
 
-class TestPublicIPsAccepted:
+class TestPublicHostnamesAccepted:
     @pytest.mark.parametrize(
         "ip",
         [
@@ -114,7 +135,7 @@ class TestPublicIPsAccepted:
             "104.16.132.229",
         ],
     )
-    def test_public_ipv4_accepted(self, ip: str) -> None:
+    def test_public_hostname_resolving_to_public_ip(self, ip: str) -> None:
         with patch(
             "oidcauthlib.utilities.url_validator.socket.getaddrinfo"
         ) as mock_gai:
