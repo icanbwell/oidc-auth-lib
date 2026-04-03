@@ -13,11 +13,6 @@ def _make_manager(
     *,
     find_many_return: list[DcrRegistration] | None = None,
 ) -> DcrManager:
-    mock_env = MagicMock()
-    mock_env.mongo_uri = "mongodb://localhost"
-    mock_env.mongo_db_name = "test"
-    mock_env.oauth_cache = "mongo"
-
     manager = object.__new__(DcrManager)
     manager._collection_name = "dcr_registrations"
     manager._redirect_uri = "http://localhost:5050/auth/callback"
