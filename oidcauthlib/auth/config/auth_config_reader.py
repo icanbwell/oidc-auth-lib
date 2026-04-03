@@ -69,8 +69,11 @@ class AuthConfigReader:
                 return self._auth_configs
             auth_providers: list[str] | None = self.environment_variables.auth_providers
             if auth_providers is None:
-                logger.error("auth_providers environment variable is not set")
-                raise ValueError("auth_providers environment variable must be set")
+                logger.info(
+                    "AUTH_PROVIDERS environment variable is not set. "
+                    "Starting with empty provider list (can be populated via register_auth_configs)."
+                )
+                auth_providers = []
             logger.info(f"Loading auth configs for providers: {auth_providers}")
             auth_configs: list[AuthConfig] = []
             for auth_provider in auth_providers:
@@ -109,6 +112,48 @@ class AuthConfigReader:
                 return auth_config
         logger.warning(f"No config found for auth provider: {auth_provider}")
         return None
+
+    def register_auth_configs(self, *, configs: list[AuthConfig]) -> None:
+        """Register auth configs from an external source (e.g. .mcp.json).
+
+        Merges with any configs already loaded from environment variables.
+        Duplicate auth_provider names (case-insensitive) are skipped.
+        Thread-safe.
+        """
+        if not configs:
+            return
+        with self._lock:
+            if self._auth_configs is None:
+                auth_providers: list[str] | None = (
+                    self.environment_variables.auth_providers
+                )
+                if auth_providers is None:
+                    auth_providers = []
+                env_configs: list[AuthConfig] = []
+                for auth_provider in auth_providers:
+                    auth_config = self.read_config_for_auth_provider(
+                        auth_provider=auth_provider
+                    )
+                    if auth_config is not None:
+                        env_configs.append(auth_config)
+                self._auth_configs = env_configs
+
+            existing_names: set[str] = {
+                c.auth_provider.lower() for c in self._auth_configs
+            }
+            for config in configs:
+                if config.auth_provider.lower() not in existing_names:
+                    self._auth_configs.append(config)
+                    existing_names.add(config.auth_provider.lower())
+                    logger.info(
+                        "Registered external auth provider: %s",
+                        config.auth_provider,
+                    )
+                else:
+                    logger.debug(
+                        "Skipping duplicate auth provider: %s",
+                        config.auth_provider,
+                    )
 
     # noinspection PyMethodMayBeStatic
     def read_config_for_auth_provider(self, *, auth_provider: str) -> AuthConfig | None:
