@@ -46,7 +46,16 @@ class DcrClient:
         if contacts:
             payload["contacts"] = contacts
 
-        logger.info("Performing DCR at '%s'", registration_url)
+        logger.info(
+            "DCR: Sending registration request to '%s' with payload keys: %s",
+            registration_url,
+            sorted(payload.keys()),
+        )
+        logger.debug(
+            "DCR: Full registration payload for '%s': %s",
+            registration_url,
+            payload,
+        )
 
         async with httpx.AsyncClient(timeout=self._timeout_seconds) as client:
             response = await client.post(
@@ -57,6 +66,12 @@ class DcrClient:
             try:
                 response.raise_for_status()
             except httpx.HTTPStatusError as e:
+                logger.error(
+                    "DCR: Registration failed at '%s' — HTTP %s. Response body: %s",
+                    registration_url,
+                    e.response.status_code,
+                    e.response.text[:500],
+                )
                 raise ValueError(
                     f"DCR registration failed at '{registration_url}' "
                     f"with status {e.response.status_code}"
@@ -65,14 +80,27 @@ class DcrClient:
 
         if "client_id" not in dcr_response:
             response_keys: list[str] = sorted(dcr_response.keys())
+            logger.error(
+                "DCR: Response from '%s' missing 'client_id'. Keys present: %s",
+                registration_url,
+                response_keys,
+            )
             raise ValueError(
                 f"DCR response from '{registration_url}' missing 'client_id'. "
                 f"Response keys: {response_keys}"
             )
 
         logger.info(
-            "DCR successful at '%s': client_id=%s",
+            "DCR: Registration successful at '%s' — client_id=%s, "
+            "has_secret=%s, expires_at=%s",
             registration_url,
             dcr_response["client_id"],
+            "client_secret" in dcr_response,
+            dcr_response.get("client_secret_expires_at", "not_set"),
+        )
+        logger.debug(
+            "DCR: Full response from '%s': %s",
+            registration_url,
+            {k: v for k, v in dcr_response.items() if k != "client_secret"},
         )
         return dcr_response

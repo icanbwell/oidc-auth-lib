@@ -52,9 +52,20 @@ class DcrManager:
         contacts: list[str] | None = None,
     ) -> DcrRegistration | None:
         if client_id:
+            logger.info(
+                "DCR: Skipping registration for '%s' — client_id already "
+                "provided (client_id=%s)",
+                auth_provider,
+                client_id,
+            )
             return None
 
         if not registration_url:
+            logger.error(
+                "DCR: No registration_url and no client_id for '%s' — "
+                "cannot resolve credentials",
+                auth_provider,
+            )
             raise ValueError(
                 f"registration_url is required for DCR when client_id is not "
                 f"provided (auth_provider='{auth_provider}')"
@@ -62,18 +73,42 @@ class DcrManager:
 
         validate_url(registration_url)
 
+        logger.info(
+            "DCR: Resolving credentials for '%s' via registration_url='%s'",
+            auth_provider,
+            registration_url,
+        )
+
         cached = await self._find_cached(
             auth_provider=auth_provider,
             registration_url=registration_url,
         )
 
         if cached and not self._is_expired(cached):
-            logger.debug(
-                "Using cached DCR credentials for '%s' (client_id=%s)",
+            logger.info(
+                "DCR: Using cached credentials for '%s' — client_id=%s, "
+                "expires_at=%s",
                 auth_provider,
                 cached.client_id,
+                cached.client_secret_expires_at or "never",
             )
             return cached
+
+        if cached and self._is_expired(cached):
+            logger.info(
+                "DCR: Cached credentials for '%s' are expired "
+                "(client_id=%s, expired_at=%s) — re-registering",
+                auth_provider,
+                cached.client_id,
+                cached.client_secret_expires_at,
+            )
+        else:
+            logger.info(
+                "DCR: No cached credentials found for '%s' — performing "
+                "new registration at '%s'",
+                auth_provider,
+                registration_url,
+            )
 
         dcr_response = await self._dcr_client.register(
             registration_url=registration_url,
@@ -84,11 +119,17 @@ class DcrManager:
             contacts=contacts,
         )
 
-        return await self._persist(
+        registration = await self._persist(
             auth_provider=auth_provider,
             registration_url=registration_url,
             dcr_response=dcr_response,
         )
+        logger.info(
+            "DCR: Persisted credentials for '%s' — client_id=%s",
+            auth_provider,
+            registration.client_id,
+        )
+        return registration
 
     async def _find_cached(
         self,
@@ -96,6 +137,13 @@ class DcrManager:
         auth_provider: str,
         registration_url: str,
     ) -> DcrRegistration | None:
+        logger.debug(
+            "DCR: Querying cache for auth_provider='%s', "
+            "registration_url='%s', collection='%s'",
+            auth_provider,
+            registration_url,
+            self._collection_name,
+        )
         results = await self._repository.find_many(
             collection_name=self._collection_name,
             model_class=DcrRegistration,
@@ -104,6 +152,20 @@ class DcrManager:
                 "registration_url": registration_url,
             },
         )
+        if results:
+            logger.debug(
+                "DCR: Cache hit for '%s' — found %d result(s), "
+                "client_id=%s",
+                auth_provider,
+                len(results),
+                results[0].client_id,
+            )
+        else:
+            logger.debug(
+                "DCR: Cache miss for '%s' at '%s'",
+                auth_provider,
+                registration_url,
+            )
         return results[0] if results else None
 
     @staticmethod
