@@ -33,6 +33,7 @@ from oidcauthlib.utilities.logger.log_levels import SRC_LOG_LEVELS
 from oidcauthlib.utilities.logger.logging_transport import (
     LoggingTransport,
 )
+from oidcauthlib.utilities.url_validator import validate_url
 
 logger = logging.getLogger(__name__)
 logger.setLevel(SRC_LOG_LEVELS["AUTH"])
@@ -199,9 +200,12 @@ class AuthManager:
         }
 
         if auth_config.authorization_endpoint and auth_config.token_endpoint:
+            validate_url(auth_config.authorization_endpoint)
+            validate_url(auth_config.token_endpoint)
             register_kwargs["authorize_url"] = auth_config.authorization_endpoint
             register_kwargs["access_token_url"] = auth_config.token_endpoint
         elif auth_config.well_known_uri:
+            validate_url(auth_config.well_known_uri)
             register_kwargs["server_metadata_url"] = auth_config.well_known_uri
         else:
             raise ValueError(

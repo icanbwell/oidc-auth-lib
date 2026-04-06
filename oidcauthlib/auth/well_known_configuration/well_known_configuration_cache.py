@@ -20,6 +20,7 @@ from oidcauthlib.utilities.environment.oidc_environment_variables import (
 )
 from oidcauthlib.utilities.logger.log_levels import SRC_LOG_LEVELS
 from oidcauthlib.open_telemetry.attribute_names import OidcOpenTelemetryAttributeNames
+from oidcauthlib.utilities.url_validator import validate_url
 
 logger = logging.getLogger(__name__)
 logger.setLevel(SRC_LOG_LEVELS["AUTH"])
@@ -249,6 +250,7 @@ class WellKnownConfigurationCache:
                 span.set_attribute(
                     OidcOpenTelemetryAttributeNames.WELL_KNOWN_URI, well_known_uri
                 )
+                validate_url(well_known_uri)
                 async with httpx.AsyncClient() as client:
                     try:
                         logger.info(
@@ -465,6 +467,7 @@ class WellKnownConfigurationCache:
         Security:
             - Keys are not logged; only counts are logged to avoid PII/token leakage.
         """
+        validate_url(jwks_uri)
         async with httpx.AsyncClient() as client:
             try:
                 logger.info(f"Fetching JWKS from {jwks_uri}")
