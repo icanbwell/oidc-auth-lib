@@ -3,10 +3,15 @@
 Validates URLs before making HTTP requests to prevent Server-Side Request
 Forgery (SSRF) attacks.  Enforces HTTPS-only, rejects private/reserved IP
 ranges, and resolves hostnames to verify the target is not internal.
+
+Set the ``AUTH_ALLOW_HTTP_URLS`` environment variable to ``true`` to relax
+HTTPS-only enforcement and private-IP blocking for local development
+(e.g. Docker Compose with ``http://keycloak:8080``).
 """
 
 import ipaddress
 import logging
+import os
 import socket
 from urllib.parse import urlparse
 
@@ -59,13 +64,23 @@ def _is_private_ip(addr: str) -> bool:
     return any(ip in network for network in _BLOCKED_NETWORKS)
 
 
+def _env_allow_http() -> bool:
+    """Return True when AUTH_ALLOW_HTTP_URLS is set to a truthy value."""
+    return os.environ.get("AUTH_ALLOW_HTTP_URLS", "").lower() in (
+        "true",
+        "1",
+        "yes",
+    )
+
+
 def validate_url(url: str, *, allow_http: bool = False) -> str:
     """Validate a URL for safe outbound HTTP requests.
 
     Args:
         url: The URL to validate.
         allow_http: If True, permit ``http://`` in addition to ``https://``.
-            Defaults to False (HTTPS only).
+            Defaults to False (HTTPS only).  Also enabled globally by the
+            ``AUTH_ALLOW_HTTP_URLS`` environment variable.
 
     Returns:
         The validated URL (unchanged).
@@ -73,6 +88,8 @@ def validate_url(url: str, *, allow_http: bool = False) -> str:
     Raises:
         ValueError: If the URL fails any validation check.
     """
+    allow_http = allow_http or _env_allow_http()
+
     parsed = urlparse(url)
 
     # --- scheme ---
@@ -80,7 +97,8 @@ def validate_url(url: str, *, allow_http: bool = False) -> str:
     if parsed.scheme not in allowed_schemes:
         raise ValueError(
             f"URL scheme must be {' or '.join(sorted(allowed_schemes))}, "
-            f"got '{parsed.scheme}' in '{url}'"
+            f"got '{parsed.scheme}' in '{url}'. "
+            f"Set AUTH_ALLOW_HTTP_URLS=true to allow http:// URLs."
         )
 
     # --- hostname ---
@@ -98,15 +116,19 @@ def validate_url(url: str, *, allow_http: bool = False) -> str:
         raise ValueError(f"URL must use a hostname, not a raw IP address: '{hostname}'")
 
     # --- resolve DNS and check all IPs ---
-    try:
-        addr_infos = socket.getaddrinfo(hostname, parsed.port or 443)
-    except socket.gaierror as exc:
-        raise ValueError(f"Cannot resolve hostname '{hostname}': {exc}") from exc
+    # When allow_http is enabled (local development), skip the private-IP
+    # check because Docker-internal hostnames (e.g. keycloak) resolve to
+    # RFC 1918 addresses on the container network.
+    if not allow_http:
+        try:
+            addr_infos = socket.getaddrinfo(hostname, parsed.port or 443)
+        except socket.gaierror as exc:
+            raise ValueError(f"Cannot resolve hostname '{hostname}': {exc}") from exc
 
-    for _family, _type, _proto, _canonname, sockaddr in addr_infos:
-        ip_str = str(sockaddr[0])
-        if _is_private_ip(ip_str):
-            raise ValueError(f"URL '{url}' resolves to blocked IP {ip_str}")
+        for _family, _type, _proto, _canonname, sockaddr in addr_infos:
+            ip_str = str(sockaddr[0])
+            if _is_private_ip(ip_str):
+                raise ValueError(f"URL '{url}' resolves to blocked IP {ip_str}")
 
     logger.debug("URL validated: %s", url)
     return url

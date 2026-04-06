@@ -126,6 +126,33 @@ class TestDNSRebindingProtection:
                 validate_url("https://some-external-host.com/register")
 
 
+class TestEnvVarAllowHttp:
+    """AUTH_ALLOW_HTTP_URLS env var globally enables allow_http."""
+
+    def test_env_var_allows_http(self) -> None:
+        with patch.dict("os.environ", {"AUTH_ALLOW_HTTP_URLS": "true"}):
+            assert (
+                validate_url(
+                    "http://keycloak:8080/realms/test/.well-known/openid-configuration"
+                )
+                == "http://keycloak:8080/realms/test/.well-known/openid-configuration"
+            )
+
+    def test_env_var_skips_private_ip_check(self) -> None:
+        with patch.dict("os.environ", {"AUTH_ALLOW_HTTP_URLS": "true"}):
+            with patch(
+                "oidcauthlib.utilities.url_validator.socket.getaddrinfo"
+            ) as mock_gai:
+                mock_gai.return_value = [(2, 1, 6, "", ("172.18.0.5", 8080))]
+                validate_url("http://keycloak:8080/realms/test")
+                mock_gai.assert_not_called()
+
+    def test_env_var_false_keeps_https_only(self) -> None:
+        with patch.dict("os.environ", {"AUTH_ALLOW_HTTP_URLS": "false"}):
+            with pytest.raises(ValueError, match="AUTH_ALLOW_HTTP_URLS"):
+                validate_url("http://example.com/register")
+
+
 class TestPublicHostnamesAccepted:
     @pytest.mark.parametrize(
         "ip",
