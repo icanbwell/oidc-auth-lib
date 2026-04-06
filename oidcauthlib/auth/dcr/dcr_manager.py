@@ -86,8 +86,7 @@ class DcrManager:
 
         if cached and not self._is_expired(cached):
             logger.info(
-                "DCR: Using cached credentials for '%s' — client_id=%s, "
-                "expires_at=%s",
+                "DCR: Using cached credentials for '%s' — client_id=%s, expires_at=%s",
                 auth_provider,
                 cached.client_id,
                 cached.client_secret_expires_at or "never",
@@ -154,8 +153,7 @@ class DcrManager:
         )
         if results:
             logger.debug(
-                "DCR: Cache hit for '%s' — found %d result(s), "
-                "client_id=%s",
+                "DCR: Cache hit for '%s' — found %d result(s), client_id=%s",
                 auth_provider,
                 len(results),
                 results[0].client_id,
