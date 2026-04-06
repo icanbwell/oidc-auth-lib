@@ -4,8 +4,7 @@ import pytest
 import httpx
 import respx
 from unittest.mock import patch
-
-from typing import Any, Dict, List, Optional, override
+from typing import Any, Dict, Generator, List, Optional, override
 
 from oidcauthlib.auth.auth_manager import AuthManager
 from oidcauthlib.auth.auth_helper import AuthHelper
@@ -186,6 +185,16 @@ def well_known_manager(
         auth_config_reader=auth_config_reader,
         metadata={"issuer": "https://auth.example.com"},
     )
+
+
+_PATCH_VALIDATE = "oidcauthlib.auth.auth_manager.validate_url"
+
+
+@pytest.fixture(autouse=True)
+def _bypass_url_validation() -> Generator[None, None, None]:
+    """Skip DNS resolution in validate_url for unit tests with fake hostnames."""
+    with patch(_PATCH_VALIDATE, side_effect=lambda url, **kw: url):
+        yield
 
 
 # ---------------- Tests -----------------

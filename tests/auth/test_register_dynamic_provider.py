@@ -1,5 +1,5 @@
 from typing import Any, AsyncGenerator
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from simple_container.container.interfaces import IContainer
@@ -9,6 +9,15 @@ from oidcauthlib.auth.config.auth_config import AuthConfig
 from oidcauthlib.auth.dcr.dcr_registration import DcrRegistration
 
 pytestmark = pytest.mark.asyncio
+
+_PATCH_VALIDATE = "oidcauthlib.auth.auth_manager.validate_url"
+
+
+@pytest.fixture(autouse=True)
+def _bypass_url_validation() -> Any:
+    """Skip DNS resolution in validate_url for unit tests with fake hostnames."""
+    with patch(_PATCH_VALIDATE, side_effect=lambda url, **kw: url):
+        yield
 
 
 @pytest.fixture(scope="function")

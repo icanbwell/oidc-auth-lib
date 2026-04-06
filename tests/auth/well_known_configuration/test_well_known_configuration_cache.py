@@ -1,4 +1,7 @@
 import asyncio
+from typing import Any
+from unittest.mock import patch
+
 import respx
 import httpx
 import pytest
@@ -15,6 +18,15 @@ from simple_container.container.interfaces import IContainer
 from oidcauthlib.utilities.environment.oidc_environment_variables import (
     OidcEnvironmentVariables,
 )
+
+_PATCH_VALIDATE = "oidcauthlib.auth.well_known_configuration.well_known_configuration_cache.validate_url"
+
+
+@pytest.fixture(autouse=True)
+def _bypass_url_validation() -> Any:
+    """Skip DNS resolution in validate_url for unit tests with fake hostnames."""
+    with patch(_PATCH_VALIDATE, side_effect=lambda url, **kw: url):
+        yield
 
 
 @pytest.mark.asyncio
