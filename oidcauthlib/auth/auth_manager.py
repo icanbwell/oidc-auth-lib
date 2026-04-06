@@ -18,13 +18,11 @@ from oidcauthlib.auth.config.auth_config import AuthConfig
 from oidcauthlib.auth.config.auth_config_reader import (
     AuthConfigReader,
 )
+from oidcauthlib.auth.dcr.dcr_manager import DcrManager
 from oidcauthlib.auth.exceptions.authorization_needed_exception import (
     AuthorizationNeededException,
 )
 from oidcauthlib.auth.token_reader import TokenReader
-from oidcauthlib.auth.well_known_configuration.well_known_configuration_cache_result import (
-    WellKnownConfigurationCacheResult,
-)
 from oidcauthlib.auth.well_known_configuration.well_known_configuration_manager import (
     WellKnownConfigurationManager,
 )
@@ -35,6 +33,7 @@ from oidcauthlib.utilities.logger.log_levels import SRC_LOG_LEVELS
 from oidcauthlib.utilities.logger.logging_transport import (
     LoggingTransport,
 )
+from oidcauthlib.utilities.url_validator import validate_url
 
 logger = logging.getLogger(__name__)
 logger.setLevel(SRC_LOG_LEVELS["AUTH"])
@@ -55,23 +54,17 @@ class AuthManager:
         auth_config_reader: AuthConfigReader,
         token_reader: TokenReader,
         well_known_configuration_manager: WellKnownConfigurationManager,
+        dcr_manager: DcrManager | None = None,
     ) -> None:
         """
         Initialize the AuthManager with the necessary configuration for OIDC PKCE.
-        It sets up the OAuth cache, reads environment variables for the OIDC provider,
-        and configures the OAuth client.
-        The environment variables required are:
-        - MONGO_URL: The connection string for the MongoDB database.
-        - MONGO_DB_NAME: The name of the MongoDB database.
-        - MONGO_DB_TOKEN_COLLECTION_NAME: The name of the MongoDB collection for tokens.
-        It also initializes the OAuth cache based on the OAUTH_CACHE environment variable,
-        which can be set to "memory" for in-memory caching or "mongo" for MongoDB caching.
-        If the OAUTH_CACHE environment variable is not set, it defaults to "memory".
 
         Args:
-            environment_variables (AbstractEnvironmentVariables): The environment variables for the application.
-            auth_config_reader (AuthConfigReader): The reader for authentication configurations.
-            token_reader (TokenReader): The reader for tokens.
+            environment_variables: The environment variables for the application.
+            auth_config_reader: The reader for authentication configurations.
+            token_reader: The reader for tokens.
+            well_known_configuration_manager: Manager for well-known OIDC discovery.
+            dcr_manager: Optional RFC 7591 Dynamic Client Registration manager.
         """
         self.environment_variables: AbstractEnvironmentVariables = environment_variables
         if self.environment_variables is None:
@@ -106,6 +99,9 @@ class AuthManager:
             raise TypeError(
                 "well_known_configuration_manager must be an instance of WellKnownConfigurationManager"
             )
+
+        self._dcr_manager: DcrManager | None = dcr_manager
+
         oauth_cache_type = environment_variables.oauth_cache
         self.cache: OAuthCache = (
             OAuthMemoryCache()
@@ -122,7 +118,7 @@ class AuthManager:
             raise ValueError("AUTH_REDIRECT_URI environment variable must be set")
         # https://docs.authlib.org/en/latest/client/frameworks.html#frameworks-clients
         self._oauth: OAuth = OAuth(cache=self.cache)
-        # read AUTH_PROVIDERS comma separated list from the environment variable and register the OIDC provider for each provider
+        self._registered_dynamic_providers: set[str] = set()
         self.auth_configs: List[AuthConfig] = (
             self.auth_config_reader.get_auth_configs_for_all_auth_providers()
         )
@@ -130,37 +126,110 @@ class AuthManager:
     async def ensure_initialized_async(self) -> None:
         auth_config: AuthConfig
         for auth_config in self.auth_configs:
-            well_known_result: (
-                WellKnownConfigurationCacheResult | None
-            ) = await self.well_known_configuration_manager.get_async(
-                auth_config=auth_config
-            )
-            server_metadata: dict[str, Any] | None = (
-                well_known_result.well_known_config if well_known_result else None
-            )
-            logger.debug(
-                f"Registering OAuth client for auth provider {auth_config.auth_provider}"
-                + (
-                    f" with well-known configuration: {server_metadata}"
-                    if server_metadata is not None
-                    else f" from {auth_config.well_known_uri}"
+            if auth_config.well_known_uri:
+                await self.well_known_configuration_manager.get_async(
+                    auth_config=auth_config
                 )
+            await self.register_dynamic_provider(auth_config=auth_config)
+
+    async def register_dynamic_provider(
+        self,
+        *,
+        auth_config: AuthConfig,
+    ) -> None:
+        """Register an OAuth provider dynamically at runtime.
+
+        Handles DCR (RFC 7591), explicit endpoints, discovery, configurable PKCE,
+        and deduplication.
+        """
+        provider_name = auth_config.auth_provider.lower()
+
+        if provider_name in self._registered_dynamic_providers:
+            return
+
+        # --- DCR: resolve client_id if not provided ---
+        client_id = auth_config.client_id
+        client_secret = auth_config.client_secret
+
+        if not client_id:
+            if not self._dcr_manager:
+                raise ValueError(
+                    f"AuthConfig for '{auth_config.auth_provider}' has no client_id "
+                    f"and no DcrManager is configured to perform DCR"
+                )
+            dcr_result = await self._dcr_manager.resolve_dcr_credentials(
+                auth_provider=provider_name,
+                registration_url=auth_config.registration_url,
             )
-            self._oauth.register(
-                name=auth_config.auth_provider.lower(),
-                client_id=auth_config.client_id,
-                client_secret=auth_config.client_secret,
-                server_metadata_url=auth_config.well_known_uri,
-                # server_metadata_url=auth_config.well_known_uri
-                # if server_metadata is None
-                # else None,
-                # server_metadata=server_metadata,
-                client_kwargs={
-                    "scope": auth_config.scope,
-                    "code_challenge_method": "S256",
-                    "transport": LoggingTransport(httpx.AsyncHTTPTransport()),
-                },
+            if dcr_result is None or not dcr_result.client_id:
+                raise ValueError(
+                    f"DCR failed to obtain client_id for '{auth_config.auth_provider}'"
+                )
+            client_id = dcr_result.client_id
+            client_secret = dcr_result.client_secret
+            logger.info(
+                "DCR resolved client_id=%s for provider '%s'",
+                client_id,
+                auth_config.auth_provider,
             )
+
+        # --- Build client kwargs ---
+        client_kwargs: dict[str, Any] = {
+            "scope": auth_config.scope,
+            "transport": LoggingTransport(httpx.AsyncHTTPTransport()),
+        }
+
+        if auth_config.use_pkce and auth_config.pkce_method:
+            pkce_method = auth_config.pkce_method
+            if pkce_method not in ("S256", "plain"):
+                logger.warning(
+                    "Invalid pkce_method '%s' for provider '%s', defaulting to S256",
+                    pkce_method,
+                    auth_config.auth_provider,
+                )
+                pkce_method = "S256"
+            client_kwargs["code_challenge_method"] = pkce_method
+        elif auth_config.use_pkce:
+            client_kwargs["code_challenge_method"] = "S256"
+
+        register_kwargs: dict[str, Any] = {
+            "name": provider_name,
+            "client_id": client_id,
+            "client_secret": client_secret,
+            "client_kwargs": client_kwargs,
+        }
+
+        if auth_config.authorization_endpoint and auth_config.token_endpoint:
+            validate_url(auth_config.authorization_endpoint)
+            validate_url(auth_config.token_endpoint)
+            register_kwargs["authorize_url"] = auth_config.authorization_endpoint
+            register_kwargs["access_token_url"] = auth_config.token_endpoint
+        elif auth_config.well_known_uri:
+            validate_url(auth_config.well_known_uri)
+            register_kwargs["server_metadata_url"] = auth_config.well_known_uri
+        else:
+            raise ValueError(
+                f"AuthConfig for '{auth_config.auth_provider}' must have either "
+                f"well_known_uri or both authorization_endpoint and token_endpoint"
+            )
+
+        self._oauth.register(**register_kwargs)
+        self._registered_dynamic_providers.add(provider_name)
+
+        if auth_config not in self.auth_configs:
+            self.auth_configs.append(auth_config)
+
+        logger.info(
+            "Dynamically registered OAuth provider '%s' "
+            "(client_id=%s, well_known=%s, authorize=%s, token=%s, pkce=%s/%s)",
+            auth_config.auth_provider,
+            client_id,
+            auth_config.well_known_uri,
+            auth_config.authorization_endpoint,
+            auth_config.token_endpoint,
+            auth_config.use_pkce,
+            auth_config.pkce_method,
+        )
 
     async def create_authorization_url(
         self,

@@ -20,6 +20,7 @@ from oidcauthlib.utilities.environment.oidc_environment_variables import (
 )
 from oidcauthlib.utilities.logger.log_levels import SRC_LOG_LEVELS
 from oidcauthlib.open_telemetry.attribute_names import OidcOpenTelemetryAttributeNames
+from oidcauthlib.utilities.url_validator import validate_url
 
 logger = logging.getLogger(__name__)
 logger.setLevel(SRC_LOG_LEVELS["AUTH"])
@@ -92,10 +93,11 @@ class WellKnownConfigurationCache:
     async def read_list_async(self, *, auth_configs: list[AuthConfig]) -> None:
         """Fetch and cache discovery documents for multiple auth configs.
 
+        Configs without a ``well_known_uri`` (e.g. explicit-endpoint configs)
+        are silently skipped.
+
         Args:
-            auth_configs: List of OIDC authorization configurations (must have well_known_uri).
-        Returns:
-            A list of WellKnownConfigurationCacheResult for successfully fetched configs.
+            auth_configs: List of OIDC authorization configurations.
         Notes:
             - Populates the in-memory cache and optional backing store.
             - Aggregates JWKS into the class-level jwks KeySet.
@@ -109,9 +111,11 @@ class WellKnownConfigurationCache:
             has_missing_well_known_cache: bool = False
             for auth_config in auth_configs:
                 if not auth_config.well_known_uri:
-                    raise ValueError(
-                        f"AuthConfig {auth_config} is missing well_known_uri"
+                    logger.debug(
+                        "Skipping AuthConfig '%s' in read_list_async — no well_known_uri",
+                        auth_config.auth_provider,
                     )
+                    continue
                 well_known_uri: str = auth_config.well_known_uri
 
                 # Fast path: cache hit via store
@@ -246,6 +250,7 @@ class WellKnownConfigurationCache:
                 span.set_attribute(
                     OidcOpenTelemetryAttributeNames.WELL_KNOWN_URI, well_known_uri
                 )
+                validate_url(well_known_uri)
                 async with httpx.AsyncClient() as client:
                     try:
                         logger.info(
@@ -462,6 +467,7 @@ class WellKnownConfigurationCache:
         Security:
             - Keys are not logged; only counts are logged to avoid PII/token leakage.
         """
+        validate_url(jwks_uri)
         async with httpx.AsyncClient() as client:
             try:
                 logger.info(f"Fetching JWKS from {jwks_uri}")

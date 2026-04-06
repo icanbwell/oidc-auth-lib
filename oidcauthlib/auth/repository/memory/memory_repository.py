@@ -145,15 +145,24 @@ class AsyncMemoryRepository[T: BaseDbModel](AsyncBaseRepository[T]):
         :return: The ID of the inserted or updated item.
 
         """
-        if item.id in self._storage:
+        # Match by keys (consistent with mongo implementation)
+        existing: T | None = None
+        if keys:
+            for obj in self._storage.values():
+                if all(getattr(obj, k, None) == v for k, v in keys.items()):
+                    existing = obj
+                    break
+
+        if existing is not None:
             item = on_update(item)
-            # Update existing item
-            self._storage[item.id] = item
+            # Preserve the existing item's ID
+            self._storage.pop(item.id, None)
+            self._storage[existing.id] = item.model_copy(update={"id": existing.id})
+            return existing.id
         else:
-            # Insert new item
             item = on_insert(item)
             self._storage[item.id] = item
-        return item.id
+            return item.id
 
     @override
     async def insert_or_replace_many(
