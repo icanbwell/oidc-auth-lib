@@ -37,12 +37,8 @@ class TokenReaderMiddleware(BaseHTTPMiddleware):
         if token_reader is None:
             raise ValueError("token_reader must be provided and cannot be None")
 
-        self.require_token_patterns: list[Pattern[str]] = [
-            re.compile(p) for p in (require_token_routes or [])
-        ]
-        self.optional_token_patterns: list[Pattern[str]] = [
-            re.compile(p) for p in (optional_token_routes or [])
-        ]
+        self.require_token_patterns: list[Pattern[str]] = [re.compile(p) for p in (require_token_routes or [])]
+        self.optional_token_patterns: list[Pattern[str]] = [re.compile(p) for p in (optional_token_routes or [])]
 
     @staticmethod
     def _is_route_match(path: str, patterns: list[Pattern[str]]) -> bool:
@@ -67,30 +63,20 @@ class TokenReaderMiddleware(BaseHTTPMiddleware):
             # If require_token is True, enforce token
             # If optional_token is True, do not enforce token
             # If neither, enforce token only if require_token_patterns is empty
-            enforce_token = require_token or (
-                not optional_token and not self.require_token_patterns
-            )
+            enforce_token = require_token or (not optional_token and not self.require_token_patterns)
         try:
             auth_header = request.headers.get("authorization")
-            raw_token: str | None = self.token_reader.extract_token(
-                authorization_header=auth_header
-            )
+            raw_token: str | None = self.token_reader.extract_token(authorization_header=auth_header)
             if raw_token:
                 # Decode raw_token (signature verification ON)
-                decoded_token: (
-                    Token | None
-                ) = await self.token_reader.verify_token_async(token=raw_token)
+                decoded_token: Token | None = await self.token_reader.verify_token_async(token=raw_token)
                 if decoded_token is None and enforce_token:
-                    return JSONResponse(
-                        {"detail": "Invalid authorization token"}, status_code=401
-                    )
+                    return JSONResponse({"detail": "Invalid authorization token"}, status_code=401)
                 request.state.token = decoded_token
             else:
                 request.state.token = None
                 if enforce_token:
-                    return JSONResponse(
-                        {"detail": "Authorization token required"}, status_code=401
-                    )
+                    return JSONResponse({"detail": "Authorization token required"}, status_code=401)
         except Exception as e:
             logger.exception(f"Error reading token: {e}")
             request.state.token = None

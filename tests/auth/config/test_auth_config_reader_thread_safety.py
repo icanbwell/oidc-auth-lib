@@ -86,9 +86,7 @@ class CountingAuthConfigReader(AuthConfigReader):
 def test_thread_safe_initialization() -> None:
     providers: List[str] = ["alpha", "beta", "gamma"]
     env: DummyEnvVars = DummyEnvVars(providers)
-    reader: CountingAuthConfigReader = CountingAuthConfigReader(
-        environment_variables=env
-    )
+    reader: CountingAuthConfigReader = CountingAuthConfigReader(environment_variables=env)
 
     # Prepare threads all calling the method concurrently
     results: List[List[AuthConfig]] = []

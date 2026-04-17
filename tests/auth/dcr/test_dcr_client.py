@@ -26,9 +26,7 @@ class TestDcrClient:
             mock_response.raise_for_status = MagicMock()
             mock_client_instance = AsyncMock()
             mock_client_instance.post = AsyncMock(return_value=mock_response)
-            mock_client_instance.__aenter__ = AsyncMock(
-                return_value=mock_client_instance
-            )
+            mock_client_instance.__aenter__ = AsyncMock(return_value=mock_client_instance)
             mock_client_instance.__aexit__ = AsyncMock(return_value=False)
             mock_httpx.return_value = mock_client_instance
 
@@ -66,9 +64,7 @@ class TestDcrClient:
             mock_response.raise_for_status = MagicMock()
             mock_client_instance = AsyncMock()
             mock_client_instance.post = AsyncMock(return_value=mock_response)
-            mock_client_instance.__aenter__ = AsyncMock(
-                return_value=mock_client_instance
-            )
+            mock_client_instance.__aenter__ = AsyncMock(return_value=mock_client_instance)
             mock_client_instance.__aexit__ = AsyncMock(return_value=False)
             mock_httpx.return_value = mock_client_instance
 
@@ -93,9 +89,7 @@ class TestDcrClient:
             mock_response.raise_for_status = MagicMock()
             mock_client_instance = AsyncMock()
             mock_client_instance.post = AsyncMock(return_value=mock_response)
-            mock_client_instance.__aenter__ = AsyncMock(
-                return_value=mock_client_instance
-            )
+            mock_client_instance.__aenter__ = AsyncMock(return_value=mock_client_instance)
             mock_client_instance.__aexit__ = AsyncMock(return_value=False)
             mock_httpx.return_value = mock_client_instance
 
@@ -115,9 +109,7 @@ class TestDcrClient:
                     registration_url="http://169.254.169.254/latest/meta-data/",
                     redirect_uri="http://localhost:5050/auth/callback",
                 )
-            mock_validate.assert_called_once_with(
-                "http://169.254.169.254/latest/meta-data/"
-            )
+            mock_validate.assert_called_once_with("http://169.254.169.254/latest/meta-data/")
 
     async def test_register_rejects_private_url(self) -> None:
         """End-to-end: validate_url (unpatched) blocks localhost."""

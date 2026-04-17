@@ -43,30 +43,20 @@ class OAuthMongoCache(OAuthCache):
 
         """
         self.id_ = uuid.uuid4()
-        self.repository: AsyncBaseRepository[CacheItem] = (
-            RepositoryFactory.get_repository(
-                repository_type=environment_variables.oauth_cache,
-                environment_variables=environment_variables,
-            )
+        self.repository: AsyncBaseRepository[CacheItem] = RepositoryFactory.get_repository(
+            repository_type=environment_variables.oauth_cache,
+            environment_variables=environment_variables,
         )
-        collection_name: str | None = (
-            environment_variables.mongo_db_auth_cache_collection_name
-        )
+        collection_name: str | None = environment_variables.mongo_db_auth_cache_collection_name
         if collection_name is None:
-            raise ValueError(
-                "MONGO_DB_AUTH_CACHE_COLLECTION_NAME environment variable must be set"
-            )
+            raise ValueError("MONGO_DB_AUTH_CACHE_COLLECTION_NAME environment variable must be set")
         self.collection_name: str = collection_name
 
         self.environment_variables: AbstractEnvironmentVariables = environment_variables
         if self.environment_variables is None:
-            raise ValueError(
-                "OAuthMongoCache requires an EnvironmentVariables instance."
-            )
+            raise ValueError("OAuthMongoCache requires an EnvironmentVariables instance.")
         if not isinstance(self.environment_variables, AbstractEnvironmentVariables):
-            raise TypeError(
-                "environment_variables must be an instance of EnvironmentVariables"
-            )
+            raise TypeError("environment_variables must be an instance of EnvironmentVariables")
 
     @property
     @override
@@ -92,9 +82,7 @@ class OAuthMongoCache(OAuthCache):
                 "key": key,
             },
         )
-        disable_delete: bool | None = (
-            self.environment_variables.mongo_db_cache_disable_delete
-        )
+        disable_delete: bool | None = self.environment_variables.mongo_db_cache_disable_delete
         if cache_item is not None and cache_item.id is not None:
             # delete the cache item if it exists
             logger.debug(f" ====== Deleting {cache_item.id} =====")
@@ -131,9 +119,7 @@ class OAuthMongoCache(OAuthCache):
                 "key": key,
             },
         )
-        logger.debug(
-            f" ====== For key {key} found {cache_item} default {default} ====="
-        )
+        logger.debug(f" ====== For key {key} found {cache_item} default {default} =====")
         return cache_item.value if cache_item is not None else default
 
     @override
@@ -166,21 +152,13 @@ class OAuthMongoCache(OAuthCache):
                 model_class=CacheItem,
             )
             if updated_cache_item is None:
-                raise ValueError(
-                    f"Failed to update cache item with ID: {existing_cache_item_id} for key: {key}"
-                )
-            logger.debug(
-                f"Cache item updated with ID: {updated_cache_item.id} for key: {key} with value: {value}.\n"
-            )
+                raise ValueError(f"Failed to update cache item with ID: {existing_cache_item_id} for key: {key}")
+            logger.debug(f"Cache item updated with ID: {updated_cache_item.id} for key: {key} with value: {value}.\n")
         else:
             logger.debug(f" ====== Creating new cache item {key}: {value} =====")
-            cache_item = CacheItem(
-                key=key, value=value, created=datetime.now(timezone.utc)
-            )
+            cache_item = CacheItem(key=key, value=value, created=datetime.now(timezone.utc))
             new_object_id = await self.repository.insert(
                 collection_name=self.collection_name,
                 model=cache_item,
             )
-            logger.debug(
-                f"New cache item created with ID: {new_object_id}: {cache_item}"
-            )
+            logger.debug(f"New cache item created with ID: {new_object_id}: {cache_item}")

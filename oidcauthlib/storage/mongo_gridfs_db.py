@@ -60,9 +60,7 @@ class GridFSFileMetadata(BaseModel):
     key: str = Field(description="The key for the stored value.")
     collection: str = Field(description="The collection name.")
     size_bytes: int = Field(description="The size of the stored value in bytes.")
-    created_at: datetime | None = Field(
-        description="The creation timestamp of the entry."
-    )
+    created_at: datetime | None = Field(description="The creation timestamp of the entry.")
     expires_at: datetime | None = Field(description="The expiration timestamp, if any.")
     ttl: float | None = Field(description="Time to live in seconds, if any.")
 
@@ -108,8 +106,7 @@ class MongoDBGridFSStore(MongoDBStore):
         default_collection: str | None = None,
         collection_sanitization_strategy: SanitizationStrategy | None = None,
         gridfs_chunk_size_kb: int = 255,  # 255KB default chunk size
-        max_inline_size_kb: int = 16
-        * 1024,  # Max size in KB for inline storage: 16MB is mongo limit
+        max_inline_size_kb: int = 16 * 1024,  # Max size in KB for inline storage: 16MB is mongo limit
     ) -> None:
         """Initialize the MongoDB GridFS store.
 
@@ -172,9 +169,7 @@ class MongoDBGridFSStore(MongoDBStore):
         sanitized_collection_name = self._sanitize_collection(collection=collection)
         collection_filter: dict[str, str] = {"name": sanitized_collection_name}
         # check if collection existed before we call super()._setup_collection
-        matching_collections: list[str] = await self._db.list_collection_names(
-            filter=collection_filter
-        )
+        matching_collections: list[str] = await self._db.list_collection_names(filter=collection_filter)
 
         await super()._setup_collection(collection=collection)
 
@@ -282,9 +277,7 @@ class MongoDBGridFSStore(MongoDBStore):
         value_bytes = value_json.encode("utf-8")
         value_size = len(value_bytes)
         value_to_store["size"] = value_size
-        mongo_doc = self._adapter.dump_dict(
-            entry=managed_entry, key=key, collection=collection
-        )
+        mongo_doc = self._adapter.dump_dict(entry=managed_entry, key=key, collection=collection)
         mongo_doc.pop("value", None)
         # Decide storage location based on configured threshold
         if value_size < self.max_inline_size_kb * 1024:
@@ -297,9 +290,7 @@ class MongoDBGridFSStore(MongoDBStore):
                 try:
                     await gridfs_bucket.delete(old_file_id)
                 except Exception as e:
-                    raise MongoGridFSException(
-                        f"Failed to delete old GridFS file with id {old_file_id}"
-                    ) from e
+                    raise MongoGridFSException(f"Failed to delete old GridFS file with id {old_file_id}") from e
         else:
             # GridFS storage: upload bytes and store file id reference
             gridfs_file_id: ObjectId = await gridfs_bucket.upload_from_stream(
@@ -324,27 +315,17 @@ class MongoDBGridFSStore(MongoDBStore):
                     try:
                         await gridfs_bucket.delete(old_file_id1)
                     except Exception as e:
-                        raise MongoGridFSException(
-                            f"Failed to delete old GridFS file with id {old_file_id1}"
-                        ) from e
+                        raise MongoGridFSException(f"Failed to delete old GridFS file with id {old_file_id1}") from e
         return mongo_doc
 
     @override
-    async def _get_managed_entry(
-        self, *, key: str, collection: str
-    ) -> ManagedEntry | None:
+    async def _get_managed_entry(self, *, key: str, collection: str) -> ManagedEntry | None:
         """Retrieve a single ManagedEntry, preferring inline and falling back to GridFS."""
-        with self._tracer.start_as_current_span(
-            OidcOpenTelemetrySpanNames.MONGO_GRIDFS_GET_MANAGED_ENTRY
-        ) as span:
-            span.set_attribute(
-                OidcOpenTelemetryAttributeNames.DB_COLLECTION, collection
-            )
+        with self._tracer.start_as_current_span(OidcOpenTelemetrySpanNames.MONGO_GRIDFS_GET_MANAGED_ENTRY) as span:
+            span.set_attribute(OidcOpenTelemetryAttributeNames.DB_COLLECTION, collection)
             span.set_attribute(OidcOpenTelemetryAttributeNames.STORAGE_KEY, key)
             # Lookup metadata by key; contains either inline value or GridFS file id
-            metadata_doc = await self._collections_by_name[collection].find_one(
-                filter={"key": key}
-            )
+            metadata_doc = await self._collections_by_name[collection].find_one(filter={"key": key})
             if not metadata_doc:
                 span.set_attribute(OidcOpenTelemetryAttributeNames.STORAGE_HIT, False)
                 return None
@@ -354,21 +335,15 @@ class MongoDBGridFSStore(MongoDBStore):
                     key=key, collection=collection, metadata_doc=metadata_doc
                 )
                 if entry is not None:
-                    span.set_attribute(
-                        OidcOpenTelemetryAttributeNames.STORAGE_HIT, True
-                    )
+                    span.set_attribute(OidcOpenTelemetryAttributeNames.STORAGE_HIT, True)
                     return entry
                 # Otherwise use the GridFS file id if present
                 gridfs_file_id: ObjectId | None = metadata_doc.get("gridfs_file_id")
                 if not gridfs_file_id:
                     # Metadata exists but lacks value; treat as missing
-                    span.set_attribute(
-                        OidcOpenTelemetryAttributeNames.STORAGE_MODE, "missing"
-                    )
+                    span.set_attribute(OidcOpenTelemetryAttributeNames.STORAGE_MODE, "missing")
                     return None
-                span.set_attribute(
-                    OidcOpenTelemetryAttributeNames.STORAGE_MODE, "gridfs"
-                )
+                span.set_attribute(OidcOpenTelemetryAttributeNames.STORAGE_MODE, "gridfs")
                 return await self._get_gridfs_value(
                     key=key,
                     collection=collection,
@@ -391,9 +366,7 @@ class MongoDBGridFSStore(MongoDBStore):
                 ) from e
 
     @override
-    async def _get_managed_entries(
-        self, *, collection: str, keys: Sequence[str]
-    ) -> list[ManagedEntry | None]:
+    async def _get_managed_entries(self, *, collection: str, keys: Sequence[str]) -> list[ManagedEntry | None]:
         """Batch retrieval for multiple keys, mixing inline and GridFS paths.
 
         Maintains result order aligned with the input keys and returns None for
@@ -402,9 +375,7 @@ class MongoDBGridFSStore(MongoDBStore):
         if not keys:
             return []
         # Query all candidate metadata docs in one cursor
-        cursor = self._collections_by_name[collection].find(
-            filter={"key": {"$in": list(keys)}}
-        )
+        cursor = self._collections_by_name[collection].find(filter={"key": {"$in": list(keys)}})
         managed_entries_by_key: dict[str, ManagedEntry | None] = dict.fromkeys(keys)
         async for metadata_doc in cursor:
             key = metadata_doc.get("key")
@@ -453,18 +424,12 @@ class MongoDBGridFSStore(MongoDBStore):
         managed_entry: ManagedEntry,
     ) -> None:
         """Upsert a single entry, cleaning up any prior GridFS file when needed."""
-        with self._tracer.start_as_current_span(
-            OidcOpenTelemetrySpanNames.MONGO_GRIDFS_PUT_MANAGED_ENTRY
-        ) as span:
-            span.set_attribute(
-                OidcOpenTelemetryAttributeNames.DB_COLLECTION, collection
-            )
+        with self._tracer.start_as_current_span(OidcOpenTelemetrySpanNames.MONGO_GRIDFS_PUT_MANAGED_ENTRY) as span:
+            span.set_attribute(OidcOpenTelemetryAttributeNames.DB_COLLECTION, collection)
             span.set_attribute(OidcOpenTelemetryAttributeNames.STORAGE_KEY, key)
             gridfs_bucket = self._gridfs_buckets[collection]
             # Check existing metadata so we can remove any old GridFS file if updated
-            existing_metadata = await self._collections_by_name[collection].find_one(
-                filter={"key": key}
-            )
+            existing_metadata = await self._collections_by_name[collection].find_one(filter={"key": key})
             try:
                 mongo_doc = await self._serialize_and_store_entry(
                     key=key,
@@ -511,19 +476,13 @@ class MongoDBGridFSStore(MongoDBStore):
         if not keys:
             return
         if created_at is None:
-            raise MongoGridFSException(
-                "created_at must be provided when storing managed entries."
-            )
+            raise MongoGridFSException("created_at must be provided when storing managed entries.")
         if not collection:
-            raise MongoGridFSException(
-                "collection must be provided when storing managed entries."
-            )
+            raise MongoGridFSException("collection must be provided when storing managed entries.")
         gridfs_bucket = self._gridfs_buckets[collection]
         # Read existing docs once to enable old GridFS cleanup during updates
         existing_docs: dict[str, dict[str, Any]] = {}
-        cursor = self._collections_by_name[collection].find(
-            filter={"key": {"$in": list(keys)}}
-        )
+        cursor = self._collections_by_name[collection].find(filter={"key": {"$in": list(keys)}})
         async for doc in cursor:
             if key := doc.get("key"):
                 existing_docs[key] = doc
@@ -551,9 +510,7 @@ class MongoDBGridFSStore(MongoDBStore):
                     update_doc["$unset"] = unset_fields
                 operations.append(UpdateOne({"key": key}, update_doc, upsert=True))
             except Exception as e:
-                raise MongoGridFSException(
-                    f"Failed to store entry for key '{key}' in collection '{collection}'"
-                ) from e
+                raise MongoGridFSException(f"Failed to store entry for key '{key}' in collection '{collection}'") from e
         if operations:
             await self._collections_by_name[collection].bulk_write(operations)
 
@@ -568,9 +525,7 @@ class MongoDBGridFSStore(MongoDBStore):
         Returns:
             True if the entry was deleted, False if it didn't exist.
         """
-        metadata_doc = await self._collections_by_name[collection].find_one(
-            filter={"key": key}
-        )
+        metadata_doc = await self._collections_by_name[collection].find_one(filter={"key": key})
 
         if not metadata_doc:
             return False
@@ -580,17 +535,13 @@ class MongoDBGridFSStore(MongoDBStore):
             try:
                 await self._gridfs_buckets[collection].delete(gridfs_file_id)
             except Exception as e:
-                raise MongoGridFSException(
-                    f"Failed to delete GridFS file with id {gridfs_file_id}"
-                ) from e
+                raise MongoGridFSException(f"Failed to delete GridFS file with id {gridfs_file_id}") from e
 
         # Delete metadata
         return await super()._delete_managed_entry(key=key, collection=collection)
 
     @override
-    async def _delete_managed_entries(
-        self, *, keys: Sequence[str], collection: str
-    ) -> int:
+    async def _delete_managed_entries(self, *, keys: Sequence[str], collection: str) -> int:
         """Delete multiple managed entries efficiently.
 
         Args:
@@ -604,9 +555,7 @@ class MongoDBGridFSStore(MongoDBStore):
             return 0
 
         # Get all metadata documents to find GridFS file IDs
-        cursor = self._collections_by_name[collection].find(
-            filter={"key": {"$in": list(keys)}}
-        )
+        cursor = self._collections_by_name[collection].find(filter={"key": {"$in": list(keys)}})
 
         gridfs_bucket = self._gridfs_buckets[collection]
         deleted_count = 0

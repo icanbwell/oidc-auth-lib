@@ -49,16 +49,12 @@ class AuthRouter:
         self.prefix = prefix
         self.tags = tags or ["models"]
         self.dependencies = dependencies or []
-        self.router = APIRouter(
-            prefix=self.prefix, tags=self.tags, dependencies=self.dependencies
-        )
+        self.router = APIRouter(prefix=self.prefix, tags=self.tags, dependencies=self.dependencies)
         self._register_routes()
 
     def _register_routes(self) -> None:
         """Register all routes for this router"""
-        self.router.add_api_route(
-            "/login", self.login, methods=["GET"], response_model=None
-        )
+        self.router.add_api_route("/login", self.login, methods=["GET"], response_model=None)
         self.router.add_api_route(
             "/callback",
             self.auth_callback,
@@ -77,12 +73,8 @@ class AuthRouter:
         self,
         request: Request,
         auth_manager: Annotated[AuthManager, Depends(Inject(AuthManager))],
-        auth_config_reader: Annotated[
-            AuthConfigReader, Depends(Inject(AuthConfigReader))
-        ],
-        environment_variables: Annotated[
-            OidcEnvironmentVariables, Depends(Inject(OidcEnvironmentVariables))
-        ],
+        auth_config_reader: Annotated[AuthConfigReader, Depends(Inject(AuthConfigReader))],
+        environment_variables: Annotated[OidcEnvironmentVariables, Depends(Inject(OidcEnvironmentVariables))],
     ) -> Union[RedirectResponse, JSONResponse]:
         """
         Handle the login route for authentication.
@@ -95,16 +87,10 @@ class AuthRouter:
             environment_variables (OidcEnvironmentVariables): The environment variables instance.
         """
         auth_redirect_uri_text: Optional[str] = environment_variables.auth_redirect_uri
-        redirect_uri1: URL = (
-            URL(auth_redirect_uri_text)
-            if auth_redirect_uri_text
-            else request.url_for("auth_callback")
-        )
+        redirect_uri1: URL = URL(auth_redirect_uri_text) if auth_redirect_uri_text else request.url_for("auth_callback")
 
         try:
-            auth_config: AuthConfig | None = (
-                auth_config_reader.get_config_for_first_auth_provider()
-            )
+            auth_config: AuthConfig | None = auth_config_reader.get_config_for_first_auth_provider()
 
             if not auth_config:
                 raise ValueError("No auth config found")
@@ -120,9 +106,7 @@ class AuthRouter:
                 referring_subject=environment_variables.oauth_referring_subject,
             )
 
-            logger.info(
-                f"Redirecting to authorization URL: {url} (auth_provider: {auth_config.auth_provider})"
-            )
+            logger.info(f"Redirecting to authorization URL: {url} (auth_provider: {auth_config.auth_provider})")
 
             return RedirectResponse(url, status_code=302)
         except Exception as e:
@@ -136,9 +120,7 @@ class AuthRouter:
     async def auth_callback(
         self,
         request: Request,
-        fast_api_auth_manager: Annotated[
-            FastAPIAuthManager, Depends(Inject(FastAPIAuthManager))
-        ],
+        fast_api_auth_manager: Annotated[FastAPIAuthManager, Depends(Inject(FastAPIAuthManager))],
     ) -> Response:
         """
         Handle the authentication callback route.
@@ -166,9 +148,7 @@ class AuthRouter:
     async def signout(
         self,
         request: Request,
-        fast_api_auth_manager: Annotated[
-            FastAPIAuthManager, Depends(Inject(FastAPIAuthManager))
-        ],
+        fast_api_auth_manager: Annotated[FastAPIAuthManager, Depends(Inject(FastAPIAuthManager))],
     ) -> Response:
         """
         Handle the signout route for authentication.

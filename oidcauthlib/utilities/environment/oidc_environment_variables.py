@@ -60,9 +60,7 @@ class OidcEnvironmentVariables(AbstractEnvironmentVariables):
     @override
     def auth_providers(self) -> Optional[list[str]]:
         auth_providers: str | None = os.environ.get("AUTH_PROVIDERS")
-        return (
-            [p.strip() for p in auth_providers.split(",")] if auth_providers else None
-        )
+        return [p.strip() for p in auth_providers.split(",")] if auth_providers else None
 
     @property
     @override
@@ -96,17 +94,13 @@ class OidcEnvironmentVariables(AbstractEnvironmentVariables):
         Raises:
             ValueError: If an invalid provider type specified
         """
-        provider_str = os.environ.get(
-            "CACHE_PROVIDER", CacheProvider.MONGODB.value
-        ).lower()
+        provider_str = os.environ.get("CACHE_PROVIDER", CacheProvider.MONGODB.value).lower()
 
         try:
             return CacheProvider(provider_str)
         except ValueError:
             valid_values = [p.value for p in CacheProvider]
-            raise ValueError(
-                f"CACHE_PROVIDER must be one of {valid_values}, got '{provider_str}'"
-            )
+            raise ValueError(f"CACHE_PROVIDER must be one of {valid_values}, got '{provider_str}'")
 
     @property
     def mongo_max_pool_size(self) -> int:
@@ -124,9 +118,7 @@ class OidcEnvironmentVariables(AbstractEnvironmentVariables):
             import logging
 
             logger = logging.getLogger(__name__)
-            logger.warning(
-                f"MONGO_MAX_POOL_SIZE={size} is very high, consider reducing to avoid resource exhaustion"
-            )
+            logger.warning(f"MONGO_MAX_POOL_SIZE={size} is very high, consider reducing to avoid resource exhaustion")
         return size
 
     @property
@@ -180,9 +172,7 @@ class OidcEnvironmentVariables(AbstractEnvironmentVariables):
             chunk_size = int(os.environ.get("GRIDFS_CHUNK_SIZE_KB", str(255)))
             return chunk_size
         except ValueError:
-            raise ValueError(
-                "GRIDFS_CHUNK_SIZE_KB must be a positive integer representing bytes"
-            )
+            raise ValueError("GRIDFS_CHUNK_SIZE_KB must be a positive integer representing bytes")
 
     @property
     def max_mongo_inline_size_kb(self) -> int:
@@ -204,9 +194,7 @@ class OidcEnvironmentVariables(AbstractEnvironmentVariables):
             max_size = int(os.environ.get("MAX_MONGO_INLINE_SIZE_KB", str(14 * 1024)))
             return max_size
         except ValueError:
-            raise ValueError(
-                "MAX_MONGO_INLINE_SIZE_KB must be a positive integer representing bytes"
-            )
+            raise ValueError("MAX_MONGO_INLINE_SIZE_KB must be a positive integer representing bytes")
 
     @property
     def well_known_config_http_timeout_seconds(self) -> int:
@@ -222,11 +210,7 @@ class OidcEnvironmentVariables(AbstractEnvironmentVariables):
             Timeout in seconds
         """
         try:
-            timeout = int(
-                os.environ.get("WELL_KNOWN_CONFIG_HTTP_TIMEOUT_SECONDS", "30")
-            )
+            timeout = int(os.environ.get("WELL_KNOWN_CONFIG_HTTP_TIMEOUT_SECONDS", "30"))
             return timeout
         except ValueError:
-            raise ValueError(
-                "WELL_KNOWN_CONFIG_HTTP_TIMEOUT_SECONDS must be a positive integer representing seconds"
-            )
+            raise ValueError("WELL_KNOWN_CONFIG_HTTP_TIMEOUT_SECONDS must be a positive integer representing seconds")

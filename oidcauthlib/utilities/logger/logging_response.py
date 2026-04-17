@@ -27,12 +27,8 @@ class LoggingResponse(httpx.Response):
         Yields:
             bytes: The next chunk of response content in bytes.
         """
-        logger.debug(
-            f"====== Response: {self.request.method} {self.url} {self.status_code} ====="
-        )
+        logger.debug(f"====== Response: {self.request.method} {self.url} {self.status_code} =====")
         async for chunk in super().aiter_bytes(*args, **kwargs):
             logger.debug(chunk)
             yield chunk
-        logger.debug(
-            f"====== End Response: {self.request.method} {self.url} {self.status_code} ====="
-        )
+        logger.debug(f"====== End Response: {self.request.method} {self.url} {self.status_code} =====")

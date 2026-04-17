@@ -74,12 +74,9 @@ class StorageFactoryCreator:
                 )
             case CacheProvider.REDIS:
                 raise NotImplementedError(
-                    "Redis provider not yet implemented. "
-                    f"Use CACHE_PROVIDER={CacheProvider.MONGODB.value} (default)"
+                    f"Redis provider not yet implemented. Use CACHE_PROVIDER={CacheProvider.MONGODB.value} (default)"
                 )
             case CacheProvider.MEMORY:
                 return MemoryStorageFactory()
             case _:
-                raise ValueError(
-                    f"Unknown cache provider: {self.environment_variables.cache_provider}"
-                )
+                raise ValueError(f"Unknown cache provider: {self.environment_variables.cache_provider}")

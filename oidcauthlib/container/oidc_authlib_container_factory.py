@@ -30,9 +30,7 @@ class OidcAuthLibContainerFactory:
 
         container: IContainer = SimpleContainer()
 
-        container = OidcAuthLibContainerFactory().register_services_in_container(
-            container=container
-        )
+        container = OidcAuthLibContainerFactory().register_services_in_container(container=container)
         return container
 
     @staticmethod
@@ -51,9 +49,7 @@ class OidcAuthLibContainerFactory:
 
         container.singleton(
             AuthConfigReader,
-            lambda c: AuthConfigReader(
-                environment_variables=c.resolve(OidcEnvironmentVariables)
-            ),
+            lambda c: AuthConfigReader(environment_variables=c.resolve(OidcEnvironmentVariables)),
         )
 
         container.singleton(
@@ -89,9 +85,7 @@ class OidcAuthLibContainerFactory:
                 environment_variables=c.resolve(OidcEnvironmentVariables),
                 auth_config_reader=c.resolve(AuthConfigReader),
                 token_reader=c.resolve(TokenReader),
-                well_known_configuration_manager=c.resolve(
-                    WellKnownConfigurationManager
-                ),
+                well_known_configuration_manager=c.resolve(WellKnownConfigurationManager),
             ),
         )
 
@@ -101,17 +95,13 @@ class OidcAuthLibContainerFactory:
                 auth_config_reader=c.resolve(AuthConfigReader),
                 token_reader=c.resolve(TokenReader),
                 environment_variables=c.resolve(OidcEnvironmentVariables),
-                well_known_configuration_manager=c.resolve(
-                    WellKnownConfigurationManager
-                ),
+                well_known_configuration_manager=c.resolve(WellKnownConfigurationManager),
             ),
         )
 
         container.singleton(
             CacheToCollectionMapper,
-            lambda c: CacheToCollectionMapper(
-                environment_variables=c.resolve(OidcEnvironmentVariables)
-            ),
+            lambda c: CacheToCollectionMapper(environment_variables=c.resolve(OidcEnvironmentVariables)),
         )
 
         container.singleton(

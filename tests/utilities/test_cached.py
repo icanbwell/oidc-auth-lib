@@ -25,20 +25,13 @@ def test_add_credentials_to_mongo_url() -> None:
     url = "mongodb://mongo:27017?appName=fhir-server"
     username = "user"
     password = "pass"  # pragma: allowlist secret
-    new_url = MongoUrlHelpers.add_credentials_to_mongo_url(
-        mongo_url=url, username=username, password=password
-    )
+    new_url = MongoUrlHelpers.add_credentials_to_mongo_url(mongo_url=url, username=username, password=password)
     assert new_url.startswith(
         "mongodb://user:pass@mongo:27017"  # pragma: allowlist secret
     )
 
     # No credentials
-    assert (
-        MongoUrlHelpers.add_credentials_to_mongo_url(
-            mongo_url=url, username=None, password=None
-        )
-        == url
-    )
+    assert MongoUrlHelpers.add_credentials_to_mongo_url(mongo_url=url, username=None, password=None) == url
 
     # Already has credentials
     url2 = "mongodb://old:creds@mongo:27017"  # pragma: allowlist secret

@@ -35,9 +35,7 @@ async def test_concurrent_setup_collection_is_race_safe(
     # Wire mapping for the test cache
     test_container.singleton(
         CacheToCollectionMapper,
-        lambda c: TestCacheToCollectionMapper(
-            environment_variables=c.resolve(OidcEnvironmentVariables)
-        ),
+        lambda c: TestCacheToCollectionMapper(environment_variables=c.resolve(OidcEnvironmentVariables)),
     )
     storage_factory: StorageFactory = test_container.resolve(StorageFactory)
     store = cast(MongoDBGridFSStore, storage_factory.get_store(TEST_CACHE))
@@ -56,9 +54,7 @@ async def test_concurrent_setup_collection_is_race_safe(
     from datetime import datetime, UTC
     from key_value.aio._utils.managed_entry import ManagedEntry
 
-    entry = ManagedEntry(
-        value={"ok": True}, created_at=datetime.now(UTC), expires_at=None
-    )
+    entry = ManagedEntry(value={"ok": True}, created_at=datetime.now(UTC), expires_at=None)
     await store._put_managed_entry(
         key="smoke",
         collection="race_collection",

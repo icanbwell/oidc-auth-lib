@@ -52,9 +52,7 @@ async def test_insert_or_replace_many_insert_and_replace() -> None:
     assert found_bob.value == "initial_value_bob"
 
     # Replace Alice's document entirely
-    updated_alice = CacheItem(
-        key="alice", value="replaced_value_alice", created=datetime.now(UTC)
-    )
+    updated_alice = CacheItem(key="alice", value="replaced_value_alice", created=datetime.now(UTC))
     result2 = await repo.insert_or_replace_many(
         collection_name=collection,
         items=[updated_alice],
@@ -62,9 +60,7 @@ async def test_insert_or_replace_many_insert_and_replace() -> None:
     )
     assert isinstance(result2, list)
     assert len(result2) == 1
-    found_alice_updated = await repo.find_by_fields(
-        collection, CacheItem, {"key": "alice"}
-    )
+    found_alice_updated = await repo.find_by_fields(collection, CacheItem, {"key": "alice"})
     assert found_alice_updated is not None
     assert found_alice_updated.key == "alice"
     assert found_alice_updated.value == "replaced_value_alice"
@@ -99,9 +95,7 @@ async def test_insert_or_update_many_insert_and_update() -> None:
     # Update Alice's document (partial update - value changes, created should be preserved)
     # Create a new item with only the fields we want to update (key for matching + value to update)
     new_created_time = datetime.now(UTC)
-    updated_alice = CacheItem(
-        key="alice", value="updated_value_alice", created=new_created_time
-    )
+    updated_alice = CacheItem(key="alice", value="updated_value_alice", created=new_created_time)
     result2 = await repo.insert_or_update_many(
         collection_name=collection,
         items=[updated_alice],
@@ -109,9 +103,7 @@ async def test_insert_or_update_many_insert_and_update() -> None:
     )
     assert isinstance(result2, list)
     assert len(result2) == 1
-    found_alice_updated = await repo.find_by_fields(
-        collection, CacheItem, {"key": "alice"}
-    )
+    found_alice_updated = await repo.find_by_fields(collection, CacheItem, {"key": "alice"})
     assert found_alice_updated is not None
     assert found_alice_updated.key == "alice"
     assert found_alice_updated.value == "updated_value_alice"

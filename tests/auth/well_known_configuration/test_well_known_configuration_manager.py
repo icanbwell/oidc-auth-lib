@@ -63,15 +63,9 @@ def auth_config_reader(auth_configs: list[AuthConfig]) -> MagicMock:
 
 @pytest.fixture
 def cache_double(test_container: IContainer) -> CacheDouble:
-    environment_variables: OidcEnvironmentVariables = test_container.resolve(
-        OidcEnvironmentVariables
-    )
-    cache = WellKnownConfigurationCache(
-        well_known_store=None, environment_variables=environment_variables
-    )
-    cache._jwks = KeySet.import_key_set(
-        {"keys": [{"kty": "oct", "kid": "kid-1", "k": "abc"}]}
-    )
+    environment_variables: OidcEnvironmentVariables = test_container.resolve(OidcEnvironmentVariables)
+    cache = WellKnownConfigurationCache(well_known_store=None, environment_variables=environment_variables)
+    cache._jwks = KeySet.import_key_set({"keys": [{"kty": "oct", "kid": "kid-1", "k": "abc"}]})
     read_mock: AsyncMock = AsyncMock(return_value=None)
     clear_mock: AsyncMock = AsyncMock(return_value=None)
     get_mock: AsyncMock = AsyncMock(return_value=None)
@@ -111,9 +105,7 @@ async def test_ensure_initialized_async_loads_each_provider_once(
 
 
 @pytest.mark.asyncio
-async def test_get_jwks_async_returns_cached_keyset(
-    auth_config_reader: MagicMock, cache_double: CacheDouble
-) -> None:
+async def test_get_jwks_async_returns_cached_keyset(auth_config_reader: MagicMock, cache_double: CacheDouble) -> None:
     manager = WellKnownConfigurationManager(
         auth_config_reader=auth_config_reader,
         cache=cache_double.cache,

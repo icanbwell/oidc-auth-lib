@@ -68,9 +68,7 @@ async def test_update_and_delete(mongo_repo: AsyncMongoRepository[TestModel]) ->
     inserted_id = await mongo_repo.insert(collection, model)
     # Update
     update_model = TestModel(name="Bobby", email="bob@example.com", age=36)
-    updated = await mongo_repo.update_by_id(
-        collection, inserted_id, update_model, TestModel
-    )
+    updated = await mongo_repo.update_by_id(collection, inserted_id, update_model, TestModel)
     assert updated is not None
     assert updated.name == "Bobby"
     assert updated.age == 36
@@ -99,12 +97,8 @@ async def test_insert_or_replace_many_insert_and_replace(
     )
     assert result.acknowledged
     # Query by email (key field) instead of id, since bulk_write does not update model ids
-    found_alice = await mongo_repo.find_by_fields(
-        collection, TestModel, {"email": "alice@example.com"}
-    )
-    found_bob = await mongo_repo.find_by_fields(
-        collection, TestModel, {"email": "bob@example.com"}
-    )
+    found_alice = await mongo_repo.find_by_fields(collection, TestModel, {"email": "alice@example.com"})
+    found_bob = await mongo_repo.find_by_fields(collection, TestModel, {"email": "bob@example.com"})
     assert found_alice is not None
     assert found_bob is not None
     assert found_alice.name == "Alice"
@@ -122,9 +116,7 @@ async def test_insert_or_replace_many_insert_and_replace(
         key_fields=["email"],
     )
     assert result2.acknowledged
-    found_alice_updated = await mongo_repo.find_by_fields(
-        collection, TestModel, {"email": "alice@example.com"}
-    )
+    found_alice_updated = await mongo_repo.find_by_fields(collection, TestModel, {"email": "alice@example.com"})
     assert found_alice_updated is not None
     assert found_alice_updated.name == "Alice Updated"
     assert found_alice_updated.age == 29
@@ -147,12 +139,8 @@ async def test_insert_or_update_many_insert_and_update(
     )
     assert result.acknowledged
     # Query by email (key field) instead of id, since bulk_write does not update model ids
-    found_alice = await mongo_repo.find_by_fields(
-        collection, TestModel, {"email": "alice@example.com"}
-    )
-    found_bob = await mongo_repo.find_by_fields(
-        collection, TestModel, {"email": "bob@example.com"}
-    )
+    found_alice = await mongo_repo.find_by_fields(collection, TestModel, {"email": "alice@example.com"})
+    found_bob = await mongo_repo.find_by_fields(collection, TestModel, {"email": "bob@example.com"})
     assert found_alice is not None
     assert found_bob is not None
     assert found_alice.name == "Alice"
@@ -170,9 +158,7 @@ async def test_insert_or_update_many_insert_and_update(
         key_fields=["email"],
     )
     assert result2.acknowledged
-    found_alice_updated = await mongo_repo.find_by_fields(
-        collection, TestModel, {"email": "alice@example.com"}
-    )
+    found_alice_updated = await mongo_repo.find_by_fields(collection, TestModel, {"email": "alice@example.com"})
     assert found_alice_updated is not None
     assert found_alice_updated.name == "Alice Updated"
     assert found_alice_updated.age == 29

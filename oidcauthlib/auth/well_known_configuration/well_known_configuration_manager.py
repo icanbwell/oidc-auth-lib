@@ -54,9 +54,7 @@ class WellKnownConfigurationManager:
         auth_config_reader: AuthConfigReader,
         cache: WellKnownConfigurationCache,
     ) -> None:
-        self._auth_configs: List[AuthConfig] = (
-            auth_config_reader.get_auth_configs_for_all_auth_providers()
-        )
+        self._auth_configs: List[AuthConfig] = auth_config_reader.get_auth_configs_for_all_auth_providers()
         self._cache: WellKnownConfigurationCache = cache
         if not isinstance(self._cache, WellKnownConfigurationCache):
             raise TypeError(
@@ -102,9 +100,7 @@ class WellKnownConfigurationManager:
 
         await self.ensure_initialized_async()
 
-    async def get_async(
-        self, auth_config: AuthConfig
-    ) -> WellKnownConfigurationCacheResult | None:
+    async def get_async(self, auth_config: AuthConfig) -> WellKnownConfigurationCacheResult | None:
         """Retrieve a cached well-known configuration for a specific provider.
 
         Args:

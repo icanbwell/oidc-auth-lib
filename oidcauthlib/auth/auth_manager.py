@@ -71,17 +71,13 @@ class AuthManager:
         if self.environment_variables is None:
             raise ValueError("environment_variables must not be None")
         if not isinstance(self.environment_variables, AbstractEnvironmentVariables):
-            raise TypeError(
-                "environment_variables must be an instance of EnvironmentVariables"
-            )
+            raise TypeError("environment_variables must be an instance of EnvironmentVariables")
 
         self.auth_config_reader: AuthConfigReader = auth_config_reader
         if self.auth_config_reader is None:
             raise ValueError("auth_config_reader must not be None")
         if not isinstance(self.auth_config_reader, AuthConfigReader):
-            raise TypeError(
-                "auth_config_reader must be an instance of AuthConfigReader"
-            )
+            raise TypeError("auth_config_reader must be an instance of AuthConfigReader")
 
         self.token_reader: TokenReader = token_reader
         if self.token_reader is None:
@@ -89,17 +85,11 @@ class AuthManager:
         if not isinstance(self.token_reader, TokenReader):
             raise TypeError("token_reader must be an instance of TokenReader")
 
-        self.well_known_configuration_manager: WellKnownConfigurationManager = (
-            well_known_configuration_manager
-        )
+        self.well_known_configuration_manager: WellKnownConfigurationManager = well_known_configuration_manager
         if self.well_known_configuration_manager is None:
             raise ValueError("well_known_configuration_manager must not be None")
-        if not isinstance(
-            self.well_known_configuration_manager, WellKnownConfigurationManager
-        ):
-            raise TypeError(
-                "well_known_configuration_manager must be an instance of WellKnownConfigurationManager"
-            )
+        if not isinstance(self.well_known_configuration_manager, WellKnownConfigurationManager):
+            raise TypeError("well_known_configuration_manager must be an instance of WellKnownConfigurationManager")
 
         self._dcr_manager: DcrManager | None = dcr_manager
 
@@ -110,9 +100,7 @@ class AuthManager:
             else OAuthMongoCache(environment_variables=environment_variables)
         )
 
-        logger.debug(
-            f"Initializing AuthManager with cache type {type(self.cache)} cache id: {self.cache.id}"
-        )
+        logger.debug(f"Initializing AuthManager with cache type {type(self.cache)} cache id: {self.cache.id}")
         # OIDC PKCE setup
         self.redirect_uri = os.getenv("AUTH_REDIRECT_URI")
         if self.redirect_uri is None:
@@ -120,17 +108,13 @@ class AuthManager:
         # https://docs.authlib.org/en/latest/client/frameworks.html#frameworks-clients
         self._oauth: OAuth = OAuth(cache=self.cache)
         self._registered_dynamic_providers: set[str] = set()
-        self.auth_configs: List[AuthConfig] = (
-            self.auth_config_reader.get_auth_configs_for_all_auth_providers()
-        )
+        self.auth_configs: List[AuthConfig] = self.auth_config_reader.get_auth_configs_for_all_auth_providers()
 
     async def ensure_initialized_async(self) -> None:
         auth_config: AuthConfig
         for auth_config in self.auth_configs:
             if auth_config.well_known_uri:
-                await self.well_known_configuration_manager.get_async(
-                    auth_config=auth_config
-                )
+                await self.well_known_configuration_manager.get_async(auth_config=auth_config)
             await self.register_dynamic_provider(auth_config=auth_config)
 
     async def register_dynamic_provider(
@@ -163,9 +147,7 @@ class AuthManager:
                 registration_url=auth_config.registration_url,
             )
             if dcr_result is None or not dcr_result.client_id:
-                raise ValueError(
-                    f"DCR failed to obtain client_id for '{auth_config.auth_provider}'"
-                )
+                raise ValueError(f"DCR failed to obtain client_id for '{auth_config.auth_provider}'")
             client_id = dcr_result.client_id
             client_secret = dcr_result.client_secret
             logger.info(
@@ -279,9 +261,7 @@ class AuthManager:
             f" with state {state_content} and encoded state {state}"
         )
 
-        rv: Dict[str, Any] = await client.create_authorization_url(
-            redirect_uri=redirect_uri, state=state
-        )
+        rv: Dict[str, Any] = await client.create_authorization_url(redirect_uri=redirect_uri, state=state)
         logger.debug(f"Authorization URL created: {rv}")
         # Save OAuth state data (code_verifier, nonce, redirect_uri) to our
         # own cache rather than relying on authlib's save_authorize_data which
@@ -338,17 +318,11 @@ class AuthManager:
                 resp.raise_for_status()
                 token_url = resp.json().get("token_endpoint")
             except Exception as e:
-                raise AuthorizationNeededException(
-                    message=f"Failed to discover token endpoint: {e}"
-                )
+                raise AuthorizationNeededException(message=f"Failed to discover token endpoint: {e}")
         if not token_url and auth_config.issuer:
-            token_url = (
-                auth_config.issuer.rstrip("/") + "/protocol/openid-connect/token"
-            )
+            token_url = auth_config.issuer.rstrip("/") + "/protocol/openid-connect/token"
         if not token_url:
-            raise AuthorizationNeededException(
-                message="No token endpoint found in AuthConfig."
-            )
+            raise AuthorizationNeededException(message="No token endpoint found in AuthConfig.")
 
         # Prepare OAuth2 client
         client_id = auth_config.client_id
@@ -380,9 +354,7 @@ class AuthManager:
 
         return access_token
 
-    def get_auth_config_for_auth_provider(
-        self, *, auth_provider: str
-    ) -> AuthConfig | None:
+    def get_auth_config_for_auth_provider(self, *, auth_provider: str) -> AuthConfig | None:
         if not auth_provider:
             raise ValueError("auth_provider must not be empty")
         for auth_config in self.auth_configs:
@@ -391,9 +363,7 @@ class AuthManager:
         return None
 
     @staticmethod
-    def wait_till_well_known_configuration_available(
-        *, auth_config: AuthConfig, timeout_seconds: int = 30
-    ) -> None:
+    def wait_till_well_known_configuration_available(*, auth_config: AuthConfig, timeout_seconds: int = 30) -> None:
         """
         Wait until the well-known configuration is available for the given AuthConfig.
 
@@ -417,9 +387,7 @@ class AuthManager:
                     resp = client.get(auth_config.well_known_uri)
                 resp.raise_for_status()
                 # Successfully fetched the configuration
-                logger.info(
-                    f"Well-known configuration is now available at {auth_config.well_known_uri}"
-                )
+                logger.info(f"Well-known configuration is now available at {auth_config.well_known_uri}")
                 return
             except Exception as e:
                 elapsed_time = time.time() - start_time
@@ -427,7 +395,5 @@ class AuthManager:
                     raise TimeoutError(
                         f"Timed out waiting for well-known configuration at {auth_config.well_known_uri}"
                     ) from e
-                logger.debug(
-                    f"Well-known configuration not yet available, retrying... ({elapsed_time:.1f}s elapsed)"
-                )
+                logger.debug(f"Well-known configuration not yet available, retrying... ({elapsed_time:.1f}s elapsed)")
                 time.sleep(2)  # Wait before retrying

@@ -28,13 +28,9 @@ class AuthInformation(BaseModel):
         description="The expiration time of the authentication token, if applicable.",
     )
 
-    email: Optional[str] = Field(
-        default=None, description="The email of the authenticated user, if available."
-    )
+    email: Optional[str] = Field(default=None, description="The email of the authenticated user, if available.")
     subject: Optional[str] = Field(
         default=None,
         description="The subject (sub) claim from the token, representing the unique identifier of the user.",
     )
-    user_name: Optional[str] = Field(
-        default=None, description="The name of the authenticated user, if available."
-    )
+    user_name: Optional[str] = Field(default=None, description="The name of the authenticated user, if available.")

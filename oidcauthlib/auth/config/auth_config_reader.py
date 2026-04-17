@@ -28,19 +28,13 @@ class AuthConfigReader:
         logger.debug("Initializing AuthConfigReader")
         self.environment_variables: AbstractEnvironmentVariables = environment_variables
         if self.environment_variables is None:
-            logger.error(
-                "AuthConfigReader initialization failed: environment_variables is None"
-            )
-            raise ValueError(
-                "AuthConfigReader requires an EnvironmentVariables instance."
-            )
+            logger.error("AuthConfigReader initialization failed: environment_variables is None")
+            raise ValueError("AuthConfigReader requires an EnvironmentVariables instance.")
         if not isinstance(self.environment_variables, AbstractEnvironmentVariables):
             logger.error(
                 f"AuthConfigReader initialization failed: environment_variables is not an instance of AbstractEnvironmentVariables, got {type(environment_variables)}"
             )
-            raise TypeError(
-                "environment_variables must be an instance of EnvironmentVariables"
-            )
+            raise TypeError("environment_variables must be an instance of EnvironmentVariables")
         self._auth_configs: list[AuthConfig] | None = None
         # lock to protect first-time initialization of _auth_configs across threads
         self._lock: threading.Lock = threading.Lock()
@@ -83,9 +77,7 @@ class AuthConfigReader:
                 )
                 if auth_config is not None:
                     auth_configs.append(auth_config)
-                    logger.debug(
-                        f"Successfully loaded config for provider: {auth_provider}"
-                    )
+                    logger.debug(f"Successfully loaded config for provider: {auth_provider}")
                 else:
                     logger.warning(f"No config found for provider: {auth_provider}")
             # Assign atomically while still under lock
@@ -124,23 +116,17 @@ class AuthConfigReader:
             return
         with self._lock:
             if self._auth_configs is None:
-                auth_providers: list[str] | None = (
-                    self.environment_variables.auth_providers
-                )
+                auth_providers: list[str] | None = self.environment_variables.auth_providers
                 if auth_providers is None:
                     auth_providers = []
                 env_configs: list[AuthConfig] = []
                 for auth_provider in auth_providers:
-                    auth_config = self.read_config_for_auth_provider(
-                        auth_provider=auth_provider
-                    )
+                    auth_config = self.read_config_for_auth_provider(auth_provider=auth_provider)
                     if auth_config is not None:
                         env_configs.append(auth_config)
                 self._auth_configs = env_configs
 
-            existing_names: set[str] = {
-                c.auth_provider.lower() for c in self._auth_configs
-            }
+            existing_names: set[str] = {c.auth_provider.lower() for c in self._auth_configs}
             for config in configs:
                 if config.auth_provider.lower() not in existing_names:
                     self._auth_configs.append(config)
@@ -175,37 +161,23 @@ class AuthConfigReader:
         logger.debug(f"Standardized auth provider name to: {auth_provider_upper}")
         # read client_id and client_secret from the environment variables
         auth_client_id: str | None = os.getenv(f"AUTH_CLIENT_ID_{auth_provider_upper}")
-        auth_client_secret: str | None = os.getenv(
-            f"AUTH_CLIENT_SECRET_{auth_provider_upper}"
-        )
+        auth_client_secret: str | None = os.getenv(f"AUTH_CLIENT_SECRET_{auth_provider_upper}")
         if auth_client_secret:
             logger.debug(f"Found client secret for provider: {auth_provider_upper}")
         else:
             logger.debug(f"No client secret found for provider: {auth_provider_upper}")
-        auth_well_known_uri: str | None = os.getenv(
-            f"AUTH_WELL_KNOWN_URI_{auth_provider_upper}"
-        )
+        auth_well_known_uri: str | None = os.getenv(f"AUTH_WELL_KNOWN_URI_{auth_provider_upper}")
         issuer: str | None = os.getenv(f"AUTH_ISSUER_{auth_provider_upper}")
-        logger.debug(
-            f"Issuer for {auth_provider_upper}: {issuer if issuer else 'not set'}"
-        )
+        logger.debug(f"Issuer for {auth_provider_upper}: {issuer if issuer else 'not set'}")
         audience: str | None = os.getenv(f"AUTH_AUDIENCE_{auth_provider_upper}")
         if audience is None:
-            logger.error(
-                f"AUTH_AUDIENCE_{auth_provider_upper} environment variable is not set"
-            )
-            raise ValueError(
-                f"AUTH_AUDIENCE_{auth_provider_upper} environment variable must be set"
-            )
-        friendly_name: str | None = os.getenv(
-            f"AUTH_FRIENDLY_NAME_{auth_provider_upper}"
-        )
+            logger.error(f"AUTH_AUDIENCE_{auth_provider_upper} environment variable is not set")
+            raise ValueError(f"AUTH_AUDIENCE_{auth_provider_upper} environment variable must be set")
+        friendly_name: str | None = os.getenv(f"AUTH_FRIENDLY_NAME_{auth_provider_upper}")
         if not friendly_name:
             # if no friendly name is set, use the auth_provider as the friendly name
             friendly_name = auth_provider
-            logger.debug(
-                f"No friendly name set, using auth provider name: {friendly_name}"
-            )
+            logger.debug(f"No friendly name set, using auth provider name: {friendly_name}")
         else:
             logger.debug(f"Friendly name for {auth_provider}: {friendly_name}")
 
@@ -214,33 +186,21 @@ class AuthConfigReader:
             scope = "openid profile email"
 
         logger.info(f"Successfully read config for auth provider: {auth_provider}")
-        extra_info_text: str | None = os.getenv(
-            f"AUTH_EXTRA_INFO_{auth_provider_upper}"
-        )
+        extra_info_text: str | None = os.getenv(f"AUTH_EXTRA_INFO_{auth_provider_upper}")
         extra_info_dict: dict[str, Any] | None
         if extra_info_text:
             try:
                 extra_info_raw: object = json.loads(extra_info_text)
             except json.JSONDecodeError as exc:
-                raise ValueError(
-                    f"Invalid JSON in AUTH_EXTRA_INFO_{auth_provider_upper}: {exc.msg}"
-                ) from exc
+                raise ValueError(f"Invalid JSON in AUTH_EXTRA_INFO_{auth_provider_upper}: {exc.msg}") from exc
             if not isinstance(extra_info_raw, dict):
-                raise ValueError(
-                    f"AUTH_EXTRA_INFO_{auth_provider_upper} must be a JSON object"
-                )
+                raise ValueError(f"AUTH_EXTRA_INFO_{auth_provider_upper} must be a JSON object")
             extra_info_dict = {str(key): value for key, value in extra_info_raw.items()}
         else:
             extra_info_dict = None
-        authorization_endpoint: str | None = os.getenv(
-            f"AUTH_AUTHORIZATION_ENDPOINT_{auth_provider_upper}"
-        )
-        token_endpoint: str | None = os.getenv(
-            f"AUTH_TOKEN_ENDPOINT_{auth_provider_upper}"
-        )
-        registration_url: str | None = os.getenv(
-            f"AUTH_REGISTRATION_URL_{auth_provider_upper}"
-        )
+        authorization_endpoint: str | None = os.getenv(f"AUTH_AUTHORIZATION_ENDPOINT_{auth_provider_upper}")
+        token_endpoint: str | None = os.getenv(f"AUTH_TOKEN_ENDPOINT_{auth_provider_upper}")
+        registration_url: str | None = os.getenv(f"AUTH_REGISTRATION_URL_{auth_provider_upper}")
 
         return AuthConfig(
             auth_provider=auth_provider,
@@ -268,15 +228,11 @@ class AuthConfigReader:
             str: The audience for the specified auth provider.
         """
         logger.debug(f"Getting audience for provider: {auth_provider}")
-        auth_config: AuthConfig | None = self.get_config_for_auth_provider(
-            auth_provider=auth_provider
-        )
+        auth_config: AuthConfig | None = self.get_config_for_auth_provider(auth_provider=auth_provider)
         if auth_config is None:
             logger.error(f"AuthConfig for provider {auth_provider} not found")
             raise ValueError(f"AuthConfig for audience {auth_provider} not found.")
-        logger.debug(
-            f"Found audience for provider {auth_provider}: {auth_config.audience}"
-        )
+        logger.debug(f"Found audience for provider {auth_provider}: {auth_config.audience}")
         return auth_config.audience
 
     def get_provider_for_audience(self, *, audience: str) -> str | None:
@@ -293,9 +249,7 @@ class AuthConfigReader:
         auth_configs: list[AuthConfig] = self.get_auth_configs_for_all_auth_providers()
         for auth_config in auth_configs:
             if auth_config.audience == audience:
-                logger.debug(
-                    f"Found provider for audience {audience}: {auth_config.auth_provider}"
-                )
+                logger.debug(f"Found provider for audience {audience}: {auth_config.auth_provider}")
                 return auth_config.auth_provider
         logger.warning(f"No provider found for audience: {audience}")
         return None
@@ -314,9 +268,7 @@ class AuthConfigReader:
         auth_configs: list[AuthConfig] = self.get_auth_configs_for_all_auth_providers()
         for auth_config in auth_configs:
             if auth_config.client_id == client_id:
-                logger.debug(
-                    f"Found provider for client_id {client_id}: {auth_config.auth_provider}"
-                )
+                logger.debug(f"Found provider for client_id {client_id}: {auth_config.auth_provider}")
                 return auth_config.auth_provider
         logger.warning(f"No provider found for client_id: {client_id}")
         return None

@@ -7,28 +7,18 @@ from oidcauthlib.utilities.url_validator import validate_url
 
 class TestSchemeValidation:
     def test_https_accepted(self) -> None:
-        with patch(
-            "oidcauthlib.utilities.url_validator.socket.getaddrinfo"
-        ) as mock_gai:
+        with patch("oidcauthlib.utilities.url_validator.socket.getaddrinfo") as mock_gai:
             mock_gai.return_value = [(2, 1, 6, "", ("93.184.216.34", 443))]
-            assert (
-                validate_url("https://example.com/register")
-                == "https://example.com/register"
-            )
+            assert validate_url("https://example.com/register") == "https://example.com/register"
 
     def test_http_rejected_by_default(self) -> None:
         with pytest.raises(ValueError, match="scheme must be https"):
             validate_url("http://example.com/register")
 
     def test_http_accepted_when_allowed(self) -> None:
-        with patch(
-            "oidcauthlib.utilities.url_validator.socket.getaddrinfo"
-        ) as mock_gai:
+        with patch("oidcauthlib.utilities.url_validator.socket.getaddrinfo") as mock_gai:
             mock_gai.return_value = [(2, 1, 6, "", ("93.184.216.34", 80))]
-            assert (
-                validate_url("http://example.com/register", allow_http=True)
-                == "http://example.com/register"
-            )
+            assert validate_url("http://example.com/register", allow_http=True) == "http://example.com/register"
 
     def test_ftp_rejected(self) -> None:
         with pytest.raises(ValueError, match="scheme must be"):
@@ -102,9 +92,7 @@ class TestDNSRebindingProtection:
         ],
     )
     def test_private_ipv4_resolved_rejected(self, ip: str) -> None:
-        with patch(
-            "oidcauthlib.utilities.url_validator.socket.getaddrinfo"
-        ) as mock_gai:
+        with patch("oidcauthlib.utilities.url_validator.socket.getaddrinfo") as mock_gai:
             mock_gai.return_value = [(2, 1, 6, "", (ip, 443))]
             with pytest.raises(ValueError, match="blocked IP"):
                 validate_url("https://some-external-host.com/register")
@@ -118,9 +106,7 @@ class TestDNSRebindingProtection:
         ],
     )
     def test_private_ipv6_resolved_rejected(self, ip: str) -> None:
-        with patch(
-            "oidcauthlib.utilities.url_validator.socket.getaddrinfo"
-        ) as mock_gai:
+        with patch("oidcauthlib.utilities.url_validator.socket.getaddrinfo") as mock_gai:
             mock_gai.return_value = [(10, 1, 6, "", (ip, 443, 0, 0))]
             with pytest.raises(ValueError, match="blocked IP"):
                 validate_url("https://some-external-host.com/register")
@@ -132,17 +118,13 @@ class TestEnvVarAllowHttp:
     def test_env_var_allows_http(self) -> None:
         with patch.dict("os.environ", {"AUTH_ALLOW_HTTP_URLS": "true"}):
             assert (
-                validate_url(
-                    "http://keycloak:8080/realms/test/.well-known/openid-configuration"
-                )
+                validate_url("http://keycloak:8080/realms/test/.well-known/openid-configuration")
                 == "http://keycloak:8080/realms/test/.well-known/openid-configuration"
             )
 
     def test_env_var_skips_private_ip_check(self) -> None:
         with patch.dict("os.environ", {"AUTH_ALLOW_HTTP_URLS": "true"}):
-            with patch(
-                "oidcauthlib.utilities.url_validator.socket.getaddrinfo"
-            ) as mock_gai:
+            with patch("oidcauthlib.utilities.url_validator.socket.getaddrinfo") as mock_gai:
                 mock_gai.return_value = [(2, 1, 6, "", ("172.18.0.5", 8080))]
                 validate_url("http://keycloak:8080/realms/test")
                 mock_gai.assert_not_called()
@@ -163,18 +145,14 @@ class TestPublicHostnamesAccepted:
         ],
     )
     def test_public_hostname_resolving_to_public_ip(self, ip: str) -> None:
-        with patch(
-            "oidcauthlib.utilities.url_validator.socket.getaddrinfo"
-        ) as mock_gai:
+        with patch("oidcauthlib.utilities.url_validator.socket.getaddrinfo") as mock_gai:
             mock_gai.return_value = [(2, 1, 6, "", (ip, 443))]
             validate_url("https://example.com/register")
 
 
 class TestDNSResolutionFailure:
     def test_unresolvable_hostname_rejected(self) -> None:
-        with patch(
-            "oidcauthlib.utilities.url_validator.socket.getaddrinfo"
-        ) as mock_gai:
+        with patch("oidcauthlib.utilities.url_validator.socket.getaddrinfo") as mock_gai:
             import socket
 
             mock_gai.side_effect = socket.gaierror("Name or service not known")
