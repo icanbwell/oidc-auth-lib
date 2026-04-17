@@ -104,7 +104,15 @@ class FastAPIAuthManager(AuthManager):
         logger.debug(
             f"OAuth client: {auth_provider} {client.client_id} {masked_client_text}"
         )
-        token: dict[str, Any] = await client.authorize_access_token(request=request)  # type: ignore[no-untyped-call]
+        # Retrieve OAuth state data (code_verifier, redirect_uri, nonce) from
+        # our cache instead of request.session — the gateway does not use
+        # SessionMiddleware.  State was saved by create_authorization_url.
+        token = await self._authorize_access_token_from_cache(
+            client=client,
+            request=request,
+            auth_provider=auth_provider,
+            state=state,
+        )
 
         return await self.process_token_async(
             code=code,
@@ -113,6 +121,74 @@ class FastAPIAuthManager(AuthManager):
             auth_config=auth_config,
             url=url,
         )
+
+    async def _authorize_access_token_from_cache(
+        self,
+        *,
+        client: StarletteOAuth2App,
+        request: Request,
+        auth_provider: str,
+        state: str,
+    ) -> dict[str, Any]:
+        """Exchange the authorization code for a token using cache-backed state.
+
+        Replaces ``client.authorize_access_token(request)`` which requires
+        ``SessionMiddleware``.  State data (code_verifier, redirect_uri,
+        nonce) is retrieved from ``self.cache`` where it was stored by
+        ``create_authorization_url``.
+        """
+        error = request.query_params.get("error")
+        if error:
+            from authlib.integrations.base_client import OAuthError
+
+            description = request.query_params.get("error_description")
+            raise OAuthError(error=error, description=description)
+
+        code = request.query_params.get("code")
+
+        # Retrieve state data saved by create_authorization_url
+        cache_key = f"_state_{auth_provider}_{state}"
+        cached_value = await self.cache.get(cache_key)
+        if cached_value:
+            state_data = json.loads(cached_value).get("data", {})
+            await self.cache.delete(cache_key)
+        else:
+            logger.warning(
+                "No cached state data found for key=%s — "
+                "token exchange may fail (missing code_verifier/redirect_uri)",
+                cache_key,
+            )
+            state_data = {}
+
+        # Build params for fetch_access_token
+        params: Dict[str, Any] = {"code": code, "state": state}
+        if state_data.get("code_verifier"):
+            params["code_verifier"] = state_data["code_verifier"]
+        redirect_uri = state_data.get("redirect_uri")
+        if redirect_uri:
+            params["redirect_uri"] = redirect_uri
+
+        token = await client.fetch_access_token(**params)
+
+        # Parse id_token if present (OpenID Connect).
+        # parse_id_token requires jwks_uri in server_metadata to verify the
+        # signature.  When the provider was registered with explicit endpoints
+        # (no server_metadata_url), jwks_uri is unavailable — skip gracefully.
+        if "id_token" in token and state_data.get("nonce"):
+            has_jwks = bool(client.server_metadata.get("jwks_uri"))
+            if has_jwks:
+                userinfo = await client.parse_id_token(
+                    token,
+                    nonce=state_data["nonce"],
+                    leeway=120,
+                )
+                token["userinfo"] = userinfo
+            else:
+                logger.debug(
+                    "Skipping id_token parsing — no jwks_uri in server metadata"
+                )
+
+        return token
 
     # noinspection PyMethodMayBeStatic
     async def process_token_async(
