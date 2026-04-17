@@ -24,20 +24,17 @@ jobs:
       run: |
         echo "${{ github.event.release.tag_name }}" > VERSION
 
-      # setup and install everything and run tests
-    - name: build docker
-      run: docker compose build --parallel
+    - name: Install uv
+      uses: astral-sh/setup-uv@cec208311dfd045dd5311c1add060b2062131d57
 
-    - name: Build and publish package with Docker Compose
+    - name: Build package
+      run: uv build
+
+    - name: Publish package
       env:
         TWINE_USERNAME: __token__
         TWINE_PASSWORD: ${{ secrets.PYPI }}
-      run: |
-        docker compose run --rm -e TWINE_USERNAME=${TWINE_USERNAME} -e TWINE_PASSWORD=${TWINE_PASSWORD} dev sh -c "
-          pip install twine wheel &&
-          python setup.py sdist bdist_wheel &&
-          twine upload dist/*
-        "
+      run: uvx twine upload dist/*
 
     - name: list files in dist
       run: ls -haltR dist

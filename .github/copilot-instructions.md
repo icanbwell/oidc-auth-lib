@@ -93,7 +93,7 @@
 - Use respx/aioresponses for HTTP mocking; inject via IoC; avoid monkey patching.
 
 ## Dependencies and Build
-- Keep `Pipfile`/`Pipfile.lock` consistent; use `make update` when changing Python deps.
+- Keep `pyproject.toml`/`uv.lock` consistent; use `make update` when changing Python deps.
 - Build and run via Docker and Make targets.
 
 ## Documentation and Examples
