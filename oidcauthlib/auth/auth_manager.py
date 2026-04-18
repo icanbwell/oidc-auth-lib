@@ -38,6 +38,9 @@ from oidcauthlib.utilities.url_validator import validate_url
 
 logger = logging.getLogger(__name__)
 logger.setLevel(SRC_LOG_LEVELS["AUTH"])
+OAUTH_STATE_CACHE_TTL_SECONDS: int = int(
+    os.getenv("OAUTH_STATE_CACHE_TTL_SECONDS", "300")
+)
 
 
 class AuthManager:
@@ -273,7 +276,11 @@ class AuthManager:
         if "nonce" in rv:
             state_data["nonce"] = rv["nonce"]
         cache_key = f"_state_{auth_provider}_{state}"
-        await self.cache.set(cache_key, json.dumps({"data": state_data}))
+        await self.cache.set(
+            cache_key,
+            json.dumps({"data": state_data}),
+            expires=OAUTH_STATE_CACHE_TTL_SECONDS,
+        )
         logger.debug(f"Saved OAuth state to cache key={cache_key} data={state_data}")
         return cast(str, rv["url"])
 
