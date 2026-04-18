@@ -143,15 +143,20 @@ class FastAPIAuthManager(AuthManager):
         # Retrieve state data saved by create_authorization_url
         cache_key = f"_state_{auth_provider}_{state}"
         cached_value = await self.cache.get(cache_key)
-        if cached_value:
-            state_data = json.loads(cached_value).get("data", {})
-            await self.cache.delete(cache_key)
-        else:
-            logger.warning(
-                "No cached state data found for key=%s — token exchange may fail (missing code_verifier/redirect_uri)",
+        if not cached_value:
+            from authlib.integrations.base_client import OAuthError
+
+            logger.error(
+                "No cached state data found for key=%s — aborting token exchange "
+                "(missing code_verifier/redirect_uri makes this a security risk)",
                 cache_key,
             )
-            state_data = {}
+            raise OAuthError(
+                error="invalid_state",
+                description="OAuth state validation failed: no cached state data found. "
+                "The state may have expired or was already consumed.",
+            )
+        state_data = json.loads(cached_value).get("data", {})
 
         # Build params for fetch_access_token
         params: Dict[str, Any] = {"code": code, "state": state}
@@ -162,6 +167,10 @@ class FastAPIAuthManager(AuthManager):
             params["redirect_uri"] = redirect_uri
 
         token = await client.fetch_access_token(**params)  # type: ignore[no-untyped-call]
+
+        # Delete the cache entry only after a successful token exchange so the
+        # user can retry the callback if the exchange fails transiently.
+        await self.cache.delete(cache_key)
 
         # Parse id_token if present (OpenID Connect).
         # parse_id_token requires jwks_uri in server_metadata to verify the
