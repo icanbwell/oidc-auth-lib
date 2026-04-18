@@ -38,9 +38,7 @@ from oidcauthlib.utilities.url_validator import validate_url
 
 logger = logging.getLogger(__name__)
 logger.setLevel(SRC_LOG_LEVELS["AUTH"])
-OAUTH_STATE_CACHE_TTL_SECONDS: int = int(
-    os.getenv("OAUTH_STATE_CACHE_TTL_SECONDS", "300")
-)
+OAUTH_STATE_CACHE_TTL_SECONDS: int = int(os.getenv("OAUTH_STATE_CACHE_TTL_SECONDS", "300"))
 
 
 class AuthManager:
