@@ -197,6 +197,26 @@ class OidcEnvironmentVariables(AbstractEnvironmentVariables):
             raise ValueError("MAX_MONGO_INLINE_SIZE_KB must be a positive integer representing bytes")
 
     @property
+    def well_known_cache_ttl_seconds(self) -> int:
+        """TTL in seconds for well-known configuration entries in the persistent store.
+
+        Controls how long OIDC discovery documents (including JWKS keys) are
+        cached in MongoDB before expiring. This ensures key rotations by
+        identity providers are picked up within a bounded window.
+
+        Set via WELL_KNOWN_CACHE_TTL_SECONDS environment variable.
+        Defaults to 3600 seconds (1 hour).
+
+        Returns:
+            TTL in seconds
+        """
+        try:
+            ttl = int(os.environ.get("WELL_KNOWN_CACHE_TTL_SECONDS", "3600"))
+            return ttl
+        except ValueError:
+            raise ValueError("WELL_KNOWN_CACHE_TTL_SECONDS must be a positive integer representing seconds")
+
+    @property
     def well_known_config_http_timeout_seconds(self) -> int:
         """HTTP timeout in seconds for fetching well-known configurations.
 

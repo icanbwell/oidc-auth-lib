@@ -247,6 +247,7 @@ class WellKnownConfigurationCache:
                             await self.well_known_store.put(
                                 key=well_known_uri,
                                 value=well_known_configuration_cache_result.model_dump(),
+                                ttl=self.environment_variables.well_known_cache_ttl_seconds,
                             )
                             logger.info(f"Cached OIDC discovery document for {well_known_uri}")
                         return well_known_configuration_cache_result
