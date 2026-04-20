@@ -113,9 +113,7 @@ class MongoStoreFactory(StorageFactory):
         # Validate required MongoDB configuration
         db_name = self._environment_variables.mongo_db_name
         if not db_name:
-            raise ValueError(
-                "MONGO_DB_NAME environment variable is required but not set"
-            )
+            raise ValueError("MONGO_DB_NAME environment variable is required but not set")
 
         if not collection_name:
             raise ValueError("Collection name is required but not provided")
@@ -158,21 +156,15 @@ class MongoStoreFactory(StorageFactory):
             if existing_locked is not None:
                 return existing_locked
 
-            collection_name: str | None = (
-                self._cache_to_collection_mapper.get_collection_for_cache(
-                    cache_name=namespace
-                )
+            collection_name: str | None = self._cache_to_collection_mapper.get_collection_for_cache(
+                cache_name=namespace
             )
             if collection_name is None:
-                raise ValueError(
-                    f"No collection mapping found for cache namespace: {namespace}"
-                )
+                raise ValueError(f"No collection mapping found for cache namespace: {namespace}")
 
             # Validate required collection configuration
             if not collection_name:
-                raise ValueError(
-                    f"Collection configuration missing for namespace: {namespace}"
-                )
+                raise ValueError(f"Collection configuration missing for namespace: {namespace}")
 
             # Create and cache the store
             store = self._create_store(collection_name)

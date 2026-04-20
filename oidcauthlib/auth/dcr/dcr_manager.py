@@ -32,11 +32,9 @@ class DcrManager:
     ) -> None:
         self._collection_name = collection_name
         self._redirect_uri = redirect_uri
-        self._repository: AsyncBaseRepository[DcrRegistration] = (
-            RepositoryFactory.get_repository(
-                repository_type=environment_variables.oauth_cache,
-                environment_variables=environment_variables,
-            )
+        self._repository: AsyncBaseRepository[DcrRegistration] = RepositoryFactory.get_repository(
+            repository_type=environment_variables.oauth_cache,
+            environment_variables=environment_variables,
         )
         self._dcr_client = dcr_client or DcrClient()
 
@@ -53,8 +51,7 @@ class DcrManager:
     ) -> DcrRegistration | None:
         if client_id:
             logger.info(
-                "DCR: Skipping registration for '%s' — client_id already "
-                "provided (client_id=%s)",
+                "DCR: Skipping registration for '%s' — client_id already provided (client_id=%s)",
                 auth_provider,
                 client_id,
             )
@@ -62,13 +59,11 @@ class DcrManager:
 
         if not registration_url:
             logger.error(
-                "DCR: No registration_url and no client_id for '%s' — "
-                "cannot resolve credentials",
+                "DCR: No registration_url and no client_id for '%s' — cannot resolve credentials",
                 auth_provider,
             )
             raise ValueError(
-                f"registration_url is required for DCR when client_id is not "
-                f"provided (auth_provider='{auth_provider}')"
+                f"registration_url is required for DCR when client_id is not provided (auth_provider='{auth_provider}')"
             )
 
         validate_url(registration_url)
@@ -95,16 +90,14 @@ class DcrManager:
 
         if cached and self._is_expired(cached):
             logger.info(
-                "DCR: Cached credentials for '%s' are expired "
-                "(client_id=%s, expired_at=%s) — re-registering",
+                "DCR: Cached credentials for '%s' are expired (client_id=%s, expired_at=%s) — re-registering",
                 auth_provider,
                 cached.client_id,
                 cached.client_secret_expires_at,
             )
         else:
             logger.info(
-                "DCR: No cached credentials found for '%s' — performing "
-                "new registration at '%s'",
+                "DCR: No cached credentials found for '%s' — performing new registration at '%s'",
                 auth_provider,
                 registration_url,
             )
@@ -137,8 +130,7 @@ class DcrManager:
         registration_url: str,
     ) -> DcrRegistration | None:
         logger.debug(
-            "DCR: Querying cache for auth_provider='%s', "
-            "registration_url='%s', collection='%s'",
+            "DCR: Querying cache for auth_provider='%s', registration_url='%s', collection='%s'",
             auth_provider,
             registration_url,
             self._collection_name,

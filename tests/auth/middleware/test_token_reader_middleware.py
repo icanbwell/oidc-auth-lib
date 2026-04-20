@@ -93,9 +93,7 @@ class TestTokenReaderMiddlewareInit:
         """Test middleware raises ValueError when token_reader is None."""
         app = FastAPI()
 
-        with pytest.raises(
-            ValueError, match="token_reader must be provided and cannot be None"
-        ):
+        with pytest.raises(ValueError, match="token_reader must be provided and cannot be None"):
             TokenReaderMiddleware(
                 app=app,
                 token_reader=None,  # type: ignore[arg-type]
@@ -163,16 +161,12 @@ class TestTokenReaderMiddlewareDefaultBehavior:
         """Test default behavior allows valid token through."""
         mock_token_reader = Mock(spec=TokenReader)
         mock_token_reader.extract_token = Mock(return_value="valid.jwt.token")
-        mock_token_reader.verify_token_async = AsyncMock(
-            return_value=create_mock_token()
-        )
+        mock_token_reader.verify_token_async = AsyncMock(return_value=create_mock_token())
 
         app = create_app_with_middleware(token_reader=mock_token_reader)
         client = TestClient(app)
 
-        response = client.get(
-            "/protected", headers={"Authorization": "Bearer valid.jwt.token"}
-        )
+        response = client.get("/protected", headers={"Authorization": "Bearer valid.jwt.token"})
 
         assert response.status_code == 200
         assert response.json()["has_token"] is True
@@ -231,9 +225,7 @@ class TestTokenReaderMiddlewareRequireTokenRoutes:
         )
         client = TestClient(app)
 
-        response = client.get(
-            "/protected", headers={"Authorization": "Bearer valid.jwt.token"}
-        )
+        response = client.get("/protected", headers={"Authorization": "Bearer valid.jwt.token"})
 
         assert response.status_code == 200
         assert response.json()["has_token"] is True
@@ -251,9 +243,7 @@ class TestTokenReaderMiddlewareRequireTokenRoutes:
         )
         client = TestClient(app)
 
-        response = client.get(
-            "/protected", headers={"Authorization": "Bearer invalid.jwt.token"}
-        )
+        response = client.get("/protected", headers={"Authorization": "Bearer invalid.jwt.token"})
 
         assert response.status_code == 401
         assert response.json() == {"detail": "Invalid authorization token"}
@@ -292,9 +282,7 @@ class TestTokenReaderMiddlewareOptionalTokenRoutes:
         )
         client = TestClient(app)
 
-        response = client.get(
-            "/public", headers={"Authorization": "Bearer valid.jwt.token"}
-        )
+        response = client.get("/public", headers={"Authorization": "Bearer valid.jwt.token"})
 
         assert response.status_code == 200
         assert response.json()["has_token"] is True
@@ -312,9 +300,7 @@ class TestTokenReaderMiddlewareOptionalTokenRoutes:
         )
         client = TestClient(app)
 
-        response = client.get(
-            "/public", headers={"Authorization": "Bearer invalid.jwt.token"}
-        )
+        response = client.get("/public", headers={"Authorization": "Bearer invalid.jwt.token"})
 
         assert response.status_code == 200
         assert response.json()["has_token"] is False
@@ -404,15 +390,11 @@ class TestTokenReaderMiddlewareTokenExtraction:
         )
         client = TestClient(app)
 
-        response = client.get(
-            "/protected", headers={"Authorization": "Bearer valid.jwt.token"}
-        )
+        response = client.get("/protected", headers={"Authorization": "Bearer valid.jwt.token"})
 
         assert response.status_code == 200
         mock_token_reader.extract_token.assert_called_once()
-        mock_token_reader.verify_token_async.assert_called_once_with(
-            token="valid.jwt.token"
-        )
+        mock_token_reader.verify_token_async.assert_called_once_with(token="valid.jwt.token")
 
     @pytest.mark.asyncio
     async def test_missing_authorization_header(self) -> None:
@@ -430,9 +412,7 @@ class TestTokenReaderMiddlewareTokenExtraction:
 
         assert response.status_code == 401
         assert response.json() == {"detail": "Authorization token required"}
-        mock_token_reader.extract_token.assert_called_once_with(
-            authorization_header=None
-        )
+        mock_token_reader.extract_token.assert_called_once_with(authorization_header=None)
 
     @pytest.mark.asyncio
     async def test_malformed_authorization_header(self) -> None:
@@ -460,9 +440,7 @@ class TestTokenReaderMiddlewareErrorHandling:
         """Test exception during token verification on required route."""
         mock_token_reader = Mock(spec=TokenReader)
         mock_token_reader.extract_token = Mock(return_value="some.jwt.token")
-        mock_token_reader.verify_token_async = AsyncMock(
-            side_effect=Exception("Verification failed")
-        )
+        mock_token_reader.verify_token_async = AsyncMock(side_effect=Exception("Verification failed"))
 
         app = create_app_with_middleware(
             token_reader=mock_token_reader,
@@ -470,9 +448,7 @@ class TestTokenReaderMiddlewareErrorHandling:
         )
         client = TestClient(app)
 
-        response = client.get(
-            "/protected", headers={"Authorization": "Bearer some.jwt.token"}
-        )
+        response = client.get("/protected", headers={"Authorization": "Bearer some.jwt.token"})
 
         assert response.status_code == 401
         assert response.json() == {"detail": "Invalid or missing authorization token"}
@@ -482,9 +458,7 @@ class TestTokenReaderMiddlewareErrorHandling:
         """Test exception during token verification on optional route allows through."""
         mock_token_reader = Mock(spec=TokenReader)
         mock_token_reader.extract_token = Mock(return_value="some.jwt.token")
-        mock_token_reader.verify_token_async = AsyncMock(
-            side_effect=Exception("Verification failed")
-        )
+        mock_token_reader.verify_token_async = AsyncMock(side_effect=Exception("Verification failed"))
 
         app = create_app_with_middleware(
             token_reader=mock_token_reader,
@@ -492,9 +466,7 @@ class TestTokenReaderMiddlewareErrorHandling:
         )
         client = TestClient(app)
 
-        response = client.get(
-            "/public", headers={"Authorization": "Bearer some.jwt.token"}
-        )
+        response = client.get("/public", headers={"Authorization": "Bearer some.jwt.token"})
 
         # Should allow through with token set to None
         assert response.status_code == 200
@@ -504,9 +476,7 @@ class TestTokenReaderMiddlewareErrorHandling:
     async def test_exception_during_token_extraction(self) -> None:
         """Test exception during token extraction."""
         mock_token_reader = Mock(spec=TokenReader)
-        mock_token_reader.extract_token = Mock(
-            side_effect=Exception("Extraction failed")
-        )
+        mock_token_reader.extract_token = Mock(side_effect=Exception("Extraction failed"))
 
         app = create_app_with_middleware(
             token_reader=mock_token_reader,
@@ -514,9 +484,7 @@ class TestTokenReaderMiddlewareErrorHandling:
         )
         client = TestClient(app)
 
-        response = client.get(
-            "/protected", headers={"Authorization": "Bearer some.jwt.token"}
-        )
+        response = client.get("/protected", headers={"Authorization": "Bearer some.jwt.token"})
 
         assert response.status_code == 401
         assert response.json() == {"detail": "Invalid or missing authorization token"}
@@ -558,9 +526,7 @@ class TestTokenReaderMiddlewareRequestStateManagement:
         )
 
         client = TestClient(app)
-        response = client.get(
-            "/check-state", headers={"Authorization": "Bearer valid.jwt.token"}
-        )
+        response = client.get("/check-state", headers={"Authorization": "Bearer valid.jwt.token"})
 
         assert response.status_code == 200
         json_data = response.json()

@@ -1,0 +1,108 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "oidcauthlib"
+dynamic = ["version"]
+description = "oidcauthlib"
+readme = "README.md"
+license = { text = "Apache-2.0" }
+requires-python = ">=3.12"
+authors = [
+    { name = "Imran Qureshi", email = "imran.qureshi@bwell.com" },
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+    "License :: OSI Approved :: Apache Software License",
+]
+dependencies = [
+    "httpx>=0.27.2",
+    "authlib>=1.6.4",
+    "joserfc>=1.4.3",
+    "pydantic>=2.0,<3.0.0",
+    "pymongo[snappy]>=4.15.3",
+    "python-snappy>=0.7.3",
+    "fastapi>=0.115.8",
+    "starlette>=0.49.1",
+    "py-key-value-aio[mongodb,pydantic,redis,memory]>=0.4.4",
+    "opentelemetry-api>=1.39.1",
+    "simple-container>=1.0.2",
+]
+
+[project.urls]
+Homepage = "https://github.com/icanbwell/oidc-auth-lib"
+
+[dependency-groups]
+dev = [
+    "setuptools>=60.9.3",
+    "wheel>=0.43.0",
+    "twine>=4.0.2",
+    "pre-commit>=3.8.0",
+    "autoflake>=2.3.1",
+    "mypy>=1.11.2",
+    "pytest>=8.3.3",
+    "pytest-asyncio>=0.24.0",
+    "black>=24.8.0",
+    "bandit>=1.8.3",
+    "ruff>=0.11.5",
+    "pytest-cov>=6.1.1",
+    "types-Authlib>=1.6.5",
+    "respx>=0.22.0",
+    "mongomock>=4.3.0",
+    "watchfiles>=1.1.1",
+    "inotify>=0.2.12",
+    "opentelemetry-distro[otlp]>=0.60b0",
+    "opentelemetry-sdk>=1.39.1",
+    "opentelemetry-instrumentation-httpx>=0.60b0",
+    "opentelemetry-instrumentation-asyncio>=0.60b0",
+    "opentelemetry-instrumentation-pymongo>=0.60b0",
+    "opentelemetry-instrumentation-redis>=0.60b0",
+    "build>=1.0.0",
+]
+
+[tool.setuptools.dynamic]
+version = {file = "VERSION"}
+
+[tool.setuptools.packages.find]
+include = ["oidcauthlib*"]
+
+[tool.setuptools.package-data]
+oidcauthlib = ["py.typed"]
+
+[tool.pytest.ini_options]
+addopts = "--capture=fd --junitxml=reports/test-results.xml"
+log_cli = true
+log_cli_level = "INFO"
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+
+[tool.mypy]
+python_version = "3.12"
+warn_return_any = true
+warn_unused_configs = true
+
+[[tool.mypy.overrides]]
+module = ["setuptools.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["authlib.integrations.starlette_client.*"]
+follow_untyped_imports = true
+
+[[tool.mypy.overrides]]
+module = ["key_value.aio._utils.*"]
+follow_untyped_imports = true
+
+[tool.ruff]
+line-length = 120
+
+[tool.bandit]
+skips = ["B101", "B105", "B106"]
+
+[[tool.uv.index]]
+name = "alpine-wheels"
+url = "https://imranq2.github.io/alpine-wheels/docs/"
+explicit = true

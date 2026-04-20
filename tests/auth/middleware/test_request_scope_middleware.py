@@ -35,9 +35,7 @@ def test_request_scope_middleware_success_path(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     app = _build_app()
-    caplog.set_level(
-        logging.DEBUG, logger="oidcauthlib.auth.middleware.request_scope_middleware"
-    )
+    caplog.set_level(logging.DEBUG, logger="oidcauthlib.auth.middleware.request_scope_middleware")
 
     calls: list[tuple[str, str | None]] = []
 
@@ -91,14 +89,10 @@ def test_request_scope_middleware_success_path(
     assert f"Request scope cleaned up (request_id={prefix}...)" in caplog.text
 
 
-def test_request_scope_middleware_error_path(
-    caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_request_scope_middleware_error_path(caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch) -> None:
     app = _build_app()
     # Capture both DEBUG (for start/cleanup) and ERROR (for exception) logs
-    caplog.set_level(
-        logging.DEBUG, logger="oidcauthlib.auth.middleware.request_scope_middleware"
-    )
+    caplog.set_level(logging.DEBUG, logger="oidcauthlib.auth.middleware.request_scope_middleware")
 
     calls: list[tuple[str, str | None]] = []
 
@@ -161,14 +155,10 @@ def test_request_id_state_exposure(monkeypatch: pytest.MonkeyPatch) -> None:
     assert response.json()["request_id"] == rid_header
 
 
-def test_existing_short_header(
-    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
-) -> None:
+def test_existing_short_header(monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture) -> None:
     # Edge case: very short header value to ensure slicing doesn't fail
     app = _build_app()
-    caplog.set_level(
-        logging.DEBUG, logger="oidcauthlib.auth.middleware.request_scope_middleware"
-    )
+    caplog.set_level(logging.DEBUG, logger="oidcauthlib.auth.middleware.request_scope_middleware")
 
     def fake_begin(request_id: str) -> str:
         return request_id

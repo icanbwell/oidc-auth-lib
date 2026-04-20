@@ -84,9 +84,7 @@ async def test_malformed_json() -> None:
 @respx.mock
 async def test_missing_required_endpoints() -> None:
     """Metadata without authorization_endpoint or token_endpoint — returns None."""
-    respx.get(_RFC8414_URL).mock(
-        return_value=httpx.Response(200, json={"issuer": "https://auth.example.com"})
-    )
+    respx.get(_RFC8414_URL).mock(return_value=httpx.Response(200, json={"issuer": "https://auth.example.com"}))
     respx.get(_OIDC_URL).mock(return_value=httpx.Response(404))
 
     discovery = AuthServerMetadataDiscovery()
@@ -130,9 +128,9 @@ async def test_no_scopes_in_metadata() -> None:
 async def test_url_with_port() -> None:
     """Resource URL with custom port — base URL preserves port."""
     url = "https://mcp.example.com:8443/v1/mcp"
-    respx.get(
-        "https://mcp.example.com:8443/.well-known/oauth-authorization-server"
-    ).mock(return_value=httpx.Response(200, json=_VALID_METADATA))
+    respx.get("https://mcp.example.com:8443/.well-known/oauth-authorization-server").mock(
+        return_value=httpx.Response(200, json=_VALID_METADATA)
+    )
 
     discovery = AuthServerMetadataDiscovery()
     result = await discovery.discover(resource_url=url)
@@ -144,25 +142,17 @@ async def test_url_with_port() -> None:
 class TestExtractBaseUrl:
     def test_strips_path(self) -> None:
         assert (
-            AuthServerMetadataDiscovery._extract_base_url(
-                "https://mcp.example.com/v1/mcp"
-            )
-            == "https://mcp.example.com"
+            AuthServerMetadataDiscovery._extract_base_url("https://mcp.example.com/v1/mcp") == "https://mcp.example.com"
         )
 
     def test_preserves_port(self) -> None:
         assert (
-            AuthServerMetadataDiscovery._extract_base_url(
-                "https://mcp.example.com:8443/v1/mcp"
-            )
+            AuthServerMetadataDiscovery._extract_base_url("https://mcp.example.com:8443/v1/mcp")
             == "https://mcp.example.com:8443"
         )
 
     def test_no_path(self) -> None:
-        assert (
-            AuthServerMetadataDiscovery._extract_base_url("https://mcp.example.com")
-            == "https://mcp.example.com"
-        )
+        assert AuthServerMetadataDiscovery._extract_base_url("https://mcp.example.com") == "https://mcp.example.com"
 
 
 @pytest.mark.asyncio

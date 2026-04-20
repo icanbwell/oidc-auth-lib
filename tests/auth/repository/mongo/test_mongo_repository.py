@@ -24,9 +24,7 @@ class AsyncMongoMockClient:
     """Wrapper to make mongomock work with async/await syntax."""
 
     def __init__(self, connection_string: str = "mongodb://localhost:27017") -> None:
-        self._sync_client: mongomock.MongoClient[Any] = mongomock.MongoClient(
-            connection_string
-        )
+        self._sync_client: mongomock.MongoClient[Any] = mongomock.MongoClient(connection_string)
 
     def __getitem__(self, key: str) -> "AsyncMongoMockDatabase":
         """Get database by name."""
@@ -71,9 +69,7 @@ class AsyncMongoMockCollection:
         """Find a single document."""
         return self._sync_collection.find_one(filter, **kwargs)
 
-    def find(
-        self, filter: Optional[Any] = None, **kwargs: Any
-    ) -> "AsyncMongoMockCursor":
+    def find(self, filter: Optional[Any] = None, **kwargs: Any) -> "AsyncMongoMockCursor":
         """Return an async cursor."""
         cursor = self._sync_collection.find(filter, **kwargs)
         return AsyncMongoMockCursor(cursor)
@@ -156,9 +152,7 @@ class TestAsyncMongoRepositoryInit:
 
     def test_init_raises_error_with_empty_server_url(self) -> None:
         """Test repository raises ValueError when server_url is empty."""
-        with pytest.raises(
-            ValueError, match="MONGO_URL environment variable is not set"
-        ):
+        with pytest.raises(ValueError, match="MONGO_URL environment variable is not set"):
             AsyncMongoRepository(
                 server_url="",
                 database_name="test_db",
@@ -461,9 +455,7 @@ class TestAsyncMongoRepositoryFindMany:
         )
 
         # Insert a document to verify empty filter returns all
-        sync_client["test_db"]["test_collection"].insert_one(
-            {"_id": ObjectId(), "name": "Test User"}
-        )
+        sync_client["test_db"]["test_collection"].insert_one({"_id": ObjectId(), "name": "Test User"})
 
         results = await repo.find_many("test_collection", TestModel, filter_dict=None)
 
@@ -498,12 +490,8 @@ class TestAsyncMongoRepositoryUpdateById:
             }
         )
 
-        update_model = TestModel(
-            name="John Smith", email="john.smith@example.com", age=31
-        )
-        result = await repo.update_by_id(
-            "test_collection", doc_id, update_model, TestModel
-        )
+        update_model = TestModel(name="John Smith", email="john.smith@example.com", age=31)
+        result = await repo.update_by_id("test_collection", doc_id, update_model, TestModel)
 
         assert result is not None
         assert result.name == "John Smith"
@@ -511,9 +499,7 @@ class TestAsyncMongoRepositoryUpdateById:
         assert result.age == 31
 
         # Verify the document was actually updated
-        updated_doc = sync_client["test_db"]["test_collection"].find_one(
-            {"_id": doc_id}
-        )
+        updated_doc = sync_client["test_db"]["test_collection"].find_one({"_id": doc_id})
         assert updated_doc["name"] == "John Smith"
         assert updated_doc["email"] == "john.smith@example.com"
         assert updated_doc["age"] == 31
@@ -531,9 +517,7 @@ class TestAsyncMongoRepositoryUpdateById:
         )
 
         update_model = TestModel(name="John Smith")
-        result = await repo.update_by_id(
-            "test_collection", ObjectId(), update_model, TestModel
-        )
+        result = await repo.update_by_id("test_collection", ObjectId(), update_model, TestModel)
 
         assert result is None
 
@@ -561,15 +545,11 @@ class TestAsyncMongoRepositoryUpdateById:
         )
 
         update_model = TestModel(name="John Smith", email=None)
-        result = await repo.update_by_id(
-            "test_collection", doc_id, update_model, TestModel
-        )
+        result = await repo.update_by_id("test_collection", doc_id, update_model, TestModel)
         assert result is not None
 
         # Verify None values were filtered out - email should remain unchanged
-        updated_doc = sync_client["test_db"]["test_collection"].find_one(
-            {"_id": doc_id}
-        )
+        updated_doc = sync_client["test_db"]["test_collection"].find_one({"_id": doc_id})
         assert updated_doc["name"] == "John Smith"
         assert updated_doc["email"] == "john@example.com"  # Should remain unchanged
         assert "age" not in updated_doc or updated_doc.get("age") == 30
@@ -604,9 +584,7 @@ class TestAsyncMongoRepositoryDeleteById:
 
         assert result is True
         # Verify the document was deleted
-        assert (
-            sync_client["test_db"]["test_collection"].find_one({"_id": doc_id}) is None
-        )
+        assert sync_client["test_db"]["test_collection"].find_one({"_id": doc_id}) is None
 
     @pytest.mark.asyncio
     async def test_delete_by_id_not_found(self, mongo_clients: Any) -> None:
@@ -630,9 +608,7 @@ class TestAsyncMongoRepositoryInsertOrUpdate:
     """Tests for insert_or_update operations."""
 
     @pytest.mark.asyncio
-    async def test_insert_or_update_inserts_new_document(
-        self, mongo_clients: Any
-    ) -> None:
+    async def test_insert_or_update_inserts_new_document(self, mongo_clients: Any) -> None:
         """Test insert_or_update inserts new document when ID doesn't exist."""
         async_client, sync_client = mongo_clients
         repo: AsyncMongoRepository[TestModel] = AsyncMongoRepository(
@@ -663,9 +639,7 @@ class TestAsyncMongoRepositoryInsertOrUpdate:
         assert inserted_doc["age"] == 25
 
     @pytest.mark.asyncio
-    async def test_insert_or_update_updates_existing_document(
-        self, mongo_clients: Any
-    ) -> None:
+    async def test_insert_or_update_updates_existing_document(self, mongo_clients: Any) -> None:
         """Test insert_or_update updates when document exists."""
         async_client, sync_client = mongo_clients
         repo: AsyncMongoRepository[TestModel] = AsyncMongoRepository(
@@ -703,9 +677,7 @@ class TestAsyncMongoRepositoryInsertOrUpdate:
         assert updated_doc["age"] == 30
 
     @pytest.mark.asyncio
-    async def test_insert_or_update_with_on_insert_callback(
-        self, mongo_clients: Any
-    ) -> None:
+    async def test_insert_or_update_with_on_insert_callback(self, mongo_clients: Any) -> None:
         """Test insert_or_update applies on_insert callback."""
         async_client, sync_client = mongo_clients
         repo: AsyncMongoRepository[TestModel] = AsyncMongoRepository(
@@ -735,9 +707,7 @@ class TestAsyncMongoRepositoryInsertOrUpdate:
         assert inserted_doc["age"] == 25
 
     @pytest.mark.asyncio
-    async def test_insert_or_update_with_on_update_callback(
-        self, mongo_clients: Any
-    ) -> None:
+    async def test_insert_or_update_with_on_update_callback(self, mongo_clients: Any) -> None:
         """Test insert_or_update applies on_update callback."""
         async_client, sync_client = mongo_clients
         repo: AsyncMongoRepository[TestModel] = AsyncMongoRepository(
@@ -812,9 +782,7 @@ class TestAsyncMongoRepositoryInsertOrUpdate:
         assert result == existing_id
 
     @pytest.mark.asyncio
-    async def test_insert_or_update_insert_not_acknowledged(
-        self, mongo_clients: Any
-    ) -> None:
+    async def test_insert_or_update_insert_not_acknowledged(self, mongo_clients: Any) -> None:
         """Test insert_or_update with mongomock - mongomock always acknowledges."""
         async_client, sync_client = mongo_clients
         repo: AsyncMongoRepository[TestModel] = AsyncMongoRepository(

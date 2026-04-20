@@ -77,7 +77,6 @@ class AuthConfig(BaseModel):
     def _require_client_id_or_registration_url(self) -> Self:
         if not self.client_id and not self.registration_url:
             raise ValueError(
-                f"AuthConfig for '{self.auth_provider}' must have either "
-                f"client_id or registration_url (for DCR)"
+                f"AuthConfig for '{self.auth_provider}' must have either client_id or registration_url (for DCR)"
             )
         return self

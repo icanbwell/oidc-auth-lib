@@ -47,8 +47,7 @@ class AuthServerMetadataDiscovery:
         token_endpoint = metadata.get("token_endpoint")
         if not authorization_endpoint or not token_endpoint:
             logger.warning(
-                "Discovered metadata missing required endpoints "
-                "(authorization_endpoint=%s, token_endpoint=%s)",
+                "Discovered metadata missing required endpoints (authorization_endpoint=%s, token_endpoint=%s)",
                 authorization_endpoint,
                 token_endpoint,
             )

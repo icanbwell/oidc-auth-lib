@@ -73,8 +73,7 @@ class DcrClient:
                     e.response.text[:500],
                 )
                 raise ValueError(
-                    f"DCR registration failed at '{registration_url}' "
-                    f"with status {e.response.status_code}"
+                    f"DCR registration failed at '{registration_url}' with status {e.response.status_code}"
                 ) from e
             dcr_response: dict[str, Any] = response.json()
 
@@ -86,13 +85,11 @@ class DcrClient:
                 response_keys,
             )
             raise ValueError(
-                f"DCR response from '{registration_url}' missing 'client_id'. "
-                f"Response keys: {response_keys}"
+                f"DCR response from '{registration_url}' missing 'client_id'. Response keys: {response_keys}"
             )
 
         logger.info(
-            "DCR: Registration successful at '%s' — client_id=%s, "
-            "has_secret=%s, expires_at=%s",
+            "DCR: Registration successful at '%s' — client_id=%s, has_secret=%s, expires_at=%s",
             registration_url,
             dcr_response["client_id"],
             "client_secret" in dcr_response,

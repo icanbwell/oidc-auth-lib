@@ -83,9 +83,7 @@ class FastAPIAuthManager(AuthManager):
             raise ValueError("Auth provider must be provided in the state")
 
         # now find the AuthConfig for this
-        auth_config: AuthConfig | None = self.get_auth_config_for_auth_provider(
-            auth_provider=auth_provider
-        )
+        auth_config: AuthConfig | None = self.get_auth_config_for_auth_provider(auth_provider=auth_provider)
         if auth_config is None:
             raise ValueError(f"No AuthConfig found for auth provider: {auth_provider}")
         client: StarletteOAuth2App = await self.create_oauth_client(name=auth_provider)
@@ -96,15 +94,19 @@ class FastAPIAuthManager(AuthManager):
         elif client.client_secret == "":
             masked_client_text = "empty"
         elif len(client.client_secret) > 3:
-            masked_client_text = (
-                f"{client.client_secret[:3]}{'X' * len(client.client_secret[3:])}"
-            )
+            masked_client_text = f"{client.client_secret[:3]}{'X' * len(client.client_secret[3:])}"
         else:
             masked_client_text = "XXX"
-        logger.debug(
-            f"OAuth client: {auth_provider} {client.client_id} {masked_client_text}"
+        logger.debug(f"OAuth client: {auth_provider} {client.client_id} {masked_client_text}")
+        # Retrieve OAuth state data (code_verifier, redirect_uri, nonce) from
+        # our cache instead of request.session — the gateway does not use
+        # SessionMiddleware.  State was saved by create_authorization_url.
+        token = await self._authorize_access_token_from_cache(
+            client=client,
+            request=request,
+            auth_provider=auth_provider,
+            state=state,
         )
-        token: dict[str, Any] = await client.authorize_access_token(request=request)  # type: ignore[no-untyped-call]
 
         return await self.process_token_async(
             code=code,
@@ -113,6 +115,80 @@ class FastAPIAuthManager(AuthManager):
             auth_config=auth_config,
             url=url,
         )
+
+    async def _authorize_access_token_from_cache(
+        self,
+        *,
+        client: StarletteOAuth2App,
+        request: Request,
+        auth_provider: str,
+        state: str,
+    ) -> dict[str, Any]:
+        """Exchange the authorization code for a token using cache-backed state.
+
+        Replaces ``client.authorize_access_token(request)`` which requires
+        ``SessionMiddleware``.  State data (code_verifier, redirect_uri,
+        nonce) is retrieved from ``self.cache`` where it was stored by
+        ``create_authorization_url``.
+        """
+        error = request.query_params.get("error")
+        if error:
+            from authlib.integrations.base_client import OAuthError
+
+            description = request.query_params.get("error_description")
+            raise OAuthError(error=error, description=description)
+
+        code = request.query_params.get("code")
+
+        # Retrieve state data saved by create_authorization_url
+        cache_key = f"_state_{auth_provider}_{state}"
+        cached_value = await self.cache.get(cache_key)
+        if not cached_value:
+            from authlib.integrations.base_client import OAuthError
+
+            logger.error(
+                "No cached state data found for key=%s — aborting token exchange "
+                "(missing code_verifier/redirect_uri makes this a security risk)",
+                cache_key,
+            )
+            raise OAuthError(
+                error="invalid_state",
+                description="OAuth state validation failed: no cached state data found. "
+                "The state may have expired or was already consumed.",
+            )
+        state_data = json.loads(cached_value).get("data", {})
+
+        # Build params for fetch_access_token
+        params: Dict[str, Any] = {"code": code, "state": state}
+        if state_data.get("code_verifier"):
+            params["code_verifier"] = state_data["code_verifier"]
+        redirect_uri = state_data.get("redirect_uri")
+        if redirect_uri:
+            params["redirect_uri"] = redirect_uri
+
+        token = await client.fetch_access_token(**params)  # type: ignore[no-untyped-call]
+
+        # Delete the cache entry only after a successful token exchange so the
+        # user can retry the callback if the exchange fails transiently.
+        await self.cache.delete(cache_key)
+
+        # Parse id_token if present (OpenID Connect).
+        # parse_id_token requires jwks_uri in server_metadata to verify the
+        # signature.  When the provider was registered with explicit endpoints
+        # (no server_metadata_url), jwks_uri is unavailable — skip gracefully.
+        if "id_token" in token and state_data.get("nonce"):
+            has_jwks = bool(client.server_metadata.get("jwks_uri"))
+            if has_jwks:
+                userinfo = await client.parse_id_token(
+                    token,
+                    nonce=state_data["nonce"],
+                    leeway=120,
+                )
+                token["userinfo"] = userinfo
+            else:
+                logger.debug("Skipping id_token parsing — no jwks_uri in server metadata")
+
+        return token  # type: ignore[no-any-return]
 
     # noinspection PyMethodMayBeStatic
     async def process_token_async(
@@ -160,21 +236,15 @@ class FastAPIAuthManager(AuthManager):
                     audience = None
         if not audience:
             # Fallback to first configured audience
-            auth_configs = (
-                self.auth_config_reader.get_auth_configs_for_all_auth_providers()
-            )
+            auth_configs = self.auth_config_reader.get_auth_configs_for_all_auth_providers()
             audience = auth_configs[0].audience if auth_configs else None
         if not audience:
             raise ValueError("No audience found for signout")
         # Get AuthConfig for audience
-        auth_provider = self.auth_config_reader.get_provider_for_audience(
-            audience=audience
-        )
+        auth_provider = self.auth_config_reader.get_provider_for_audience(audience=audience)
         if not auth_provider:
             raise ValueError(f"No auth provider found for audience: {audience}")
-        auth_config = self.auth_config_reader.get_config_for_auth_provider(
-            auth_provider=auth_provider
-        )
+        auth_config = self.auth_config_reader.get_config_for_auth_provider(auth_provider=auth_provider)
         if not auth_config:
             raise ValueError(f"No AuthConfig found for audience: {audience}")
         # Discover end_session_endpoint
@@ -183,23 +253,15 @@ class FastAPIAuthManager(AuthManager):
             try:
                 well_known_result: (
                     WellKnownConfigurationCacheResult | None
-                ) = await self.well_known_configuration_manager.get_async(
-                    auth_config=auth_config
-                )
+                ) = await self.well_known_configuration_manager.get_async(auth_config=auth_config)
                 well_known_config: dict[str, Any] | None = (
                     well_known_result.well_known_config if well_known_result else None
                 )
-                end_session_endpoint = (
-                    well_known_config.get("end_session_endpoint")
-                    if well_known_config
-                    else None
-                )
+                end_session_endpoint = well_known_config.get("end_session_endpoint") if well_known_config else None
             except Exception as e:
                 logger.warning(f"Could not discover end_session_endpoint: {e}")
         if not end_session_endpoint and auth_config.issuer:
-            end_session_endpoint = (
-                auth_config.issuer.rstrip("/") + "/protocol/openid-connect/logout"
-            )
+            end_session_endpoint = auth_config.issuer.rstrip("/") + "/protocol/openid-connect/logout"
         if not end_session_endpoint:
             raise ValueError("No end_session_endpoint found for signout")
         # Try to get id_token from cache (if available)
@@ -212,11 +274,7 @@ class FastAPIAuthManager(AuthManager):
         except Exception as e:
             logger.warning(f"Could not get id_token for signout: {e}")
         # Build post_logout_redirect_uri
-        post_logout_redirect_uri = (
-            str(request.url_for("login"))
-            if hasattr(request, "url_for")
-            else self.redirect_uri
-        )
+        post_logout_redirect_uri = str(request.url_for("login")) if hasattr(request, "url_for") else self.redirect_uri
         # Build logout URL
         params = {}
         if id_token:

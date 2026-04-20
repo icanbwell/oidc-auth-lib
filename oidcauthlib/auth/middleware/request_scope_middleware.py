@@ -59,9 +59,7 @@ class RequestScopeMiddleware(BaseHTTPMiddleware):
         # Begin request scope
         ContainerRegistry.begin_request_scope(request_id)
         if request.url.path not in _SUPPRESSED_LOG_PATHS:
-            logger.debug(
-                f"→ {request.method} {request.url.path} (request_id={request_id[:8]}...)"
-            )
+            logger.debug(f"→ {request.method} {request.url.path} (request_id={request_id[:8]}...)")
 
         try:
             # Process the request
@@ -72,9 +70,7 @@ class RequestScopeMiddleware(BaseHTTPMiddleware):
 
             if request.url.path not in _SUPPRESSED_LOG_PATHS:
                 logger.debug(
-                    f"← {request.method} {request.url.path} "
-                    f"[{response.status_code}] "
-                    f"(request_id={request_id[:8]}...)"
+                    f"← {request.method} {request.url.path} [{response.status_code}] (request_id={request_id[:8]}...)"
                 )
 
             return response
@@ -82,8 +78,7 @@ class RequestScopeMiddleware(BaseHTTPMiddleware):
         except Exception as e:
             if request.url.path not in _SUPPRESSED_LOG_PATHS:
                 logger.error(
-                    f"✗ {request.method} {request.url.path} "
-                    f"(request_id={request_id[:8]}...): {type(e).__name__}: {e}",
+                    f"✗ {request.method} {request.url.path} (request_id={request_id[:8]}...): {type(e).__name__}: {e}",
                     exc_info=True,
                 )
             raise
@@ -92,6 +87,4 @@ class RequestScopeMiddleware(BaseHTTPMiddleware):
             # Always clean up request scope
             ContainerRegistry.end_request_scope()
             if request.url.path not in _SUPPRESSED_LOG_PATHS:
-                logger.debug(
-                    f"Request scope cleaned up (request_id={request_id[:8]}...)"
-                )
+                logger.debug(f"Request scope cleaned up (request_id={request_id[:8]}...)")

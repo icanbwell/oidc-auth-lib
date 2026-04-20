@@ -33,9 +33,7 @@ class AsyncBaseRepository(Generic[T], metaclass=ABCMeta):
         ...
 
     @abstractmethod
-    async def find_by_id(
-        self, collection_name: str, model_class: Type[T], document_id: ObjectId
-    ) -> Optional[T]: ...
+    async def find_by_id(self, collection_name: str, model_class: Type[T], document_id: ObjectId) -> Optional[T]: ...
 
     @abstractmethod
     async def find_by_fields(
@@ -65,9 +63,7 @@ class AsyncBaseRepository(Generic[T], metaclass=ABCMeta):
     ) -> Optional[T]: ...
 
     @abstractmethod
-    async def delete_by_id(
-        self, collection_name: str, document_id: ObjectId
-    ) -> bool: ...
+    async def delete_by_id(self, collection_name: str, document_id: ObjectId) -> bool: ...
 
     @abstractmethod
     async def insert_or_update(

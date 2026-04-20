@@ -33,9 +33,7 @@ class AsyncMemoryRepository[T: BaseDbModel](AsyncBaseRepository[T]):
         return model.id
 
     @override
-    async def find_by_id(
-        self, collection_name: str, model_class: type[T], document_id: ObjectId
-    ) -> T | None:
+    async def find_by_id(self, collection_name: str, model_class: type[T], document_id: ObjectId) -> T | None:
         """
         Find a Pydantic model by its ID in the in-memory storage.
         :param collection_name: Name of the collection (not used in memory storage).
@@ -81,11 +79,7 @@ class AsyncMemoryRepository[T: BaseDbModel](AsyncBaseRepository[T]):
         """
         items = list(self._storage.values())
         if filter_dict:
-            items = [
-                item
-                for item in items
-                if all(getattr(item, k) == v for k, v in filter_dict.items())
-            ]
+            items = [item for item in items if all(getattr(item, k) == v for k, v in filter_dict.items())]
         return items[skip : skip + limit]
 
     @override

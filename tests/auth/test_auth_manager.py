@@ -126,19 +126,13 @@ class DummyWellKnownConfigurationManager(WellKnownConfigurationManager):
     """Simplified WellKnownConfigurationManager returning static metadata."""
 
     # noinspection PyMissingConstructor
-    def __init__(
-        self, *, auth_config_reader: AuthConfigReader, metadata: Dict[str, Any] | None
-    ) -> None:
+    def __init__(self, *, auth_config_reader: AuthConfigReader, metadata: Dict[str, Any] | None) -> None:
         # Bypass base init; only need auth configs and get_async behavior
-        self._auth_configs = (
-            auth_config_reader.get_auth_configs_for_all_auth_providers()
-        )
+        self._auth_configs = auth_config_reader.get_auth_configs_for_all_auth_providers()
         self._metadata = metadata
 
     @override
-    async def get_async(
-        self, auth_config: AuthConfig
-    ) -> WellKnownConfigurationCacheResult | None:
+    async def get_async(self, auth_config: AuthConfig) -> WellKnownConfigurationCacheResult | None:
         well_known_uri = auth_config.well_known_uri
         assert well_known_uri is not None
         return WellKnownConfigurationCacheResult(
@@ -324,12 +318,8 @@ async def test_get_auth_config_for_auth_provider_case_insensitive(
         token_reader=token_reader,
         well_known_configuration_manager=well_known_manager,
     )
-    cfg_upper = auth_manager.get_auth_config_for_auth_provider(
-        auth_provider="PROVIDER1"
-    )
-    cfg_lower = auth_manager.get_auth_config_for_auth_provider(
-        auth_provider="provider1"
-    )
+    cfg_upper = auth_manager.get_auth_config_for_auth_provider(auth_provider="PROVIDER1")
+    cfg_lower = auth_manager.get_auth_config_for_auth_provider(auth_provider="provider1")
     assert cfg_upper is not None and cfg_lower is not None
     assert cfg_upper.client_id == cfg_lower.client_id == "client-id-1"
 
@@ -347,9 +337,7 @@ async def test_get_auth_config_for_auth_provider_not_found(
         token_reader=token_reader,
         well_known_configuration_manager=well_known_manager,
     )
-    assert (
-        auth_manager.get_auth_config_for_auth_provider(auth_provider="UNKNOWN") is None
-    )
+    assert auth_manager.get_auth_config_for_auth_provider(auth_provider="UNKNOWN") is None
 
 
 @pytest.mark.asyncio
@@ -365,12 +353,8 @@ async def test_login_and_get_token_with_username_password_success_discovery() ->
         well_known_uri="https://auth.example.com/.well-known/openid-configuration",
         scope="openid profile email",
     )
-    respx.get(auth_config.well_known_uri).respond(
-        200, json={"token_endpoint": "https://auth.example.com/oauth/token"}
-    )
-    respx.post("https://auth.example.com/oauth/token").respond(
-        200, json={"access_token": "abc123"}
-    )
+    respx.get(auth_config.well_known_uri).respond(200, json={"token_endpoint": "https://auth.example.com/oauth/token"})
+    respx.post("https://auth.example.com/oauth/token").respond(200, json={"access_token": "abc123"})
     token = await AuthManager.login_and_get_token_with_username_password_async(
         auth_config=auth_config,
         username="user",
@@ -381,9 +365,7 @@ async def test_login_and_get_token_with_username_password_success_discovery() ->
 
 @pytest.mark.asyncio
 @respx.mock
-async def test_login_and_get_token_with_username_password_success_issuer_fallback() -> (
-    None
-):
+async def test_login_and_get_token_with_username_password_success_issuer_fallback() -> None:
     auth_config = AuthConfig(
         auth_provider="PROVIDER1",
         friendly_name="Provider One",
@@ -453,9 +435,7 @@ async def test_login_and_get_token_request_failure() -> None:
 
 @pytest.mark.asyncio
 @respx.mock
-async def test_login_and_get_token_missing_access_token_via_token_name_override() -> (
-    None
-):
+async def test_login_and_get_token_missing_access_token_via_token_name_override() -> None:
     auth_config = AuthConfig(
         auth_provider="PROVIDER1",
         friendly_name="Provider One",
@@ -498,9 +478,7 @@ def test_wait_till_well_known_configuration_available_success() -> None:
 
     respx.get(auth_config.well_known_uri).mock(side_effect=handler)
     with patch("time.sleep", return_value=None):
-        AuthManager.wait_till_well_known_configuration_available(
-            auth_config=auth_config, timeout_seconds=3
-        )
+        AuthManager.wait_till_well_known_configuration_available(auth_config=auth_config, timeout_seconds=3)
 
 
 @respx.mock
@@ -518,6 +496,4 @@ def test_wait_till_well_known_configuration_available_timeout() -> None:
     respx.get(auth_config.well_known_uri).respond(503)
     with patch("time.sleep", return_value=None):
         with pytest.raises(TimeoutError):
-            AuthManager.wait_till_well_known_configuration_available(
-                auth_config=auth_config, timeout_seconds=1
-            )
+            AuthManager.wait_till_well_known_configuration_available(auth_config=auth_config, timeout_seconds=1)

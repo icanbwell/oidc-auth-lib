@@ -92,10 +92,7 @@ class TestRegisterDynamicProviderDiscovery:
         )
         await manager.register_dynamic_provider(auth_config=config)
         call_kwargs = _mock_register(manager).call_args[1]
-        assert (
-            call_kwargs["server_metadata_url"]
-            == "https://idp.example.com/.well-known/openid-configuration"
-        )
+        assert call_kwargs["server_metadata_url"] == "https://idp.example.com/.well-known/openid-configuration"
         assert "authorize_url" not in call_kwargs
         assert "access_token_url" not in call_kwargs
 
@@ -316,9 +313,7 @@ class TestRegisterDynamicProviderDCR:
         )
         call_kwargs = _mock_register(manager).call_args[1]
         assert call_kwargs["client_id"] == "dcr-resolved-id"
-        assert (
-            call_kwargs["client_secret"] == "dcr-resolved-secret"
-        )  # pragma: allowlist secret
+        assert call_kwargs["client_secret"] == "dcr-resolved-secret"  # pragma: allowlist secret
 
     async def test_dcr_raises_when_no_dcr_manager(self) -> None:
         """When client_id is None and no DcrManager, should raise ValueError."""

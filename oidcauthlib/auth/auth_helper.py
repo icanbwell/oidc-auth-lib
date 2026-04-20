@@ -21,9 +21,7 @@ class AuthHelper:
             A base64url encoded string of the content.
         """
         json_content = json.dumps(content)
-        encoded_content = base64.urlsafe_b64encode(json_content.encode("utf-8")).decode(
-            "utf-8"
-        )
+        encoded_content = base64.urlsafe_b64encode(json_content.encode("utf-8")).decode("utf-8")
         return encoded_content.rstrip("=")
 
     @staticmethod
@@ -56,9 +54,7 @@ class AuthHelper:
                 logger.error(f"Failed to decode state (JSON error): {e}")
                 raise ValueError("Invalid JSON in decoded state") from e
             if not isinstance(result, dict):
-                logger.error(
-                    "Failed to decode state: Decoded state is not a dictionary"
-                )
+                logger.error("Failed to decode state: Decoded state is not a dictionary")
                 raise ValueError("Decoded state is not a dictionary")
             return result
         except Exception:

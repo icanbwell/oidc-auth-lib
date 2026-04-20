@@ -3,9 +3,7 @@ import urllib.parse
 
 class MongoUrlHelpers:
     @staticmethod
-    def add_credentials_to_mongo_url(
-        *, mongo_url: str, username: str | None, password: str | None
-    ) -> str:
+    def add_credentials_to_mongo_url(*, mongo_url: str, username: str | None, password: str | None) -> str:
         """
         Adds username and password to a MongoDB connection string.
         Args:

@@ -7,7 +7,7 @@ from typing import Optional, Any, Dict, List, cast
 from uuid import UUID
 
 from joserfc import jwt, jws
-from joserfc.errors import ExpiredTokenError
+from joserfc.errors import ExpiredTokenError, InvalidKeyIdError
 from joserfc.jwk import KeySet
 
 from zoneinfo import ZoneInfo
@@ -88,26 +88,16 @@ class TokenReader:
         if self.auth_config_reader is None:
             raise ValueError("AuthConfigReader must be provided")
         if not isinstance(self.auth_config_reader, AuthConfigReader):
-            raise TypeError(
-                "auth_config_reader must be an instance of AuthConfigReader"
-            )
+            raise TypeError("auth_config_reader must be an instance of AuthConfigReader")
 
-        self.auth_configs: List[AuthConfig] = (
-            self.auth_config_reader.get_auth_configs_for_all_auth_providers()
-        )
+        self.auth_configs: List[AuthConfig] = self.auth_config_reader.get_auth_configs_for_all_auth_providers()
         if not self.auth_configs:
             raise ValueError("At least one AuthConfig must be provided")
 
         # Initialize new manager (replaces inline JWKS + well-known handling)
-        self._well_known_config_manager: WellKnownConfigurationManager = (
-            well_known_config_manager
-        )
-        if not isinstance(
-            self._well_known_config_manager, WellKnownConfigurationManager
-        ):
-            raise TypeError(
-                "well_known_config_manager must be an instance of WellKnownConfigurationManager"
-            )
+        self._well_known_config_manager: WellKnownConfigurationManager = well_known_config_manager
+        if not isinstance(self._well_known_config_manager, WellKnownConfigurationManager):
+            raise TypeError("well_known_config_manager must be an instance of WellKnownConfigurationManager")
 
     @staticmethod
     def extract_token(*, authorization_header: str | None) -> Optional[str]:
@@ -128,9 +118,7 @@ class TokenReader:
             return parts[1]
         return None
 
-    async def decode_token_async(
-        self, *, token: str, verify_signature: bool
-    ) -> Dict[str, Any] | None:
+    async def decode_token_async(self, *, token: str, verify_signature: bool) -> Dict[str, Any] | None:
         """
         Decode a JWT token's claims, optionally verifying the signature.
 
@@ -152,16 +140,20 @@ class TokenReader:
             raise ValueError("Token must not be empty")
         # Only attempt to decode if token looks like a JWT (contains two dots)
         if token.count(".") != 2:
-            logger.warning(
-                f"Token does not appear to be a JWT, skipping decode: {token}"
-            )
+            logger.warning(f"Token does not appear to be a JWT, skipping decode: {token}")
             return None
         if verify_signature:
             jwks: KeySet = await self._well_known_config_manager.get_jwks_async()
             if not jwks:
                 raise RuntimeError("JWKS must be fetched before verifying tokens")
             try:
-                decoded = jwt.decode(token, jwks, algorithms=self.algorithms)
+                try:
+                    decoded = jwt.decode(token, jwks, algorithms=self.algorithms)
+                except InvalidKeyIdError:
+                    logger.info("Unknown kid in token during decode; refreshing JWKS and retrying.")
+                    await self._well_known_config_manager.refresh_async()
+                    jwks = await self._well_known_config_manager.get_jwks_async()
+                    decoded = jwt.decode(token, jwks, algorithms=self.algorithms)
                 return decoded.claims
             except Exception as e:
                 logger.exception(f"Failed to decode token: {e}")
@@ -211,8 +203,15 @@ class TokenReader:
         issuer: Optional[str] = None
         audience: Optional[str] = None
         try:
-            # Validate the token
-            verified = jwt.decode(token, jwks, algorithms=self.algorithms)
+            # Validate the token; on unknown kid, refresh JWKS once and retry
+            try:
+                verified = jwt.decode(token, jwks, algorithms=self.algorithms)
+            except InvalidKeyIdError:
+                logger.info("Unknown kid in token; refreshing JWKS from identity providers and retrying.")
+                await self._well_known_config_manager.refresh_async()
+                jwks = await self._well_known_config_manager.get_jwks_async()
+                jwks_kids = [key.get("kid") for key in jwks.keys]
+                verified = jwt.decode(token, jwks, algorithms=self.algorithms)
             issuer = verified.claims.get("iss")
             audience = verified.claims.get("aud") or verified.claims.get(
                 "client_id"
@@ -281,11 +280,7 @@ class TokenReader:
                     return "None"
                 # noinspection PyBroadException
                 try:
-                    dt = (
-                        datetime.datetime.fromtimestamp(ts, tz)
-                        if tz
-                        else datetime.datetime.fromtimestamp(ts)
-                    )
+                    dt = datetime.datetime.fromtimestamp(ts, tz) if tz else datetime.datetime.fromtimestamp(ts)
                     return dt.strftime("%Y-%m-%d %I:%M:%S %p %Z")  # AM/PM format
                 except Exception:
                     return str(ts)
@@ -340,7 +335,13 @@ class TokenReader:
         assert access_token, "Access token must not be empty"
         jwks: KeySet = await self._well_known_config_manager.get_jwks_async()
         try:
-            verified = jwt.decode(access_token, jwks, algorithms=self.algorithms)
+            try:
+                verified = jwt.decode(access_token, jwks, algorithms=self.algorithms)
+            except InvalidKeyIdError:
+                logger.info("Unknown kid in token during validity check; refreshing JWKS and retrying.")
+                await self._well_known_config_manager.refresh_async()
+                jwks = await self._well_known_config_manager.get_jwks_async()
+                verified = jwt.decode(access_token, jwks, algorithms=self.algorithms)
             exp = verified.claims.get("exp")
             now = time.time()
             if exp and exp < now:

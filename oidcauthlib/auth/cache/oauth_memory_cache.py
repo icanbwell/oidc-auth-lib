@@ -14,11 +14,10 @@ class OAuthMemoryCache(OAuthCache):
     def id(self) -> uuid.UUID:
         return self.id_
 
-    _cache: dict[str, str] = {}
-
     def __init__(self) -> None:
         """Initialize the AuthCache."""
         self.id_ = uuid.uuid4()
+        self._cache: dict[str, str] = {}
 
     @override
     async def delete(self, key: str) -> None:

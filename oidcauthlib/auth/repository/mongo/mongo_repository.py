@@ -36,12 +36,8 @@ class AsyncMongoRepository[T: BaseDbModel](AsyncBaseRepository[T]):
         database_name: str,
         username: Optional[str],
         password: Optional[str],
-        client: Optional[
-            AsyncMongoClient[Any]
-        ] = None,  # Optional injected async client (for testing or custom usage)
-        read_preference: Optional[
-            str
-        ] = None,  # MongoDB read preference (default: PRIMARY_PREFERRED)
+        client: Optional[AsyncMongoClient[Any]] = None,  # Optional injected async client (for testing or custom usage)
+        read_preference: Optional[str] = None,  # MongoDB read preference (default: PRIMARY_PREFERRED)
         read_concern: Optional[str] = None,  # MongoDB read concern (default: majority)
         additional_mongo_client_options: Optional[Dict[str, Any]] = None,
     ) -> None:
@@ -87,9 +83,7 @@ class AsyncMongoRepository[T: BaseDbModel](AsyncBaseRepository[T]):
         else:
             # Set defaults if not provided
             # https://pymongo.readthedocs.io/en/4.0.1/examples/high_availability.html
-            my_read_preference = (
-                read_preference if read_preference is not None else "primaryPreferred"
-            )
+            my_read_preference = read_preference if read_preference is not None else "primaryPreferred"
             # Set read_concern at the database level
             my_read_concern = read_concern if read_concern is not None else "majority"
             # Only pass read_preference to AsyncMongoClient; read_concern is set on DB/collection
@@ -111,9 +105,7 @@ class AsyncMongoRepository[T: BaseDbModel](AsyncBaseRepository[T]):
             await self._db.command("ping")
             # Extract hostname for safe logging
             hostname = MongoUrlHelpers.extract_hostname(self.connection_string)
-            logger.info(
-                f"Successfully connected to MongoDB host: {hostname} in database {self.database_name}"
-            )
+            logger.info(f"Successfully connected to MongoDB host: {hostname} in database {self.database_name}")
         except Exception:
             logger.exception("Failed to connect to MongoDB")
             raise
@@ -136,9 +128,7 @@ class AsyncMongoRepository[T: BaseDbModel](AsyncBaseRepository[T]):
         Returns:
             ObjectId: Inserted document's ID
         """
-        logger.debug(
-            f"Saving document in collection {collection_name} with data: {model}"
-        )
+        logger.debug(f"Saving document in collection {collection_name} with data: {model}")
         collection = self._db[collection_name]
         document = self._convert_model_to_dict(model)
         document = {k: v for k, v in document.items() if v is not None}
@@ -149,9 +139,7 @@ class AsyncMongoRepository[T: BaseDbModel](AsyncBaseRepository[T]):
         return cast(ObjectId, result.inserted_id)
 
     @override
-    async def find_by_id(
-        self, collection_name: str, model_class: Type[T], document_id: ObjectId
-    ) -> Optional[T]:
+    async def find_by_id(self, collection_name: str, model_class: Type[T], document_id: ObjectId) -> Optional[T]:
         """
         Find a document by its ID asynchronously.
 
@@ -163,9 +151,7 @@ class AsyncMongoRepository[T: BaseDbModel](AsyncBaseRepository[T]):
         Returns:
             Optional[T]: Pydantic model instance or None
         """
-        logger.debug(
-            f"Finding document with ID: {document_id} in collection {collection_name}"
-        )
+        logger.debug(f"Finding document with ID: {document_id} in collection {collection_name}")
         collection = self._db[collection_name]
         object_id = ObjectId(document_id)
         document = await collection.find_one({"_id": object_id})
@@ -272,9 +258,7 @@ class AsyncMongoRepository[T: BaseDbModel](AsyncBaseRepository[T]):
         Returns:
             bool: True if deletion was successful, False otherwise
         """
-        logger.debug(
-            f"Deleting document {document_id} from collection {collection_name}"
-        )
+        logger.debug(f"Deleting document {document_id} from collection {collection_name}")
         collection = self._db[collection_name]
         object_id = ObjectId(document_id)
         result = await collection.delete_one({"_id": object_id})
@@ -339,13 +323,9 @@ class AsyncMongoRepository[T: BaseDbModel](AsyncBaseRepository[T]):
         Returns:
             ObjectId: The ID of the inserted or updated document
         """
-        logger.debug(
-            f"Inserting or updating item in collection {collection_name} with data:\n{item.model_dump_json()}"
-        )
+        logger.debug(f"Inserting or updating item in collection {collection_name} with data:\n{item.model_dump_json()}")
         collection = self._db[collection_name]
-        existing_item = await self.find_by_fields(
-            collection_name=collection_name, fields=keys, model_class=model_class
-        )
+        existing_item = await self.find_by_fields(collection_name=collection_name, fields=keys, model_class=model_class)
         if existing_item:
             item = on_update(item)
         else:
@@ -358,9 +338,7 @@ class AsyncMongoRepository[T: BaseDbModel](AsyncBaseRepository[T]):
                 update={"$set": document},
             )
             if update_result.modified_count == 0:
-                logger.debug(
-                    f"No changes made to document with ID: {existing_item.id} in collection {collection_name}"
-                )
+                logger.debug(f"No changes made to document with ID: {existing_item.id} in collection {collection_name}")
             else:
                 logger.debug(
                     f"Document updated with ID: {existing_item.id} in collection {collection_name} with data:\n{document}\nresult: {update_result}"
@@ -369,9 +347,7 @@ class AsyncMongoRepository[T: BaseDbModel](AsyncBaseRepository[T]):
         else:
             insert_result: InsertOneResult = await collection.insert_one(document)
             if not insert_result.acknowledged:
-                logger.error(
-                    f"Failed to insert document in collection {collection_name} with data: {document}"
-                )
+                logger.error(f"Failed to insert document in collection {collection_name} with data: {document}")
                 raise Exception("Insert operation was not acknowledged by MongoDB")
             logger.debug(
                 f"Document inserted with ID: {insert_result.inserted_id} in collection {collection_name} with data:\n{document}\nresult: {insert_result}"
@@ -404,9 +380,7 @@ class AsyncMongoRepository[T: BaseDbModel](AsyncBaseRepository[T]):
             # Build a SAFE filter (must include all key fields)
             missing = [k for k in key_fields if k not in d or d[k] is None]
             if missing:
-                raise ValueError(
-                    f"Missing key_fields {missing}; refusing to build unsafe filter"
-                )
+                raise ValueError(f"Missing key_fields {missing}; refusing to build unsafe filter")
 
             filter_dict = {k: d[k] for k in key_fields}
 
@@ -447,9 +421,7 @@ class AsyncMongoRepository[T: BaseDbModel](AsyncBaseRepository[T]):
             # Build a SAFE filter (must include all key fields)
             missing = [k for k in key_fields if k not in d or d[k] is None]
             if missing:
-                raise ValueError(
-                    f"Missing key_fields {missing}; refusing to build unsafe filter"
-                )
+                raise ValueError(f"Missing key_fields {missing}; refusing to build unsafe filter")
 
             filter_dict = {k: d[k] for k in key_fields}
 

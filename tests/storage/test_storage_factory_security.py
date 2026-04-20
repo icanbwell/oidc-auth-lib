@@ -69,9 +69,7 @@ async def test_data_isolation_between_namespaces() -> None:
     env.mcp_response_cache_collection = "mcp_response_cache"
 
     with patch("oidcauthlib.storage.mongo_storage_factory.AsyncMongoClient"):
-        with patch(
-            "oidcauthlib.storage.mongo_storage_factory.MongoDBGridFSStore"
-        ) as mock_store_class:
+        with patch("oidcauthlib.storage.mongo_storage_factory.MongoDBGridFSStore") as mock_store_class:
             # Create two separate mock stores
             person_store_mock = Mock()
             client_store_mock = Mock()
@@ -90,9 +88,7 @@ async def test_data_isolation_between_namespaces() -> None:
 
             factory = MongoStoreFactory(
                 environment_variables=env,
-                cache_to_collection_mapper=TestCacheToCollectionMapper(
-                    environment_variables=env
-                ),
+                cache_to_collection_mapper=TestCacheToCollectionMapper(environment_variables=env),
             )
 
             # Get caches for different namespaces
@@ -121,9 +117,7 @@ async def test_concurrent_writes_to_different_namespaces_dont_interfere() -> Non
     env.mcp_response_cache_collection = "mcp_response_cache"
 
     with patch("oidcauthlib.storage.mongo_storage_factory.AsyncMongoClient"):
-        with patch(
-            "oidcauthlib.storage.mongo_storage_factory.MongoDBGridFSStore"
-        ) as mock_store_class:
+        with patch("oidcauthlib.storage.mongo_storage_factory.MongoDBGridFSStore") as mock_store_class:
             # Create separate mock stores with tracking
             person_writes = []
             client_writes = []
@@ -153,9 +147,7 @@ async def test_concurrent_writes_to_different_namespaces_dont_interfere() -> Non
 
             factory = MongoStoreFactory(
                 environment_variables=env,
-                cache_to_collection_mapper=TestCacheToCollectionMapper(
-                    environment_variables=env
-                ),
+                cache_to_collection_mapper=TestCacheToCollectionMapper(environment_variables=env),
             )
 
             person_cache = factory.get_store(PERSON_PATIENT_CACHE)
@@ -193,14 +185,10 @@ def test_different_namespaces_use_different_collections() -> None:
     env.mcp_response_cache_collection = "mcp_response_cache"
 
     with patch("oidcauthlib.storage.mongo_storage_factory.AsyncMongoClient"):
-        with patch(
-            "oidcauthlib.storage.mongo_storage_factory.MongoDBGridFSStore"
-        ) as mock_store_class:
+        with patch("oidcauthlib.storage.mongo_storage_factory.MongoDBGridFSStore") as mock_store_class:
             factory = MongoStoreFactory(
                 environment_variables=env,
-                cache_to_collection_mapper=TestCacheToCollectionMapper(
-                    environment_variables=env
-                ),
+                cache_to_collection_mapper=TestCacheToCollectionMapper(environment_variables=env),
             )
 
             # Get both caches
@@ -210,9 +198,7 @@ def test_different_namespaces_use_different_collections() -> None:
             # Verify MongoDBStore was called twice with different collection names
             assert mock_store_class.call_count == 2
 
-            call_args_list = [
-                call[1]["coll_name"] for call in mock_store_class.call_args_list
-            ]
+            call_args_list = [call[1]["coll_name"] for call in mock_store_class.call_args_list]
             assert PERSON_PATIENT_CACHE in call_args_list
             assert "dynamic_client_registration" in call_args_list
 
@@ -241,17 +227,13 @@ def test_concurrent_get_cache_same_namespace_returns_same_instance() -> None:
     env.mcp_response_cache_collection = "mcp_response_cache"
 
     with patch("oidcauthlib.storage.mongo_storage_factory.AsyncMongoClient"):
-        with patch(
-            "oidcauthlib.storage.mongo_storage_factory.MongoDBGridFSStore"
-        ) as mock_store_class:
+        with patch("oidcauthlib.storage.mongo_storage_factory.MongoDBGridFSStore") as mock_store_class:
             mock_store_instance = Mock()
             mock_store_class.return_value = mock_store_instance
 
             factory = MongoStoreFactory(
                 environment_variables=env,
-                cache_to_collection_mapper=TestCacheToCollectionMapper(
-                    environment_variables=env
-                ),
+                cache_to_collection_mapper=TestCacheToCollectionMapper(environment_variables=env),
             )
 
             # Fire 100 concurrent calls from different threads
@@ -291,9 +273,7 @@ def test_factory_initialization_is_thread_safe() -> None:
         def create_factory_instance() -> None:
             factory = MongoStoreFactory(
                 environment_variables=env,
-                cache_to_collection_mapper=TestCacheToCollectionMapper(
-                    environment_variables=env
-                ),
+                cache_to_collection_mapper=TestCacheToCollectionMapper(environment_variables=env),
             )
             factories.append(factory)
 
@@ -328,17 +308,13 @@ def test_singleton_per_namespace() -> None:
     env.mcp_response_cache_collection = "mcp_response_cache"
 
     with patch("oidcauthlib.storage.mongo_storage_factory.AsyncMongoClient"):
-        with patch(
-            "oidcauthlib.storage.mongo_storage_factory.MongoDBGridFSStore"
-        ) as mock_store_class:
+        with patch("oidcauthlib.storage.mongo_storage_factory.MongoDBGridFSStore") as mock_store_class:
             mock_store_instance = Mock()
             mock_store_class.return_value = mock_store_instance
 
             factory = MongoStoreFactory(
                 environment_variables=env,
-                cache_to_collection_mapper=TestCacheToCollectionMapper(
-                    environment_variables=env
-                ),
+                cache_to_collection_mapper=TestCacheToCollectionMapper(environment_variables=env),
             )
 
             cache1 = factory.get_store(PERSON_PATIENT_CACHE)
@@ -367,17 +343,13 @@ def test_different_namespaces_return_different_instances() -> None:
     env.mcp_response_cache_collection = "mcp_response_cache"
 
     with patch("oidcauthlib.storage.mongo_storage_factory.AsyncMongoClient"):
-        with patch(
-            "oidcauthlib.storage.mongo_storage_factory.MongoDBGridFSStore"
-        ) as mock_store_class:
+        with patch("oidcauthlib.storage.mongo_storage_factory.MongoDBGridFSStore") as mock_store_class:
             # Return different mocks for each call
             mock_store_class.side_effect = [Mock(), Mock()]
 
             factory = MongoStoreFactory(
                 environment_variables=env,
-                cache_to_collection_mapper=TestCacheToCollectionMapper(
-                    environment_variables=env
-                ),
+                cache_to_collection_mapper=TestCacheToCollectionMapper(environment_variables=env),
             )
 
             cache1 = factory.get_store(PERSON_PATIENT_CACHE)
@@ -404,24 +376,18 @@ def test_singleton_per_factory_instance() -> None:
     env.mcp_response_cache_collection = "mcp_response_cache"
 
     with patch("oidcauthlib.storage.mongo_storage_factory.AsyncMongoClient"):
-        with patch(
-            "oidcauthlib.storage.mongo_storage_factory.MongoDBGridFSStore"
-        ) as mock_store_class:
+        with patch("oidcauthlib.storage.mongo_storage_factory.MongoDBGridFSStore") as mock_store_class:
             # Return different mocks for each call
             mock_store_class.side_effect = [Mock(), Mock(), Mock(), Mock()]
 
             # Create two separate factory instances
             factory1 = MongoStoreFactory(
                 environment_variables=env,
-                cache_to_collection_mapper=TestCacheToCollectionMapper(
-                    environment_variables=env
-                ),
+                cache_to_collection_mapper=TestCacheToCollectionMapper(environment_variables=env),
             )
             factory2 = MongoStoreFactory(
                 environment_variables=env,
-                cache_to_collection_mapper=TestCacheToCollectionMapper(
-                    environment_variables=env
-                ),
+                cache_to_collection_mapper=TestCacheToCollectionMapper(environment_variables=env),
             )
 
             # Each factory should have its own stores
@@ -455,9 +421,7 @@ def test_factory_selection_mongodb() -> None:
     with patch("oidcauthlib.storage.mongo_storage_factory.AsyncMongoClient"):
         factory = MongoStoreFactory(
             environment_variables=env,
-            cache_to_collection_mapper=TestCacheToCollectionMapper(
-                environment_variables=env
-            ),
+            cache_to_collection_mapper=TestCacheToCollectionMapper(environment_variables=env),
         )
         assert isinstance(factory, MongoStoreFactory)
         # Verify it implements StorageFactory Protocol
@@ -472,9 +436,7 @@ def test_factory_selection_redis_not_implemented(test_container: IContainer) -> 
     with pytest.raises(NotImplementedError) as exc_info:
         StorageFactoryCreator(
             environment_variables=env,
-            cache_to_collection_mapper=TestCacheToCollectionMapper(
-                environment_variables=env
-            ),
+            cache_to_collection_mapper=TestCacheToCollectionMapper(environment_variables=env),
         ).create_storage_factory()
 
     assert "Redis provider not yet implemented" in str(exc_info.value)
@@ -490,9 +452,7 @@ def test_factory_selection_invalid_provider() -> None:
     with pytest.raises(ValueError) as exc_info:
         StorageFactoryCreator(
             environment_variables=env,
-            cache_to_collection_mapper=TestCacheToCollectionMapper(
-                environment_variables=env
-            ),
+            cache_to_collection_mapper=TestCacheToCollectionMapper(environment_variables=env),
         ).create_storage_factory()
 
     assert "Unknown cache provider" in str(exc_info.value)

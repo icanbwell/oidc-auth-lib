@@ -54,9 +54,7 @@ def test_get_auth_configs_for_all_auth_providers() -> None:
             scope="openid profile email",
         )
 
-    setattr(
-        reader, "read_config_for_auth_provider", dummy_read_config_for_auth_provider
-    )
+    setattr(reader, "read_config_for_auth_provider", dummy_read_config_for_auth_provider)
     configs_list: List[AuthConfig] = reader.get_auth_configs_for_all_auth_providers()
     assert len(configs_list) == 2
     assert configs_list[0].auth_provider == "a"

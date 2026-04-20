@@ -24,6 +24,4 @@ class CacheItem(BaseDbModel):
         default=None,
         description="The timestamp when the cache item was deleted, if applicable.",
     )
-    created: datetime = Field(
-        ..., description="The creation time of the cache item as a datetime object."
-    )
+    created: datetime = Field(..., description="The creation time of the cache item as a datetime object.")

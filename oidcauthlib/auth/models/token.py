@@ -18,9 +18,7 @@ class Token(BaseModel):
     """
 
     model_config = ConfigDict(extra="forbid")  # Prevents any additional properties
-    token: str = Field(
-        ..., description="The raw encoded token string (e.g., JWS compact form)."
-    )
+    token: str = Field(..., description="The raw encoded token string (e.g., JWS compact form).")
     expires: Optional[datetime] = Field(
         default=None,
         description="The expiration time of the token (exp claim) as a timezone-aware datetime if provided.",
@@ -72,9 +70,7 @@ class Token(BaseModel):
         return cls.create_from_dict(claims=claims, token=token)
 
     @classmethod
-    def create_from_dict(
-        cls, *, claims: dict[str, Any] | None, token: str | None
-    ) -> Optional["Token"]:
+    def create_from_dict(cls, *, claims: dict[str, Any] | None, token: str | None) -> Optional["Token"]:
         """
         Create a Token instance from a dictionary of claims. Extracts expiration and issued times.
         Args:
@@ -89,23 +85,13 @@ class Token(BaseModel):
         required_fields = ["exp", "iat", "iss"]
         missing_fields = [field for field in required_fields if field not in claims]
         if missing_fields:
-            logger.debug(
-                f"Missing required claim fields: {missing_fields} in claims: {claims}"
-            )
+            logger.debug(f"Missing required claim fields: {missing_fields} in claims: {claims}")
             return None
 
         exp = claims.get("exp")
         iat = claims.get("iat")
-        expires_dt = (
-            datetime.fromtimestamp(exp, tz=UTC)
-            if isinstance(exp, (int, float))
-            else None
-        )
-        issued_dt = (
-            datetime.fromtimestamp(iat, tz=UTC)
-            if isinstance(iat, (int, float))
-            else None
-        )
+        expires_dt = datetime.fromtimestamp(exp, tz=UTC) if isinstance(exp, (int, float)) else None
+        issued_dt = datetime.fromtimestamp(iat, tz=UTC) if isinstance(iat, (int, float)) else None
         return cls(
             token=token,
             expires=expires_dt,
@@ -204,11 +190,5 @@ class Token(BaseModel):
             str: The client ID associated with the token.
         """
         return (
-            (
-                self.claims.get("cid")
-                or self.claims.get("client_id")
-                or self.claims.get("azp")
-            )
-            if self.claims
-            else None
+            (self.claims.get("cid") or self.claims.get("client_id") or self.claims.get("azp")) if self.claims else None
         )

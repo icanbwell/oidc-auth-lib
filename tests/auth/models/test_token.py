@@ -43,6 +43,4 @@ def test_auth_config_creation() -> None:
 
 def test_auth_config_forbid_extra() -> None:
     with pytest.raises(ValidationError):
-        AuthConfig(
-            auth_provider="a", audience="b", issuer="c", extra_field="not allowed"
-        )  # type: ignore[call-arg]
+        AuthConfig(auth_provider="a", audience="b", issuer="c", extra_field="not allowed")  # type: ignore[call-arg]
