@@ -7,7 +7,7 @@ from typing import Optional, Any, Dict, List, cast
 from uuid import UUID
 
 from joserfc import jwt, jws
-from joserfc.errors import ExpiredTokenError
+from joserfc.errors import ExpiredTokenError, InvalidKeyIdError
 from joserfc.jwk import KeySet
 
 from zoneinfo import ZoneInfo
@@ -147,7 +147,13 @@ class TokenReader:
             if not jwks:
                 raise RuntimeError("JWKS must be fetched before verifying tokens")
             try:
-                decoded = jwt.decode(token, jwks, algorithms=self.algorithms)
+                try:
+                    decoded = jwt.decode(token, jwks, algorithms=self.algorithms)
+                except InvalidKeyIdError:
+                    logger.info("Unknown kid in token during decode; refreshing JWKS and retrying.")
+                    await self._well_known_config_manager.refresh_async()
+                    jwks = await self._well_known_config_manager.get_jwks_async()
+                    decoded = jwt.decode(token, jwks, algorithms=self.algorithms)
                 return decoded.claims
             except Exception as e:
                 logger.exception(f"Failed to decode token: {e}")
@@ -197,8 +203,15 @@ class TokenReader:
         issuer: Optional[str] = None
         audience: Optional[str] = None
         try:
-            # Validate the token
-            verified = jwt.decode(token, jwks, algorithms=self.algorithms)
+            # Validate the token; on unknown kid, refresh JWKS once and retry
+            try:
+                verified = jwt.decode(token, jwks, algorithms=self.algorithms)
+            except InvalidKeyIdError:
+                logger.info("Unknown kid in token; refreshing JWKS from identity providers and retrying.")
+                await self._well_known_config_manager.refresh_async()
+                jwks = await self._well_known_config_manager.get_jwks_async()
+                jwks_kids = [key.get("kid") for key in jwks.keys]
+                verified = jwt.decode(token, jwks, algorithms=self.algorithms)
             issuer = verified.claims.get("iss")
             audience = verified.claims.get("aud") or verified.claims.get(
                 "client_id"
@@ -322,7 +335,13 @@ class TokenReader:
         assert access_token, "Access token must not be empty"
         jwks: KeySet = await self._well_known_config_manager.get_jwks_async()
         try:
-            verified = jwt.decode(access_token, jwks, algorithms=self.algorithms)
+            try:
+                verified = jwt.decode(access_token, jwks, algorithms=self.algorithms)
+            except InvalidKeyIdError:
+                logger.info("Unknown kid in token during validity check; refreshing JWKS and retrying.")
+                await self._well_known_config_manager.refresh_async()
+                jwks = await self._well_known_config_manager.get_jwks_async()
+                verified = jwt.decode(access_token, jwks, algorithms=self.algorithms)
             exp = verified.claims.get("exp")
             now = time.time()
             if exp and exp < now:
