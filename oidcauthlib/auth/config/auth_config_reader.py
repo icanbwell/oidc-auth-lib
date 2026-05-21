@@ -1,8 +1,6 @@
-import json
 import logging
 import os
 import threading
-from typing import Any
 
 from oidcauthlib.auth.config.auth_config import AuthConfig
 from oidcauthlib.utilities.environment.abstract_environment_variables import (
@@ -186,18 +184,6 @@ class AuthConfigReader:
             scope = "openid profile email"
 
         logger.info(f"Successfully read config for auth provider: {auth_provider}")
-        extra_info_text: str | None = os.getenv(f"AUTH_EXTRA_INFO_{auth_provider_upper}")
-        extra_info_dict: dict[str, Any] | None
-        if extra_info_text:
-            try:
-                extra_info_raw: object = json.loads(extra_info_text)
-            except json.JSONDecodeError as exc:
-                raise ValueError(f"Invalid JSON in AUTH_EXTRA_INFO_{auth_provider_upper}: {exc.msg}") from exc
-            if not isinstance(extra_info_raw, dict):
-                raise ValueError(f"AUTH_EXTRA_INFO_{auth_provider_upper} must be a JSON object")
-            extra_info_dict = {str(key): value for key, value in extra_info_raw.items()}
-        else:
-            extra_info_dict = None
         authorization_endpoint: str | None = os.getenv(f"AUTH_AUTHORIZATION_ENDPOINT_{auth_provider_upper}")
         token_endpoint: str | None = os.getenv(f"AUTH_TOKEN_ENDPOINT_{auth_provider_upper}")
         registration_url: str | None = os.getenv(f"AUTH_REGISTRATION_URL_{auth_provider_upper}")
@@ -211,7 +197,8 @@ class AuthConfigReader:
             client_secret=auth_client_secret,
             well_known_uri=auth_well_known_uri,
             scope=scope,
-            extra_info=extra_info_dict,
+            # read via .mcp.json
+            app_login=None,
             authorization_endpoint=authorization_endpoint,
             token_endpoint=token_endpoint,
             registration_url=registration_url,
