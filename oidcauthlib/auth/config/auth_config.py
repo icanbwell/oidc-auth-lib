@@ -43,12 +43,11 @@ class AuthConfig(BaseModel):
         description="The scopes requested for the auth provider, typically a space-separated list of scopes.",
     )
 
-    extra_info: dict[str, Any] | None = Field(
+    app_login: dict[str, Any] | None = Field(
         default=None,
         description=(
-            "A dictionary of extra string configuration values for the auth provider. "
-            "Keys and values must be strings (for example, settings derived from environment "
-            "variables or other string-based configuration sources)."
+            "App login configuration for credential-based login flows. "
+            "Contains api_gateway_base_url and optional client_keys."
         ),
     )
 
