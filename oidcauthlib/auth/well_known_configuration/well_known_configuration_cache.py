@@ -8,6 +8,7 @@ from joserfc.jwk import KeySet
 from key_value.aio.stores.base import BaseStore
 from key_value.aio.stores.memory import MemoryStore
 from opentelemetry import trace
+from pydantic import ValidationError
 
 from oidcauthlib.auth.config.auth_config import AuthConfig
 from oidcauthlib.auth.models.client_key_set import ClientKeySet
@@ -121,7 +122,15 @@ class WellKnownConfigurationCache:
                 if cached_config_dict is None:
                     has_missing_well_known_cache = True
                 else:
-                    result = WellKnownConfigurationCacheResult.model_validate(cached_config_dict)
+                    try:
+                        result = WellKnownConfigurationCacheResult.model_validate(cached_config_dict)
+                    except ValidationError as ve:
+                        logger.info(
+                            f"Cached data for {well_known_uri} failed validation "
+                            f"({ve.error_count()} error(s)); treating as cache miss"
+                        )
+                        has_missing_well_known_cache = True
+                        continue
                     if not result.is_schema_current():
                         logger.info(
                             f"Stale schema version in backing store for {well_known_uri} "
@@ -196,8 +205,15 @@ class WellKnownConfigurationCache:
             else None
         )
         if stored_config:
-            stored_result = WellKnownConfigurationCacheResult.model_validate(stored_config)
-            if stored_result.is_schema_current():
+            try:
+                stored_result = WellKnownConfigurationCacheResult.model_validate(stored_config)
+            except ValidationError as ve:
+                logger.info(
+                    f"Cached data for {well_known_uri} failed validation "
+                    f"({ve.error_count()} error(s)); re-fetching from remote"
+                )
+                stored_result = None
+            if stored_result is not None and stored_result.is_schema_current():
                 logger.info(f"\u2713 Using stored OIDC discovery document from store for {well_known_uri}")
                 # write-through to memory cache store
                 await self._cache_store.put(
@@ -205,7 +221,7 @@ class WellKnownConfigurationCache:
                     value=stored_result.model_dump(),
                 )
                 return stored_result
-            else:
+            elif stored_result is not None:
                 logger.info(
                     f"Stale schema version in backing store for {well_known_uri} "
                     f"(stored={stored_result.schema_version}, current={WellKnownConfigurationCacheResult.SCHEMA_VERSION}); "
