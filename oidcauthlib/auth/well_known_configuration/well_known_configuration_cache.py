@@ -122,11 +122,19 @@ class WellKnownConfigurationCache:
                     has_missing_well_known_cache = True
                 else:
                     result = WellKnownConfigurationCacheResult.model_validate(cached_config_dict)
-                    results.append(result)
-                    await self._cache_store.put(
-                        key=well_known_uri,
-                        value=result.model_dump(),
-                    )
+                    if not result.is_schema_current():
+                        logger.info(
+                            f"Stale schema version in backing store for {well_known_uri} "
+                            f"(stored={result.schema_version}, current={WellKnownConfigurationCacheResult.SCHEMA_VERSION}); "
+                            f"treating as cache miss"
+                        )
+                        has_missing_well_known_cache = True
+                    else:
+                        results.append(result)
+                        await self._cache_store.put(
+                            key=well_known_uri,
+                            value=result.model_dump(),
+                        )
 
             if not has_missing_well_known_cache:
                 logger.info("All well-known configurations already cached; skipping read.")
@@ -188,13 +196,21 @@ class WellKnownConfigurationCache:
             else None
         )
         if stored_config:
-            logger.info(f"\u2713 Using stored OIDC discovery document from store for {well_known_uri}")
-            # write-through to memory cache store
-            await self._cache_store.put(
-                key=well_known_uri,
-                value=stored_config,
-            )
-            return WellKnownConfigurationCacheResult.model_validate(stored_config)
+            stored_result = WellKnownConfigurationCacheResult.model_validate(stored_config)
+            if stored_result.is_schema_current():
+                logger.info(f"\u2713 Using stored OIDC discovery document from store for {well_known_uri}")
+                # write-through to memory cache store
+                await self._cache_store.put(
+                    key=well_known_uri,
+                    value=stored_result.model_dump(),
+                )
+                return stored_result
+            else:
+                logger.info(
+                    f"Stale schema version in backing store for {well_known_uri} "
+                    f"(stored={stored_result.schema_version}, current={WellKnownConfigurationCacheResult.SCHEMA_VERSION}); "
+                    f"re-fetching from remote"
+                )
 
         # Acquire or reuse a URI-specific lock to limit network calls per provider
         async with self._locks_lock:

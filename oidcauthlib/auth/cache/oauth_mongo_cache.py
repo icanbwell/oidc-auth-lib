@@ -120,6 +120,13 @@ class OAuthMongoCache(OAuthCache):
             },
         )
         logger.debug(f" ====== For key {key} found {cache_item} default {default} =====")
+        if cache_item is not None and not cache_item.is_schema_current():
+            logger.info(
+                f"Stale schema version for cache key {key} "
+                f"(stored={cache_item.schema_version}, current={CacheItem.SCHEMA_VERSION}); "
+                f"treating as cache miss"
+            )
+            return default
         return cache_item.value if cache_item is not None else default
 
     @override

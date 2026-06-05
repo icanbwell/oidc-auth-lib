@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Optional
+from typing import ClassVar, Optional
 
 from oidcauthlib.auth.models.base_db_model import BaseDbModel
 from pydantic import Field
@@ -11,6 +11,9 @@ class CacheItem(BaseDbModel):
     This model is used to store key-value pairs in the cache.
     """
 
+    SCHEMA_VERSION: ClassVar[int] = 1
+
+    schema_version: int = Field(default=1, description="Schema version for cache invalidation on model changes")
     key: str = Field(
         ...,
         description="The key for the cache item; used to identify the item in the cache.",
@@ -25,3 +28,6 @@ class CacheItem(BaseDbModel):
         description="The timestamp when the cache item was deleted, if applicable.",
     )
     created: datetime = Field(..., description="The creation time of the cache item as a datetime object.")
+
+    def is_schema_current(self) -> bool:
+        return self.schema_version == self.SCHEMA_VERSION
