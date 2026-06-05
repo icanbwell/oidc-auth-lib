@@ -335,6 +335,7 @@ async def test_read_list_async_hydrates_cache_from_backing_store(
     uri = "https://provider.example.com/.well-known/openid-configuration"
 
     stored_result = WellKnownConfigurationCacheResult(
+        schema_version=WellKnownConfigurationCacheResult.SCHEMA_VERSION,
         well_known_uri=uri,
         well_known_config={
             "issuer": "https://provider.example.com",
@@ -472,6 +473,7 @@ async def test_read_async_uses_backing_store_with_current_schema_version(
     uri = "https://provider.example.com/.well-known/openid-configuration"
 
     current_data = WellKnownConfigurationCacheResult(
+        schema_version=WellKnownConfigurationCacheResult.SCHEMA_VERSION,
         well_known_uri=uri,
         well_known_config={
             "issuer": "https://provider.example.com",

@@ -184,6 +184,7 @@ class DcrManager:
         now = datetime.now(UTC)
         registration = DcrRegistration(
             _id=ObjectId(),
+            schema_version=DcrRegistration.SCHEMA_VERSION,
             created=now,
             auth_provider=auth_provider,
             registration_url=registration_url,

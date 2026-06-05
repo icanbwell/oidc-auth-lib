@@ -9,9 +9,9 @@ from oidcauthlib.auth.models.base_db_model import BaseDbModel
 class DcrRegistration(BaseDbModel):
     """Persisted DCR credentials in MongoDB."""
 
-    SCHEMA_VERSION: ClassVar[int] = 1
+    SCHEMA_VERSION: ClassVar[int] = 3
 
-    schema_version: int = Field(default=1, description="Schema version for cache invalidation on model changes")
+    schema_version: int = Field(default=0, description="Schema version for cache invalidation on model changes")
     created: datetime = Field(description="When the registration was created.")
     updated: Optional[datetime] = Field(default=None, description="When the registration was last updated.")
     auth_provider: str = Field(description="The normalized auth provider key.")

@@ -247,6 +247,7 @@ class WellKnownConfigurationCache:
                         response.raise_for_status()
                         config = cast(Dict[str, Any], response.json())
                         well_known_configuration_cache_result = WellKnownConfigurationCacheResult(
+                            schema_version=WellKnownConfigurationCacheResult.SCHEMA_VERSION,
                             well_known_uri=well_known_uri,
                             well_known_config=config,
                             client_key_set=await self._read_jwks_async(
