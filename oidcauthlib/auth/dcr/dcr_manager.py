@@ -144,19 +144,29 @@ class DcrManager:
             },
         )
         if results:
+            result = results[0]
+            if not result.is_schema_current():
+                logger.info(
+                    "DCR: Stale schema version for '%s' (stored=%d, current=%d); treating as cache miss",
+                    auth_provider,
+                    result.schema_version,
+                    DcrRegistration.SCHEMA_VERSION,
+                )
+                return None
             logger.debug(
                 "DCR: Cache hit for '%s' — found %d result(s), client_id=%s",
                 auth_provider,
                 len(results),
                 results[0].client_id,
             )
+            return result
         else:
             logger.debug(
                 "DCR: Cache miss for '%s' at '%s'",
                 auth_provider,
                 registration_url,
             )
-        return results[0] if results else None
+        return None
 
     @staticmethod
     def _is_expired(registration: DcrRegistration) -> bool:
@@ -174,6 +184,7 @@ class DcrManager:
         now = datetime.now(UTC)
         registration = DcrRegistration(
             _id=ObjectId(),
+            schema_version=DcrRegistration.SCHEMA_VERSION,
             created=now,
             auth_provider=auth_provider,
             registration_url=registration_url,

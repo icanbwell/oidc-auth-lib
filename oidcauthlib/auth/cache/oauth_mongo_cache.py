@@ -120,6 +120,13 @@ class OAuthMongoCache(OAuthCache):
             },
         )
         logger.debug(f" ====== For key {key} found {cache_item} default {default} =====")
+        if cache_item is not None and not cache_item.is_schema_current():
+            logger.info(
+                f"Stale schema version for cache key {key} "
+                f"(stored={cache_item.schema_version}, current={CacheItem.SCHEMA_VERSION}); "
+                f"treating as cache miss"
+            )
+            return default
         return cache_item.value if cache_item is not None else default
 
     @override
@@ -143,6 +150,7 @@ class OAuthMongoCache(OAuthCache):
         if existing_cache_item is not None:
             logger.debug(f" ====== Existing for key {key}: {existing_cache_item} =====")
             # if it exists, update the value
+            existing_cache_item.schema_version = CacheItem.SCHEMA_VERSION
             existing_cache_item.value = value
             existing_cache_item_id: ObjectId = existing_cache_item.id
             updated_cache_item: CacheItem | None = await self.repository.update_by_id(
@@ -156,7 +164,9 @@ class OAuthMongoCache(OAuthCache):
             logger.debug(f"Cache item updated with ID: {updated_cache_item.id} for key: {key} with value: {value}.\n")
         else:
             logger.debug(f" ====== Creating new cache item {key}: {value} =====")
-            cache_item = CacheItem(key=key, value=value, created=datetime.now(timezone.utc))
+            cache_item = CacheItem(
+                schema_version=CacheItem.SCHEMA_VERSION, key=key, value=value, created=datetime.now(timezone.utc)
+            )
             new_object_id = await self.repository.insert(
                 collection_name=self.collection_name,
                 model=cache_item,

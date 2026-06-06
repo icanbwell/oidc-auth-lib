@@ -45,6 +45,7 @@ class TestCachedCredentials:
     async def test_returns_cached_registration(self, _mock_validate: object) -> None:
         cached = DcrRegistration(
             _id=ObjectId(),
+            schema_version=DcrRegistration.SCHEMA_VERSION,
             created=datetime.now(UTC),
             auth_provider="test",
             registration_url="https://auth.example.com/register",

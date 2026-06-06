@@ -8,6 +8,7 @@ from joserfc.jwk import KeySet
 from key_value.aio.stores.base import BaseStore
 from key_value.aio.stores.memory import MemoryStore
 from opentelemetry import trace
+from pydantic import ValidationError
 
 from oidcauthlib.auth.config.auth_config import AuthConfig
 from oidcauthlib.auth.models.client_key_set import ClientKeySet
@@ -121,12 +122,28 @@ class WellKnownConfigurationCache:
                 if cached_config_dict is None:
                     has_missing_well_known_cache = True
                 else:
-                    result = WellKnownConfigurationCacheResult.model_validate(cached_config_dict)
-                    results.append(result)
-                    await self._cache_store.put(
-                        key=well_known_uri,
-                        value=result.model_dump(),
-                    )
+                    try:
+                        result = WellKnownConfigurationCacheResult.model_validate(cached_config_dict)
+                    except ValidationError as ve:
+                        logger.info(
+                            f"Cached data for {well_known_uri} failed validation "
+                            f"({ve.error_count()} error(s)); treating as cache miss"
+                        )
+                        has_missing_well_known_cache = True
+                        continue
+                    if not result.is_schema_current():
+                        logger.info(
+                            f"Stale schema version in backing store for {well_known_uri} "
+                            f"(stored={result.schema_version}, current={WellKnownConfigurationCacheResult.SCHEMA_VERSION}); "
+                            f"treating as cache miss"
+                        )
+                        has_missing_well_known_cache = True
+                    else:
+                        results.append(result)
+                        await self._cache_store.put(
+                            key=well_known_uri,
+                            value=result.model_dump(),
+                        )
 
             if not has_missing_well_known_cache:
                 logger.info("All well-known configurations already cached; skipping read.")
@@ -188,13 +205,28 @@ class WellKnownConfigurationCache:
             else None
         )
         if stored_config:
-            logger.info(f"\u2713 Using stored OIDC discovery document from store for {well_known_uri}")
-            # write-through to memory cache store
-            await self._cache_store.put(
-                key=well_known_uri,
-                value=stored_config,
-            )
-            return WellKnownConfigurationCacheResult.model_validate(stored_config)
+            try:
+                stored_result = WellKnownConfigurationCacheResult.model_validate(stored_config)
+            except ValidationError as ve:
+                logger.info(
+                    f"Cached data for {well_known_uri} failed validation "
+                    f"({ve.error_count()} error(s)); re-fetching from remote"
+                )
+                stored_result = None
+            if stored_result is not None and stored_result.is_schema_current():
+                logger.info(f"\u2713 Using stored OIDC discovery document from store for {well_known_uri}")
+                # write-through to memory cache store
+                await self._cache_store.put(
+                    key=well_known_uri,
+                    value=stored_result.model_dump(),
+                )
+                return stored_result
+            elif stored_result is not None:
+                logger.info(
+                    f"Stale schema version in backing store for {well_known_uri} "
+                    f"(stored={stored_result.schema_version}, current={WellKnownConfigurationCacheResult.SCHEMA_VERSION}); "
+                    f"re-fetching from remote"
+                )
 
         # Acquire or reuse a URI-specific lock to limit network calls per provider
         async with self._locks_lock:
@@ -231,6 +263,7 @@ class WellKnownConfigurationCache:
                         response.raise_for_status()
                         config = cast(Dict[str, Any], response.json())
                         well_known_configuration_cache_result = WellKnownConfigurationCacheResult(
+                            schema_version=WellKnownConfigurationCacheResult.SCHEMA_VERSION,
                             well_known_uri=well_known_uri,
                             well_known_config=config,
                             client_key_set=await self._read_jwks_async(

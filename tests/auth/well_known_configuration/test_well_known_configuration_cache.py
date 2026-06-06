@@ -335,6 +335,7 @@ async def test_read_list_async_hydrates_cache_from_backing_store(
     uri = "https://provider.example.com/.well-known/openid-configuration"
 
     stored_result = WellKnownConfigurationCacheResult(
+        schema_version=WellKnownConfigurationCacheResult.SCHEMA_VERSION,
         well_known_uri=uri,
         well_known_config={
             "issuer": "https://provider.example.com",
@@ -365,3 +366,313 @@ async def test_read_list_async_hydrates_cache_from_backing_store(
     assert cached is not None
     assert cached.well_known_uri == uri
     assert await cache.get_size_async() == 1
+
+
+@pytest.mark.asyncio
+async def test_read_list_async_ignores_stale_schema_version_in_backing_store(
+    test_container: IContainer,
+) -> None:
+    environment_variables: OidcEnvironmentVariables = test_container.resolve(OidcEnvironmentVariables)
+    backing_store = MemoryStore()
+    cache = WellKnownConfigurationCache(well_known_store=backing_store, environment_variables=environment_variables)
+    uri = "https://provider.example.com/.well-known/openid-configuration"
+
+    stale_data = {
+        "schema_version": 0,
+        "well_known_uri": uri,
+        "well_known_config": {
+            "issuer": "https://provider.example.com",
+            "jwks_uri": "https://provider.example.com/jwks",
+        },
+        "client_key_set": None,
+    }
+    await backing_store.put(key=uri, value=stale_data)
+
+    auth_config: AuthConfig = AuthConfig(
+        auth_provider="TEST_PROVIDER",
+        friendly_name="Test Provider",
+        audience="test_audience",
+        issuer="https://provider.example.com",
+        client_id="test_client_id",
+        well_known_uri=uri,
+        scope="openid profile email",
+    )
+
+    with respx.mock(assert_all_called=True) as respx_mock:
+        respx_mock.get(uri).mock(
+            return_value=httpx.Response(
+                200,
+                json={
+                    "issuer": "https://provider.example.com",
+                    "jwks_uri": "https://provider.example.com/jwks",
+                },
+            )
+        )
+        respx_mock.get("https://provider.example.com/jwks").mock(return_value=httpx.Response(200, json={"keys": []}))
+        await cache.read_list_async(auth_configs=[auth_config])
+
+    cached = await cache.get_async(auth_config=auth_config)
+    assert cached is not None
+    assert cached.schema_version == WellKnownConfigurationCacheResult.SCHEMA_VERSION
+
+
+@pytest.mark.asyncio
+async def test_read_async_ignores_stale_schema_version_in_backing_store(
+    test_container: IContainer,
+) -> None:
+    environment_variables: OidcEnvironmentVariables = test_container.resolve(OidcEnvironmentVariables)
+    backing_store = MemoryStore()
+    cache = WellKnownConfigurationCache(well_known_store=backing_store, environment_variables=environment_variables)
+    uri = "https://provider.example.com/.well-known/openid-configuration"
+
+    stale_data = {
+        "schema_version": 0,
+        "well_known_uri": uri,
+        "well_known_config": {
+            "issuer": "https://provider.example.com",
+            "jwks_uri": "https://provider.example.com/jwks",
+        },
+        "client_key_set": None,
+    }
+    await backing_store.put(key=uri, value=stale_data)
+
+    auth_config: AuthConfig = AuthConfig(
+        auth_provider="TEST_PROVIDER",
+        friendly_name="Test Provider",
+        audience="test_audience",
+        issuer="https://provider.example.com",
+        client_id="test_client_id",
+        well_known_uri=uri,
+        scope="openid profile email",
+    )
+
+    with respx.mock(assert_all_called=True) as respx_mock:
+        respx_mock.get(uri).mock(
+            return_value=httpx.Response(
+                200,
+                json={
+                    "issuer": "https://provider.example.com",
+                    "jwks_uri": "https://provider.example.com/jwks",
+                },
+            )
+        )
+        respx_mock.get("https://provider.example.com/jwks").mock(return_value=httpx.Response(200, json={"keys": []}))
+        result = await cache.read_async(auth_config=auth_config)
+
+    assert result is not None
+    assert result.schema_version == WellKnownConfigurationCacheResult.SCHEMA_VERSION
+
+
+@pytest.mark.asyncio
+async def test_read_async_uses_backing_store_with_current_schema_version(
+    test_container: IContainer,
+) -> None:
+    environment_variables: OidcEnvironmentVariables = test_container.resolve(OidcEnvironmentVariables)
+    backing_store = MemoryStore()
+    cache = WellKnownConfigurationCache(well_known_store=backing_store, environment_variables=environment_variables)
+    uri = "https://provider.example.com/.well-known/openid-configuration"
+
+    current_data = WellKnownConfigurationCacheResult(
+        schema_version=WellKnownConfigurationCacheResult.SCHEMA_VERSION,
+        well_known_uri=uri,
+        well_known_config={
+            "issuer": "https://provider.example.com",
+            "jwks_uri": "https://provider.example.com/jwks",
+        },
+        client_key_set=None,
+    )
+    await backing_store.put(key=uri, value=current_data.model_dump())
+
+    auth_config: AuthConfig = AuthConfig(
+        auth_provider="TEST_PROVIDER",
+        friendly_name="Test Provider",
+        audience="test_audience",
+        issuer="https://provider.example.com",
+        client_id="test_client_id",
+        well_known_uri=uri,
+        scope="openid profile email",
+    )
+
+    with respx.mock(assert_all_called=False) as respx_mock:
+        respx_mock.get(uri).mock(side_effect=AssertionError("Should not fetch — backing store is current"))
+        result = await cache.read_async(auth_config=auth_config)
+
+    assert result is not None
+    assert result.well_known_uri == uri
+    assert result.schema_version == WellKnownConfigurationCacheResult.SCHEMA_VERSION
+
+
+@pytest.mark.asyncio
+async def test_read_async_stores_schema_version_in_backing_store(
+    test_container: IContainer,
+) -> None:
+    environment_variables: OidcEnvironmentVariables = test_container.resolve(OidcEnvironmentVariables)
+    backing_store = MemoryStore()
+    cache = WellKnownConfigurationCache(well_known_store=backing_store, environment_variables=environment_variables)
+    uri = "https://provider.example.com/.well-known/openid-configuration"
+
+    auth_config: AuthConfig = AuthConfig(
+        auth_provider="TEST_PROVIDER",
+        friendly_name="Test Provider",
+        audience="test_audience",
+        issuer="https://provider.example.com",
+        client_id="test_client_id",
+        well_known_uri=uri,
+        scope="openid profile email",
+    )
+
+    with respx.mock(assert_all_called=True) as respx_mock:
+        respx_mock.get(uri).mock(
+            return_value=httpx.Response(
+                200,
+                json={
+                    "issuer": "https://provider.example.com",
+                    "jwks_uri": "https://provider.example.com/jwks",
+                },
+            )
+        )
+        respx_mock.get("https://provider.example.com/jwks").mock(return_value=httpx.Response(200, json={"keys": []}))
+        await cache.read_async(auth_config=auth_config)
+
+    stored = await backing_store.get(key=uri)
+    assert stored is not None
+    assert stored["schema_version"] == WellKnownConfigurationCacheResult.SCHEMA_VERSION
+
+
+@pytest.mark.asyncio
+async def test_cache_result_ignores_unknown_fields_from_future_schema(
+    test_container: IContainer,
+) -> None:
+    uri = "https://provider.example.com/.well-known/openid-configuration"
+    future_data = {
+        "schema_version": WellKnownConfigurationCacheResult.SCHEMA_VERSION,
+        "well_known_uri": uri,
+        "well_known_config": {"issuer": "https://provider.example.com"},
+        "client_key_set": None,
+        "some_future_field": "should_be_ignored",
+    }
+    result = WellKnownConfigurationCacheResult.model_validate(future_data)
+    assert result.well_known_uri == uri
+    assert result.is_schema_current()
+
+
+@pytest.mark.asyncio
+async def test_read_async_handles_validation_error_in_backing_store(
+    test_container: IContainer,
+) -> None:
+    """Cached data with extra fields in nested models (e.g. auth_config.extra_info)
+    should be treated as a cache miss rather than crashing."""
+    environment_variables: OidcEnvironmentVariables = test_container.resolve(OidcEnvironmentVariables)
+    backing_store = MemoryStore()
+    cache = WellKnownConfigurationCache(well_known_store=backing_store, environment_variables=environment_variables)
+    uri = "https://provider.example.com/.well-known/openid-configuration"
+
+    invalid_cached_data = {
+        "schema_version": WellKnownConfigurationCacheResult.SCHEMA_VERSION,
+        "well_known_uri": uri,
+        "well_known_config": {
+            "issuer": "https://provider.example.com",
+            "jwks_uri": "https://provider.example.com/jwks",
+        },
+        "client_key_set": {
+            "auth_config": {
+                "auth_provider": "TEST",
+                "friendly_name": "Test",
+                "audience": "aud",
+                "client_id": "cid",
+                "scope": "openid",
+                "extra_info": None,
+            },
+            "well_known_config": None,
+            "kids": [],
+            "keys": [],
+        },
+    }
+    await backing_store.put(key=uri, value=invalid_cached_data)
+
+    auth_config: AuthConfig = AuthConfig(
+        auth_provider="TEST_PROVIDER",
+        friendly_name="Test Provider",
+        audience="test_audience",
+        issuer="https://provider.example.com",
+        client_id="test_client_id",
+        well_known_uri=uri,
+        scope="openid profile email",
+    )
+
+    with respx.mock(assert_all_called=True) as respx_mock:
+        respx_mock.get(uri).mock(
+            return_value=httpx.Response(
+                200,
+                json={
+                    "issuer": "https://provider.example.com",
+                    "jwks_uri": "https://provider.example.com/jwks",
+                },
+            )
+        )
+        respx_mock.get("https://provider.example.com/jwks").mock(return_value=httpx.Response(200, json={"keys": []}))
+        result = await cache.read_async(auth_config=auth_config)
+
+    assert result is not None
+    assert result.well_known_uri == uri
+
+
+@pytest.mark.asyncio
+async def test_read_list_async_handles_validation_error_in_backing_store(
+    test_container: IContainer,
+) -> None:
+    """read_list_async should treat ValidationError from backing store as cache miss."""
+    environment_variables: OidcEnvironmentVariables = test_container.resolve(OidcEnvironmentVariables)
+    backing_store = MemoryStore()
+    cache = WellKnownConfigurationCache(well_known_store=backing_store, environment_variables=environment_variables)
+    uri = "https://provider.example.com/.well-known/openid-configuration"
+
+    invalid_cached_data = {
+        "schema_version": WellKnownConfigurationCacheResult.SCHEMA_VERSION,
+        "well_known_uri": uri,
+        "well_known_config": {
+            "issuer": "https://provider.example.com",
+            "jwks_uri": "https://provider.example.com/jwks",
+        },
+        "client_key_set": {
+            "auth_config": {
+                "auth_provider": "TEST",
+                "friendly_name": "Test",
+                "audience": "aud",
+                "client_id": "cid",
+                "scope": "openid",
+                "extra_info": None,
+            },
+            "well_known_config": None,
+            "kids": [],
+            "keys": [],
+        },
+    }
+    await backing_store.put(key=uri, value=invalid_cached_data)
+
+    auth_config: AuthConfig = AuthConfig(
+        auth_provider="TEST_PROVIDER",
+        friendly_name="Test Provider",
+        audience="test_audience",
+        issuer="https://provider.example.com",
+        client_id="test_client_id",
+        well_known_uri=uri,
+        scope="openid profile email",
+    )
+
+    with respx.mock(assert_all_called=True) as respx_mock:
+        respx_mock.get(uri).mock(
+            return_value=httpx.Response(
+                200,
+                json={
+                    "issuer": "https://provider.example.com",
+                    "jwks_uri": "https://provider.example.com/jwks",
+                },
+            )
+        )
+        respx_mock.get("https://provider.example.com/jwks").mock(return_value=httpx.Response(200, json={"keys": []}))
+        await cache.read_list_async(auth_configs=[auth_config])
+
+    cached = await cache.get_async(auth_config=auth_config)
+    assert cached is not None
+    assert cached.well_known_uri == uri
