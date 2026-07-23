@@ -1,10 +1,19 @@
-"""Regression test for the "iat"/"nbf" clock-skew leeway in TokenReader.verify_token_async.
+"""Regression test for the "iat"/"nbf"/"exp" clock-skew leeway in TokenReader.verify_token_async.
 
 A session JWT used immediately after it's minted can have an "iat" a fraction of a
 second ahead of this host's clock (ordinary clock skew between the IdP and this
 host, not a real "issued in the future" problem). With joserfc's default leeway=0,
 that token is spuriously rejected. See the "recently signed-up user gets bounced
 back to /login" symptom this was found from.
+
+Note: joserfc's `JWTClaimsRegistry(leeway=...)` applies the same tolerance to "exp"
+as it does to "iat"/"nbf" — a token also stays acceptable for up to
+`clock_skew_leeway_seconds` past its stated expiration. This is intentional (the
+same clock-skew problem applies symmetrically to expiry), but is covered explicitly
+below since it's an easy side effect to miss.
+
+All time-sensitive tests freeze `time.time()` via monkeypatch so they don't depend
+on how much real wall-clock time elapses between minting a token and verifying it.
 """
 
 import time
@@ -16,6 +25,12 @@ from joserfc.jwk import OctKey, KeySet
 
 from oidcauthlib.auth.config.auth_config import AuthConfig
 from oidcauthlib.auth.config.auth_config_reader import AuthConfigReader
+from oidcauthlib.auth.exceptions.authorization_bearer_token_expired_exception import (
+    AuthorizationBearerTokenExpiredException,
+)
+from oidcauthlib.auth.exceptions.authorization_bearer_token_invalid_exception import (
+    AuthorizationBearerTokenInvalidException,
+)
 from oidcauthlib.auth.token_reader import TokenReader
 from oidcauthlib.auth.well_known_configuration.well_known_configuration_manager import (
     WellKnownConfigurationManager,
@@ -51,27 +66,46 @@ def _make_token_reader(*, clock_skew_leeway_seconds: int) -> TokenReader:
     )
 
 
-def _make_token_signed_slightly_in_the_future(*, skew_seconds: int) -> str:
-    """A token whose iat/nbf are `skew_seconds` ahead of real now — simulating the
-    issuing IdP's clock running fast relative to this host."""
-    now = int(time.time()) + skew_seconds
+def _encode_token(*, iat: int, nbf: int, exp: int) -> str:
     header = {"alg": "HS256", "kid": "key-1"}
     claims = {
         "iss": "https://auth.example.com",
         "aud": "audience-1",
-        "iat": now,
-        "nbf": now,
-        "exp": now + 3600,
+        "iat": iat,
+        "nbf": nbf,
+        "exp": exp,
     }
     key = OctKey.import_key(SECRET, {"kid": "key-1"})
     return jwt.encode(header, claims, key)
 
 
+def _make_token_signed_slightly_in_the_future(*, now: int, skew_seconds: int) -> str:
+    """A token whose iat/nbf are `skew_seconds` ahead of `now` — simulating the
+    issuing IdP's clock running fast relative to this host."""
+    issued_at = now + skew_seconds
+    return _encode_token(iat=issued_at, nbf=issued_at, exp=issued_at + 3600)
+
+
+def _make_token_with_exp_offset(*, now: int, exp_offset_seconds: int) -> str:
+    """A token issued well in the past whose "exp" is `exp_offset_seconds` from `now`
+    (negative = already expired by that many seconds)."""
+    return _encode_token(iat=now - 3600, nbf=now - 3600, exp=now + exp_offset_seconds)
+
+
+def _freeze_time(monkeypatch: pytest.MonkeyPatch) -> int:
+    """Pin `time.time()` for the duration of the test so token minting and
+    verification agree on "now", independent of real elapsed wall-clock time."""
+    frozen_now = int(time.time())
+    monkeypatch.setattr(time, "time", lambda: float(frozen_now))
+    return frozen_now
+
+
 @pytest.mark.asyncio
-async def test_token_issued_moments_ago_with_clock_skew_is_accepted() -> None:
+async def test_token_issued_moments_ago_with_clock_skew_is_accepted(monkeypatch: pytest.MonkeyPatch) -> None:
     """Default leeway absorbs a couple seconds of IdP/host clock skew."""
+    now = _freeze_time(monkeypatch)
     token_reader = _make_token_reader(clock_skew_leeway_seconds=10)
-    token = _make_token_signed_slightly_in_the_future(skew_seconds=2)
+    token = _make_token_signed_slightly_in_the_future(now=now, skew_seconds=2)
 
     result = await token_reader.verify_token_async(token=token)
 
@@ -79,20 +113,48 @@ async def test_token_issued_moments_ago_with_clock_skew_is_accepted() -> None:
 
 
 @pytest.mark.asyncio
-async def test_token_beyond_leeway_window_is_still_rejected() -> None:
+async def test_token_beyond_leeway_window_is_still_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
     """Leeway isn't unlimited — a token genuinely far in the future still fails."""
+    now = _freeze_time(monkeypatch)
     token_reader = _make_token_reader(clock_skew_leeway_seconds=10)
-    token = _make_token_signed_slightly_in_the_future(skew_seconds=120)
+    token = _make_token_signed_slightly_in_the_future(now=now, skew_seconds=120)
 
-    with pytest.raises(Exception):
+    with pytest.raises(AuthorizationBearerTokenInvalidException):
         await token_reader.verify_token_async(token=token)
 
 
 @pytest.mark.asyncio
 async def test_zero_leeway_rejects_the_same_clock_skew(monkeypatch: pytest.MonkeyPatch) -> None:
     """Demonstrates the bug this fix addresses: with no leeway, even trivial skew 401s."""
+    now = _freeze_time(monkeypatch)
     token_reader = _make_token_reader(clock_skew_leeway_seconds=0)
-    token = _make_token_signed_slightly_in_the_future(skew_seconds=2)
+    token = _make_token_signed_slightly_in_the_future(now=now, skew_seconds=2)
 
-    with pytest.raises(Exception):
+    with pytest.raises(AuthorizationBearerTokenInvalidException):
+        await token_reader.verify_token_async(token=token)
+
+
+@pytest.mark.asyncio
+async def test_token_expired_within_leeway_is_still_accepted(monkeypatch: pytest.MonkeyPatch) -> None:
+    """joserfc applies `leeway` to "exp" too: a token that expired moments ago,
+    within the leeway window, is still accepted — the same tolerance that absorbs
+    iat/nbf clock skew also grants a grace period past expiration."""
+    now = _freeze_time(monkeypatch)
+    token_reader = _make_token_reader(clock_skew_leeway_seconds=10)
+    token = _make_token_with_exp_offset(now=now, exp_offset_seconds=-3)
+
+    result = await token_reader.verify_token_async(token=token)
+
+    assert result is not None
+
+
+@pytest.mark.asyncio
+async def test_token_expired_beyond_leeway_is_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The exp grace period is bounded by leeway — a token expired well beyond it
+    is still rejected as expired."""
+    now = _freeze_time(monkeypatch)
+    token_reader = _make_token_reader(clock_skew_leeway_seconds=10)
+    token = _make_token_with_exp_offset(now=now, exp_offset_seconds=-20)
+
+    with pytest.raises(AuthorizationBearerTokenExpiredException):
         await token_reader.verify_token_async(token=token)

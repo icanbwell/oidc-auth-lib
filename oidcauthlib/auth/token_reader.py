@@ -80,6 +80,9 @@ class TokenReader:
                 claim checks to absorb clock skew between the issuing IdP and this host. A
                 token minted and used within the same second as issuance can otherwise fail
                 validation ("iat"/"nbf" is in the future) purely from sub-second clock drift.
+                Applies symmetrically to "exp" as well: a token also remains acceptable for up
+                to this many seconds past its stated expiration, since the same clock-skew
+                tolerance has to apply to both directions.
         Raises:
             ValueError: If required dependencies or provider configs are missing.
             TypeError: If dependency types do not match expected classes.
