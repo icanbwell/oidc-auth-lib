@@ -67,6 +67,7 @@ class TokenReader:
         algorithms: Optional[list[str]] = None,
         auth_config_reader: AuthConfigReader,
         well_known_config_manager: WellKnownConfigurationManager,
+        clock_skew_leeway_seconds: int = 10,
     ):
         """
         Initialize TokenReader with dependencies and verification settings.
@@ -75,6 +76,10 @@ class TokenReader:
             algorithms: Allowed JWT algorithms for signature verification (e.g., ["RS256"]).
             auth_config_reader: Provider configuration reader used for issuer/audience validation.
             well_known_config_manager: Manager responsible for well-known configs and JWKS retrieval.
+            clock_skew_leeway_seconds: Tolerance (in seconds) applied to the "exp"/"nbf"/"iat"
+                claim checks to absorb clock skew between the issuing IdP and this host. A
+                token minted and used within the same second as issuance can otherwise fail
+                validation ("iat"/"nbf" is in the future) purely from sub-second clock drift.
         Raises:
             ValueError: If required dependencies or provider configs are missing.
             TypeError: If dependency types do not match expected classes.
@@ -83,6 +88,7 @@ class TokenReader:
         """
         self.uuid: UUID = uuid.uuid4()
         self.algorithms: List[str] | None = algorithms or None
+        self.clock_skew_leeway_seconds: int = clock_skew_leeway_seconds
 
         self.auth_config_reader: AuthConfigReader = auth_config_reader
         if self.auth_config_reader is None:
@@ -287,8 +293,10 @@ class TokenReader:
 
             exp_str = to_eastern_time(exp)
             now_str = to_eastern_time(now)
-            # Create claims registry
-            claims_requests = jwt.JWTClaimsRegistry()
+            # Create claims registry. Zero leeway (the joserfc default) makes exp/nbf/iat
+            # checks fail on nothing more than clock skew between the IdP and this host —
+            # observed in practice for a session token used immediately after it's minted.
+            claims_requests = jwt.JWTClaimsRegistry(leeway=self.clock_skew_leeway_seconds)
             claims_requests.validate(verified.claims)
 
             logger.debug(f"Successfully verified token: {token}")
