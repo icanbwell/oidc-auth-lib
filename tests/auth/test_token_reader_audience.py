@@ -30,8 +30,13 @@ _JWKS = KeySet([_KEY])
 
 
 def _token(*, claims: Dict[str, Any]) -> str:
-    """Sign a token with the shared test key."""
-    payload: Dict[str, Any] = {"exp": 9999999999, **claims}
+    """Sign a token with the shared test key.
+
+    `iat` is included because Token.create_from_dict requires exp, iat and iss and
+    returns None without them - so a token missing it verifies fine but yields no
+    Token, which would make the positive assertions below vacuous.
+    """
+    payload: Dict[str, Any] = {"exp": 9999999999, "iat": 1000000000, **claims}
     return jwt.encode({"alg": "HS256", "kid": KID}, payload, _KEY)
 
 
