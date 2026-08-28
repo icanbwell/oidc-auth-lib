@@ -98,9 +98,7 @@ class TestArrayAudience:
         # The shape Descope mints for an Agentic MCP Server: the DCR client id, the
         # bare project id, and the MCP Server URL. Comparing this list to a string
         # with == is never true, so before membership matching it matched no provider.
-        token = _token(
-            claims={"iss": ISSUER, "aud": [DCR_CLIENT_ID, PROJECT_ID, RESOURCE]}
-        )
+        token = _token(claims={"iss": ISSUER, "aud": [DCR_CLIENT_ID, PROJECT_ID, RESOURCE]})
 
         result = await _reader().verify_token_async(token=token)
 
@@ -116,9 +114,7 @@ class TestArrayAudience:
 
     @pytest.mark.asyncio
     async def test_rejects_array_without_a_configured_audience(self) -> None:
-        token = _token(
-            claims={"iss": ISSUER, "aud": ["someone-else", "another-audience"]}
-        )
+        token = _token(claims={"iss": ISSUER, "aud": ["someone-else", "another-audience"]})
 
         with pytest.raises(AuthorizationBearerTokenInvalidException):
             await _reader().verify_token_async(token=token)
