@@ -201,7 +201,8 @@ class TokenReader:
         exp_str: str = "None"
         now_str: str = "None"
         issuer: Optional[str] = None
-        audience: Optional[str] = None
+        # `aud` may be a single string or an array of strings (RFC 7519 4.1.3)
+        audience: Optional[str | List[str]] = None
         try:
             # Validate the token; on unknown kid, refresh JWKS once and retry
             try:
@@ -224,11 +225,17 @@ class TokenReader:
                     token=token,
                 )
 
+            # RFC 7519 4.1.3 allows `aud` to be either a single string or an array of
+            # strings. Normalize to a list so a provider's configured audience is matched
+            # by membership: comparing a list claim to a string with == is never true, so
+            # a multi-audience token would otherwise match no provider at all.
+            token_audiences: List[str] = audience if isinstance(audience, list) else [audience]
+
             # Validate that the token matches a configured provider securely.
             # Require audience to match; if an issuer is configured for that provider, require the issuer to match as well.
             token_matches_config = False
             for auth_config in self.auth_configs:
-                audience_matches = audience == auth_config.audience
+                audience_matches = auth_config.audience in token_audiences
                 if not audience_matches:
                     continue
 
