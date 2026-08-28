@@ -71,6 +71,7 @@ def _auth_config(
         audience=audience,
         issuer=issuer,
         client_id=client_id,
+        scope="openid",
     )
 
 

@@ -310,7 +310,8 @@ class TokenReader:
                 now=now_str,
                 token=token,
                 issuer=issuer,
-                audience=audience,
+                # The exception reports a single string; join a multi-valued claim.
+                audience=", ".join(audience) if isinstance(audience, list) else audience,
             ) from e
         except AuthorizationBearerTokenInvalidException:
             # Re-raise our custom validation exceptions without wrapping them
