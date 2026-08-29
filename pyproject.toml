@@ -106,3 +106,6 @@ skips = ["B101", "B105", "B106"]
 name = "alpine-wheels"
 url = "https://imranq2.github.io/alpine-wheels/docs/"
 explicit = true
+
+[tool.uv]
+exclude-newer = "2 days"
