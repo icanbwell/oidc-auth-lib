@@ -51,9 +51,7 @@ class FilteringSpanProcessor(SpanProcessor):
         self.excluded_span_names: Optional[Set[str]] = excluded_span_names
         self.excluded_span_prefixes: Optional[Set[str]] = excluded_span_prefixes
         self.min_duration_ms: Optional[float] = min_duration_ms
-        self.exclude_root_spans_from_duration_filter: bool = (
-            exclude_root_spans_from_duration_filter
-        )
+        self.exclude_root_spans_from_duration_filter: bool = exclude_root_spans_from_duration_filter
 
         logger.info(
             "FilteringSpanProcessor initialized: "
@@ -100,13 +98,8 @@ class FilteringSpanProcessor(SpanProcessor):
         span_name = span.name
         logger.debug(f"FilteringSpanProcessor: on_end called for span: {span.name}")
         # Filter 1: Check exact name match
-        if (
-            self.excluded_span_names is not None
-            and span_name in self.excluded_span_names
-        ):
-            logger.debug(
-                "FilteringSpanProcessor: Filtered out span (exact match): %s", span_name
-            )
+        if self.excluded_span_names is not None and span_name in self.excluded_span_names:
+            logger.debug("FilteringSpanProcessor: Filtered out span (exact match): %s", span_name)
             return
 
         # Filter 2: Check prefix match
@@ -121,7 +114,6 @@ class FilteringSpanProcessor(SpanProcessor):
 
         # Filter 3: Check duration (if configured)
         if self.min_duration_ms is not None:
-            # Check if we should skip duration filtering for root spans
             is_root = self._is_root_span(span)
             if is_root and self.exclude_root_spans_from_duration_filter:
                 logger.debug(
@@ -139,14 +131,13 @@ class FilteringSpanProcessor(SpanProcessor):
                         span_name,
                     )
                     return
-                else:
-                    logger.debug(
-                        "FilteringSpanProcessor: Span passes duration check (root:%s) span (duration %.2fms < %.2fms): %s",
-                        is_root,
-                        duration_ms,
-                        self.min_duration_ms,
-                        span_name,
-                    )
+                logger.debug(
+                    "FilteringSpanProcessor: Span passes duration check (root:%s) span (duration %.2fms < %.2fms): %s",
+                    is_root,
+                    duration_ms,
+                    self.min_duration_ms,
+                    span_name,
+                )
 
         # Span passed all filters, forward it
         self.wrapped_processor.on_end(span)

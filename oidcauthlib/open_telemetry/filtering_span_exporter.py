@@ -1,5 +1,5 @@
 import logging
-from typing import Optional, Set, Sequence
+from typing import Optional, Set, Sequence, override
 from opentelemetry.sdk.trace import ReadableSpan
 from opentelemetry.sdk.trace.export import SpanExporter, SpanExportResult
 
@@ -15,12 +15,12 @@ class FilteringSpanExporter(SpanExporter):
     """
 
     def __init__(
-            self,
-            wrapped_exporter: SpanExporter,
-            excluded_span_names: Optional[Set[str]] = None,
-            excluded_span_prefixes: Optional[Set[str]] = None,
-            min_duration_ms: Optional[float] = None,
-            exclude_root_spans_from_duration_filter: bool = True,
+        self,
+        wrapped_exporter: SpanExporter,
+        excluded_span_names: Optional[Set[str]] = None,
+        excluded_span_prefixes: Optional[Set[str]] = None,
+        min_duration_ms: Optional[float] = None,
+        exclude_root_spans_from_duration_filter: bool = True,
     ):
         """
         Initialize the filtering span exporter.
@@ -100,23 +100,18 @@ class FilteringSpanExporter(SpanExporter):
             # Check if we should skip duration filtering for root spans
             is_root = self._is_root_span(span)
             if is_root and self.exclude_root_spans_from_duration_filter:
-                logger.debug(
-                    "Skipping duration filter for root span: %s",
-                    span_name
-                )
+                logger.debug("Skipping duration filter for root span: %s", span_name)
             else:
                 duration_ms = self._get_span_duration_ms(span)
                 if duration_ms is not None and duration_ms < self.min_duration_ms:
                     logger.debug(
-                        "Filtered out span (duration %.2fms < %.2fms): %s",
-                        duration_ms,
-                        self.min_duration_ms,
-                        span_name
+                        "Filtered out span (duration %.2fms < %.2fms): %s", duration_ms, self.min_duration_ms, span_name
                     )
                     return False
 
         return True
 
+    @override
     def export(self, spans: Sequence[ReadableSpan]) -> SpanExportResult:
         """
         Export spans, filtering out unwanted ones.
@@ -131,11 +126,7 @@ class FilteringSpanExporter(SpanExporter):
         filtered_spans = [span for span in spans if self._should_export_span(span)]
 
         if len(filtered_spans) < len(spans):
-            logger.debug(
-                "Filtered %d out of %d spans",
-                len(spans) - len(filtered_spans),
-                len(spans)
-            )
+            logger.debug("Filtered %d out of %d spans", len(spans) - len(filtered_spans), len(spans))
 
         # Export filtered spans
         if filtered_spans:
@@ -143,10 +134,12 @@ class FilteringSpanExporter(SpanExporter):
         else:
             return SpanExportResult.SUCCESS
 
+    @override
     def shutdown(self) -> None:
         """Shutdown the wrapped exporter."""
         self.wrapped_exporter.shutdown()
 
+    @override
     def force_flush(self, timeout_millis: int = 30000) -> bool:
         """Force flush the wrapped exporter."""
         return self.wrapped_exporter.force_flush(timeout_millis)

@@ -170,8 +170,7 @@ class SpanFilterProcessor(SpanProcessor):
         except Exception:
             # Fail-safe: if filtering fails, pass through the span
             self._logger.exception(
-                f"Error in span filtering for {span.name}. "
-                f"Passing through span to prevent data loss."
+                f"Error in span filtering for {span.name}. Passing through span to prevent data loss."
             )
             self._wrapped.on_end(span)
 
@@ -185,10 +184,7 @@ class SpanFilterProcessor(SpanProcessor):
         self._metrics.increment_filtered(span.name)
 
         if self._config.debug_logging:
-            self._logger.debug(
-                f"Filtered span: {span.name} "
-                f"(total filtered: {self._metrics.get_filtered_count()})"
-            )
+            self._logger.debug(f"Filtered span: {span.name} (total filtered: {self._metrics.get_filtered_count()})")
 
     @override
     def shutdown(self) -> None:
@@ -199,9 +195,7 @@ class SpanFilterProcessor(SpanProcessor):
             if self._config.debug_logging and filtered_count > 0:
                 filtered_by_pattern = self._metrics.get_filtered_by_pattern()
                 self._logger.info(
-                    f"SpanFilterProcessor shutdown: "
-                    f"filtered {filtered_count} spans. "
-                    f"Breakdown: {filtered_by_pattern}"
+                    f"SpanFilterProcessor shutdown: filtered {filtered_count} spans. Breakdown: {filtered_by_pattern}"
                 )
 
         except Exception:
