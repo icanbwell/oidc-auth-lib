@@ -206,6 +206,10 @@ class TokenReader:
         if not token:
             raise ValueError("Token must not be empty")
 
+        # Read outside the try/except below so a misconfigured env var (ValueError)
+        # surfaces as a config error, not a per-request "invalid token" failure.
+        leeway = self.environment_variables.jwt_clock_skew_leeway_seconds
+
         jwks: KeySet = await self._well_known_config_manager.get_jwks_async()
 
         # get kids from jwks for logging
@@ -312,7 +316,7 @@ class TokenReader:
             # token issuer and this process (e.g. a container/VM clock
             # drifting from its host) -- without it, validate_iat rejects a
             # token as "issued in the future" on any skew at all.
-            claims_requests = jwt.JWTClaimsRegistry(leeway=self.environment_variables.jwt_clock_skew_leeway_seconds)
+            claims_requests = jwt.JWTClaimsRegistry(leeway=leeway)
             claims_requests.validate(verified.claims)
 
             logger.debug(f"Successfully verified token: {token}")
@@ -369,7 +373,8 @@ class TokenReader:
                 verified = jwt.decode(access_token, jwks, algorithms=self.algorithms)
             exp = verified.claims.get("exp")
             now = time.time()
-            if exp and exp < now:
+            leeway = self.environment_variables.jwt_clock_skew_leeway_seconds
+            if exp and exp < now - leeway:
                 logger.warning(f"Token has expired. Exp: {exp}, Now: {now}")
                 return False
             return True

@@ -253,6 +253,8 @@ class OidcEnvironmentVariables(AbstractEnvironmentVariables):
         """
         try:
             leeway = int(os.environ.get("JWT_CLOCK_SKEW_LEEWAY_SECONDS", "10"))
-            return leeway
         except ValueError:
-            raise ValueError("JWT_CLOCK_SKEW_LEEWAY_SECONDS must be a positive integer representing seconds")
+            raise ValueError("JWT_CLOCK_SKEW_LEEWAY_SECONDS must be a non-negative integer representing seconds")
+        if leeway < 0:
+            raise ValueError("JWT_CLOCK_SKEW_LEEWAY_SECONDS must be a non-negative integer representing seconds")
+        return leeway
