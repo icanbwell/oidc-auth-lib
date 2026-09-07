@@ -64,6 +64,12 @@ class TokenReader:
     - Algorithms used for verification are configurable via the constructor.
     """
 
+    # Class-level default so test doubles that bypass __init__ (a pattern
+    # already used in this test suite, e.g. tests/auth/test_token_reader_audience.py's
+    # _TestTokenReader) still find a usable environment_variables via normal
+    # attribute lookup, instead of raising AttributeError on first access.
+    environment_variables: OidcEnvironmentVariables = OidcEnvironmentVariables()
+
     def __init__(
         self,
         *,
