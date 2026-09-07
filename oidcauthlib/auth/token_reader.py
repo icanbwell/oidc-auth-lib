@@ -26,6 +26,9 @@ from oidcauthlib.auth.exceptions.authorization_bearer_token_missing_exception im
     AuthorizationBearerTokenMissingException,
 )
 from oidcauthlib.auth.models.token import Token
+from oidcauthlib.utilities.environment.oidc_environment_variables import (
+    OidcEnvironmentVariables,
+)
 from oidcauthlib.utilities.logger.log_levels import SRC_LOG_LEVELS
 from oidcauthlib.auth.well_known_configuration.well_known_configuration_manager import (
     WellKnownConfigurationManager,
@@ -67,6 +70,7 @@ class TokenReader:
         algorithms: Optional[list[str]] = None,
         auth_config_reader: AuthConfigReader,
         well_known_config_manager: WellKnownConfigurationManager,
+        environment_variables: Optional[OidcEnvironmentVariables] = None,
     ):
         """
         Initialize TokenReader with dependencies and verification settings.
@@ -75,6 +79,8 @@ class TokenReader:
             algorithms: Allowed JWT algorithms for signature verification (e.g., ["RS256"]).
             auth_config_reader: Provider configuration reader used for issuer/audience validation.
             well_known_config_manager: Manager responsible for well-known configs and JWKS retrieval.
+            environment_variables: Source for jwt_clock_skew_leeway_seconds. Defaults to a
+                plain OidcEnvironmentVariables() (reads directly from os.environ) if not given.
         Raises:
             ValueError: If required dependencies or provider configs are missing.
             TypeError: If dependency types do not match expected classes.
@@ -98,6 +104,8 @@ class TokenReader:
         self._well_known_config_manager: WellKnownConfigurationManager = well_known_config_manager
         if not isinstance(self._well_known_config_manager, WellKnownConfigurationManager):
             raise TypeError("well_known_config_manager must be an instance of WellKnownConfigurationManager")
+
+        self.environment_variables: OidcEnvironmentVariables = environment_variables or OidcEnvironmentVariables()
 
     @staticmethod
     def extract_token(*, authorization_header: str | None) -> Optional[str]:
@@ -287,8 +295,11 @@ class TokenReader:
 
             exp_str = to_eastern_time(exp)
             now_str = to_eastern_time(now)
-            # Create claims registry
-            claims_requests = jwt.JWTClaimsRegistry()
+            # Create claims registry. leeway tolerates clock skew between the
+            # token issuer and this process (e.g. a container/VM clock
+            # drifting from its host) -- without it, validate_iat rejects a
+            # token as "issued in the future" on any skew at all.
+            claims_requests = jwt.JWTClaimsRegistry(leeway=self.environment_variables.jwt_clock_skew_leeway_seconds)
             claims_requests.validate(verified.claims)
 
             logger.debug(f"Successfully verified token: {token}")

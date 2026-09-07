@@ -234,3 +234,25 @@ class OidcEnvironmentVariables(AbstractEnvironmentVariables):
             return timeout
         except ValueError:
             raise ValueError("WELL_KNOWN_CONFIG_HTTP_TIMEOUT_SECONDS must be a positive integer representing seconds")
+
+    @property
+    def jwt_clock_skew_leeway_seconds(self) -> int:
+        """Clock-skew tolerance in seconds for JWT iat/exp/nbf claim validation.
+
+        Accounts for clock drift between the token issuer and the process
+        verifying it (e.g. containers on different hosts, or a local dev VM's
+        clock drifting from its host) — applied as joserfc JWTClaimsRegistry's
+        `leeway`. Without this, any skew at all — even sub-second — makes
+        validate_iat reject a token as "issued in the future".
+
+        Set via JWT_CLOCK_SKEW_LEEWAY_SECONDS environment variable.
+        Defaults to 10 seconds.
+
+        Returns:
+            Leeway in seconds
+        """
+        try:
+            leeway = int(os.environ.get("JWT_CLOCK_SKEW_LEEWAY_SECONDS", "10"))
+            return leeway
+        except ValueError:
+            raise ValueError("JWT_CLOCK_SKEW_LEEWAY_SECONDS must be a positive integer representing seconds")
