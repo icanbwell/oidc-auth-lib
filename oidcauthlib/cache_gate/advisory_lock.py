@@ -147,9 +147,22 @@ class AdvisoryLock:
             self._heartbeat_task = None
 
         if self._acquired:
-            await self._store.delete(self._lock_name, collection=self._collection)
-            logger.info(
-                "AdvisoryLock: released lock '%s' (holder=%s)",
-                self._lock_name,
-                self._holder_id,
-            )
+            try:
+                await self._store.delete(self._lock_name, collection=self._collection)
+                logger.info(
+                    "AdvisoryLock: released lock '%s' (holder=%s)",
+                    self._lock_name,
+                    self._holder_id,
+                )
+            except Exception:
+                # Don't let a failed release mask an exception already propagating
+                # from the caller's critical section. The heartbeat has stopped, so
+                # the lock still self-clears once its TTL elapses.
+                logger.warning(
+                    "AdvisoryLock: failed to release lock '%s' (holder=%s) — it will "
+                    "still expire via TTL in up to %ds.",
+                    self._lock_name,
+                    self._holder_id,
+                    self._ttl_seconds,
+                    exc_info=True,
+                )
