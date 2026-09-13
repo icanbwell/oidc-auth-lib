@@ -65,3 +65,23 @@ async def test_stale_lock_expires_via_ttl() -> None:
 
     async with AdvisoryLock(store, "skill_sync") as after_expiry:
         assert after_expiry is True
+
+
+@pytest.mark.asyncio
+async def test_heartbeat_keeps_lock_alive_past_original_ttl() -> None:
+    store = MemoryStore()
+
+    async with AdvisoryLock(store, "skill_sync", ttl_seconds=1, heartbeat_interval_seconds=0.3) as acquired:
+        assert acquired is True
+
+        # Outlive the original TTL entirely. Without a heartbeat refreshing
+        # it, this window would let a second pod acquire the same lock while
+        # we're still holding it -- the exact bug this test guards against.
+        await asyncio.sleep(1.5)
+
+        async with AdvisoryLock(store, "skill_sync") as second_acquired:
+            assert second_acquired is False
+
+    # Released (and heartbeat stopped) on exit -- a fresh acquire succeeds.
+    async with AdvisoryLock(store, "skill_sync") as third_acquired:
+        assert third_acquired is True

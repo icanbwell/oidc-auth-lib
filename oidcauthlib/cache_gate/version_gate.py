@@ -43,12 +43,14 @@ class VersionGate:
         collection: str = VERSION_GATE_COLLECTION,
         lock_name: str | None = None,
         lock_ttl_seconds: int = 300,
+        lock_heartbeat_interval_seconds: float | None = None,
     ) -> None:
         self._store = store
         self._key = key
         self._collection = collection
         self._lock_name = lock_name
         self._lock_ttl_seconds = lock_ttl_seconds
+        self._lock_heartbeat_interval_seconds = lock_heartbeat_interval_seconds
 
     async def run_if_changed_async(
         self,
@@ -67,7 +69,12 @@ class VersionGate:
             await self._mark(current_version)
             return True
 
-        async with AdvisoryLock(self._store, self._lock_name, ttl_seconds=self._lock_ttl_seconds) as acquired:
+        async with AdvisoryLock(
+            self._store,
+            self._lock_name,
+            ttl_seconds=self._lock_ttl_seconds,
+            heartbeat_interval_seconds=self._lock_heartbeat_interval_seconds,
+        ) as acquired:
             if not acquired:
                 logger.info(
                     "VersionGate: lock '%s' held by another pod — skipping.",
