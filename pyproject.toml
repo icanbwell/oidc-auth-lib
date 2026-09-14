@@ -20,7 +20,8 @@ classifiers = [
 ]
 dependencies = [
     "httpx>=0.27.2",
-    "authlib>=1.6.4",
+    "httpx2>=2.12.0",  # required directly by authlib>=1.8.0's httpx_client integration (authlib#909); authlib itself only declares cryptography/joserfc, not this
+    "authlib>=1.8.0",  # 1.8.0 switched authlib.integrations.httpx_client to httpx2; LoggingTransport/LoggingResponse (below) are migrated to match
     "joserfc>=1.4.3",
     "pydantic>=2.0,<3.0.0",
     "pymongo[snappy]>=4.15.3",
@@ -47,7 +48,7 @@ dev = [
     "pytest-asyncio>=0.24.0",
     "black>=24.8.0",
     "bandit>=1.8.3",
-    "ruff>=0.11.5",
+    "ruff>=0.11.5,<0.16.0",  # 0.16 expands ruff's default rule set (unrelated to this PR); repo-wide reformat is a separate cleanup, not bundled here
     "pytest-cov>=6.1.1",
     "types-Authlib>=1.6.5",
     "respx>=0.22.0",

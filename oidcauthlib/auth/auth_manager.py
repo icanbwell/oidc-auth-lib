@@ -6,6 +6,7 @@ import uuid
 from typing import Any, Dict, cast, List
 
 import httpx
+import httpx2
 from authlib.integrations.httpx_client import AsyncOAuth2Client
 from authlib.integrations.starlette_client import OAuth, StarletteOAuth2App
 
@@ -160,7 +161,12 @@ class AuthManager:
         # --- Build client kwargs ---
         client_kwargs: dict[str, Any] = {
             "scope": auth_config.scope,
-            "transport": LoggingTransport(httpx.AsyncHTTPTransport()),
+            # authlib's httpx_client integration is httpx2-based as of authlib 1.8.0
+            # (authlib#909) -- this transport is passed straight into
+            # httpx2.AsyncClient.__init__, so it must wrap an httpx2 transport, not
+            # httpx's (a custom httpx-based transport= is one of authlib's own
+            # documented breaking changes for that release).
+            "transport": LoggingTransport(httpx2.AsyncHTTPTransport()),
         }
 
         if auth_config.use_pkce and auth_config.pkce_method:
