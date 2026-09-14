@@ -286,9 +286,9 @@ def apply_span_filtering(
         exclude_root_spans_from_duration_filter=exclude_root_spans_from_duration_filter,
     )
 
-    if sampler_applied or processor_applied:
-        logger.info("✓ Span filtering applied successfully")
-        return True
-    else:
+    if not (sampler_applied or processor_applied):
         logger.warning("Span filtering could not be applied")
         return False
+
+    logger.info("✓ Span filtering applied successfully")
+    return True
