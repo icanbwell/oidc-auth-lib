@@ -55,10 +55,10 @@ class OtelInitializer:
 
             try:
                 # Load configuration
-                config = config or SpanFilterConfig.from_environment()
+                resolved_config = config or SpanFilterConfig.from_environment()
 
                 # Validate configuration
-                validation_errors = config.validate()
+                validation_errors = resolved_config.validate()
                 if validation_errors:
                     cls._logger.warning(
                         f"Span filter configuration has validation errors: "
@@ -67,7 +67,7 @@ class OtelInitializer:
                     cls._initialized = True
                     return
 
-                if not config.enabled:
+                if not resolved_config.enabled:
                     cls._logger.info("Span filtering disabled via configuration")
                     cls._initialized = True
                     return
@@ -85,25 +85,19 @@ class OtelInitializer:
                     return
 
                 # Wrap existing span processors with filter
-                cls._wrap_existing_processors(tracer_provider, config)
+                cls._wrap_existing_processors(tracer_provider, resolved_config)
 
-                cls._logger.info(
-                    f"Span filtering initialized successfully. "
-                    f"Patterns: {config.patterns}"
-                )
+                cls._logger.info(f"Span filtering initialized successfully. Patterns: {resolved_config.patterns}")
                 cls._initialized = True
 
             except Exception:
                 cls._logger.exception(
-                    "Failed to initialize span filtering. "
-                    "Continuing without filtering to prevent app failure."
+                    "Failed to initialize span filtering. Continuing without filtering to prevent app failure."
                 )
                 cls._initialized = True  # Mark as initialized to prevent retries
 
     @classmethod
-    def _wrap_existing_processors(
-        cls, tracer_provider: TracerProvider, config: SpanFilterConfig
-    ) -> None:
+    def _wrap_existing_processors(cls, tracer_provider: TracerProvider, config: SpanFilterConfig) -> None:
         """
         Wrap existing span processors with SpanFilterProcessor.
 
@@ -128,9 +122,7 @@ class OtelInitializer:
         current_processor = tracer_provider._active_span_processor
 
         if current_processor is None:
-            cls._logger.warning(
-                "TracerProvider has no active span processor. Cannot apply filtering."
-            )
+            cls._logger.warning("TracerProvider has no active span processor. Cannot apply filtering.")
             return
 
         # Create strategy and metrics
@@ -150,10 +142,7 @@ class OtelInitializer:
         # Type ignore: We're intentionally wrapping the processor with our filter
         tracer_provider._active_span_processor = filtered_processor  # type: ignore[assignment]
 
-        cls._logger.debug(
-            f"Wrapped existing processor {type(current_processor).__name__} "
-            f"with SpanFilterProcessor"
-        )
+        cls._logger.debug(f"Wrapped existing processor {type(current_processor).__name__} with SpanFilterProcessor")
 
     @classmethod
     def reset(cls) -> None:

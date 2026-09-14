@@ -14,9 +14,7 @@ def get_excluded_span_names() -> Set[str]:
 
     env_excluded = os.environ.get("OTEL_EXCLUDED_SPAN_NAMES", "")
     if env_excluded:
-        custom_excluded = {
-            name.strip() for name in env_excluded.split(",") if name.strip()
-        }
+        custom_excluded = {name.strip() for name in env_excluded.split(",") if name.strip()}
         logger.info("Using custom excluded span names: %s", custom_excluded)
         return custom_excluded
 
@@ -27,9 +25,7 @@ def get_excluded_span_prefixes() -> Set[str]:
     """Get excluded span name prefixes from environment."""
     env_excluded = os.environ.get("OTEL_EXCLUDED_SPAN_PREFIXES", "")
     if env_excluded:
-        custom_excluded = {
-            prefix.strip() for prefix in env_excluded.split(",") if prefix.strip()
-        }
+        custom_excluded = {prefix.strip() for prefix in env_excluded.split(",") if prefix.strip()}
         logger.info("Using custom excluded span prefixes: %s", custom_excluded)
         return custom_excluded
 
@@ -69,8 +65,7 @@ def configure_opentelemetry(tracer_provider: TracerProvider) -> None:
         tracer_provider.__dict__["sampler"] = parent_based_filtering_sampler
 
         logger.info(
-            "✓ Configured OpenTelemetry with span filtering. "
-            "Excluding span names: %s, prefixes: %s",
+            "✓ Configured OpenTelemetry with span filtering. Excluding span names: %s, prefixes: %s",
             excluded_span_names,
             excluded_span_prefixes,
         )

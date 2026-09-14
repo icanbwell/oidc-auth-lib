@@ -1,5 +1,5 @@
 import logging
-from typing import Optional, Set, Sequence
+from typing import Optional, Set, Sequence, override
 
 from opentelemetry.context import Context
 from opentelemetry.sdk.trace.sampling import (
@@ -24,10 +24,10 @@ class FilteringSampler(Sampler):
     """
 
     def __init__(
-            self,
-            parent_sampler: Optional[Sampler] = None,
-            excluded_span_names: Optional[Set[str]] = None,
-            excluded_span_prefixes: Optional[Set[str]] = None,
+        self,
+        parent_sampler: Optional[Sampler] = None,
+        excluded_span_names: Optional[Set[str]] = None,
+        excluded_span_prefixes: Optional[Set[str]] = None,
     ):
         """
         Initialize the filtering sampler.
@@ -52,15 +52,16 @@ class FilteringSampler(Sampler):
             self.excluded_span_prefixes,
         )
 
+    @override
     def should_sample(
-            self,
-            parent_context: Optional["Context"],
-            trace_id: int,
-            name: str,
-            kind: Optional[SpanKind] = None,
-            attributes: Optional[Attributes] = None,
-            links: Optional[Sequence[Link]] = None,
-            trace_state: Optional["TraceState"] = None,
+        self,
+        parent_context: Optional["Context"],
+        trace_id: int,
+        name: str,
+        kind: Optional[SpanKind] = None,
+        attributes: Optional[Attributes] = None,
+        links: Optional[Sequence[Link]] = None,
+        trace_state: Optional["TraceState"] = None,
     ) -> SamplingResult:
         """
         Determine if a span should be sampled.
@@ -81,10 +82,9 @@ class FilteringSampler(Sampler):
         logger.debug(f"FilteringSampler: Not filtering span: {name}")
 
         # Delegate to parent sampler
-        return self.parent_sampler.should_sample(
-            parent_context, trace_id, name, kind, attributes, links, trace_state
-        )
+        return self.parent_sampler.should_sample(parent_context, trace_id, name, kind, attributes, links, trace_state)
 
+    @override
     def get_description(self) -> str:
         """Get a description of this sampler."""
         return f"FilteringSampler(parent={self.parent_sampler.get_description()})"
