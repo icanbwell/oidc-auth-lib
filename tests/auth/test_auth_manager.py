@@ -2,6 +2,7 @@ import os
 import uuid
 import pytest
 import httpx
+import httpx2
 import respx
 from unittest.mock import patch
 from typing import Any, Dict, Generator, List, Optional, override
@@ -191,6 +192,32 @@ def _bypass_url_validation() -> Generator[None, None, None]:
         yield
 
 
+def mock_httpx2(handler: Any) -> Any:
+    """Mock httpx2-level requests, mirroring what @respx.mock does for plain httpx.
+
+    authlib's httpx_client integration is httpx2-based as of authlib 1.8.0 (authlib#909),
+    so calls made through it (AuthManager.create_authorization_url, the password-grant
+    login flow) aren't intercepted by respx, which only patches httpx. This patches
+    httpx2's default transport class in both places it's referenced -- the public
+    `httpx2.AsyncHTTPTransport` attribute (what auth_manager.py's explicit
+    `httpx2.AsyncHTTPTransport()` call resolves via, e.g. LoggingTransport's usage) and
+    `httpx2._client.AsyncHTTPTransport` (the name httpx2.AsyncClient's own
+    `_init_transport` binds directly via `from ._transports.default import
+    AsyncHTTPTransport`, used when no `transport=` is given at all, e.g. the
+    password-grant login flow's bare `AsyncOAuth2Client(...)`) -- so any httpx2.AsyncClient
+    constructed while this context manager is active routes through an
+    httpx2.MockTransport instead of real sockets.
+    """
+    from contextlib import ExitStack
+
+    stack = ExitStack()
+    stack.enter_context(patch("httpx2.AsyncHTTPTransport", side_effect=lambda *a, **kw: httpx2.MockTransport(handler)))
+    stack.enter_context(
+        patch("httpx2._client.AsyncHTTPTransport", side_effect=lambda *a, **kw: httpx2.MockTransport(handler))
+    )
+    return stack
+
+
 # ---------------- Tests -----------------
 @pytest.mark.asyncio
 async def test_init_memory_cache(
@@ -262,25 +289,25 @@ async def test_ensure_initialized_and_create_client(
 
 
 @pytest.mark.asyncio
-@respx.mock
 async def test_create_authorization_url(
     environment_memory: FakeEnvironmentVariables,
     auth_config_reader: AuthConfigReader,
     token_reader: DummyTokenReader,
     well_known_manager: DummyWellKnownConfigurationManager,
 ) -> None:
-    # Mock the OIDC discovery document so the client doesn't perform real HTTP requests
-    # Use the provider's well-known URI from env (same as FakeEnvironmentVariables sets)
-    well_known_uri = "https://auth.example.com/.well-known/openid-configuration"
-    respx.get(well_known_uri).respond(
-        200,
-        json={
-            "issuer": "https://auth.example.com",
-            "authorization_endpoint": "https://auth.example.com/oauth/authorize",
-            "token_endpoint": "https://auth.example.com/oauth/token",
-        },
-    )
-    with patch("uuid.uuid4", return_value=uuid.UUID(int=0)):
+    # Mock the OIDC discovery document so the client doesn't perform real HTTP requests.
+    # This goes through authlib's httpx2-based client (see mock_httpx2), not respx.
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        return httpx2.Response(
+            200,
+            json={
+                "issuer": "https://auth.example.com",
+                "authorization_endpoint": "https://auth.example.com/oauth/authorize",
+                "token_endpoint": "https://auth.example.com/oauth/token",
+            },
+        )
+
+    with patch("uuid.uuid4", return_value=uuid.UUID(int=0)), mock_httpx2(handler):
         auth_manager = AuthManager(
             environment_variables=environment_memory,
             auth_config_reader=auth_config_reader,
@@ -354,17 +381,20 @@ async def test_login_and_get_token_with_username_password_success_discovery() ->
         scope="openid profile email",
     )
     respx.get(auth_config.well_known_uri).respond(200, json={"token_endpoint": "https://auth.example.com/oauth/token"})
-    respx.post("https://auth.example.com/oauth/token").respond(200, json={"access_token": "abc123"})
-    token = await AuthManager.login_and_get_token_with_username_password_async(
-        auth_config=auth_config,
-        username="user",
-        password="pass",
-    )
+
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        return httpx2.Response(200, json={"access_token": "abc123"})
+
+    with mock_httpx2(handler):
+        token = await AuthManager.login_and_get_token_with_username_password_async(
+            auth_config=auth_config,
+            username="user",
+            password="pass",
+        )
     assert token == "abc123"
 
 
 @pytest.mark.asyncio
-@respx.mock
 async def test_login_and_get_token_with_username_password_success_issuer_fallback() -> None:
     auth_config = AuthConfig(
         auth_provider="PROVIDER1",
@@ -376,13 +406,16 @@ async def test_login_and_get_token_with_username_password_success_issuer_fallbac
         well_known_uri=None,
         scope="openid profile email",
     )
-    token_endpoint = "https://issuer.example.com/protocol/openid-connect/token"
-    respx.post(token_endpoint).respond(200, json={"access_token": "xyz789"})
-    token = await AuthManager.login_and_get_token_with_username_password_async(
-        auth_config=auth_config,
-        username="user",
-        password="pass",
-    )
+
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        return httpx2.Response(200, json={"access_token": "xyz789"})
+
+    with mock_httpx2(handler):
+        token = await AuthManager.login_and_get_token_with_username_password_async(
+            auth_config=auth_config,
+            username="user",
+            password="pass",
+        )
     assert token == "xyz789"
 
 
@@ -410,7 +443,6 @@ async def test_login_and_get_token_missing_token_endpoint_raise() -> None:
 
 
 @pytest.mark.asyncio
-@respx.mock
 async def test_login_and_get_token_request_failure() -> None:
     auth_config = AuthConfig(
         auth_provider="PROVIDER1",
@@ -422,9 +454,11 @@ async def test_login_and_get_token_request_failure() -> None:
         well_known_uri=None,
         scope="openid profile email",
     )
-    token_endpoint = "https://issuer.example.com/protocol/openid-connect/token"
-    respx.post(token_endpoint).respond(400, json={"error": "invalid_grant"})
-    with pytest.raises(AuthorizationNeededException) as exc:
+
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        return httpx2.Response(400, json={"error": "invalid_grant"})
+
+    with mock_httpx2(handler), pytest.raises(AuthorizationNeededException) as exc:
         await AuthManager.login_and_get_token_with_username_password_async(
             auth_config=auth_config,
             username="user",
@@ -434,7 +468,6 @@ async def test_login_and_get_token_request_failure() -> None:
 
 
 @pytest.mark.asyncio
-@respx.mock
 async def test_login_and_get_token_missing_access_token_via_token_name_override() -> None:
     auth_config = AuthConfig(
         auth_provider="PROVIDER1",
@@ -446,9 +479,11 @@ async def test_login_and_get_token_missing_access_token_via_token_name_override(
         well_known_uri=None,
         scope="openid profile email",
     )
-    token_endpoint = "https://issuer.example.com/protocol/openid-connect/token"
-    respx.post(token_endpoint).respond(200, json={"access_token": "abc123"})
-    with pytest.raises(AuthorizationNeededException) as exc:
+
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        return httpx2.Response(200, json={"access_token": "abc123"})
+
+    with mock_httpx2(handler), pytest.raises(AuthorizationNeededException) as exc:
         await AuthManager.login_and_get_token_with_username_password_async(
             auth_config=auth_config,
             username="user",
