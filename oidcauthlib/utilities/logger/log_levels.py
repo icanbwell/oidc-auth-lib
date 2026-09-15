@@ -32,6 +32,7 @@ log_sources = [
     "AGENTS",
     "ERRORS",
     "REQUEST_SCOPE",
+    "OPEN_TELEMETRY",
 ]
 
 SRC_LOG_LEVELS = {}
