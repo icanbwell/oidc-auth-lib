@@ -249,13 +249,16 @@ class OidcUserInfoManager:
 
     @classmethod
     def build_cache_key(cls, *, issuer: str | None, client_id: str | None, subject: str | None) -> str | None:
-        """Versioned key for one user of one client of one issuer, or None when the token has no ``sub``.
+        """Versioned key for one user of one client of one issuer, or None when the token is not cacheable.
+
+        A token without ``sub`` or without an issuer is not cacheable: the key would be shared by every user
+        of the client, or by every provider that issues tokens without an ``iss`` claim.
 
         Each segment is percent-encoded, so a ``:`` inside an issuer, client id or subject can never move a
-        segment boundary and make two different users share a key. A missing issuer or client id is an
-        empty segment, which no encoded value can equal.
+        segment boundary and make two different users share a key. A missing client id is an empty segment,
+        which no encoded value can equal.
         """
-        if not subject:
+        if not subject or not issuer:
             return None
         segments = [quote(value or "", safe="") for value in (issuer, client_id, subject)]
         return f"{':'.join([cls._KEY_PREFIX, *segments])}|v{cls.CACHE_VERSION}"

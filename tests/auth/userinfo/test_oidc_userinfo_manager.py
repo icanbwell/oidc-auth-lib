@@ -176,11 +176,16 @@ class TestBuildCacheKey:
     def test_includes_issuer_client_id_subject_and_version(self) -> None:
         assert OidcUserInfoManager.build_cache_key(issuer=ISSUER, client_id="client-a", subject="user-1") == KEY
 
-    def test_missing_issuer_and_client_id_are_empty_segments(self) -> None:
+    def test_missing_client_id_is_an_empty_segment(self) -> None:
         assert (
-            OidcUserInfoManager.build_cache_key(issuer=None, client_id=None, subject="user-1")
-            == "oidc-userinfo-scopes:::user-1|v1"
+            OidcUserInfoManager.build_cache_key(issuer="i", client_id=None, subject="user-1")
+            == "oidc-userinfo-scopes:i::user-1|v1"
         )
+
+    @pytest.mark.parametrize("issuer", [None, ""])
+    def test_no_issuer_yields_no_key(self, issuer: str | None) -> None:
+        """Without an issuer two providers' tokens could share a key."""
+        assert OidcUserInfoManager.build_cache_key(issuer=issuer, client_id="client-a", subject="user-1") is None
 
     @pytest.mark.parametrize("subject", [None, ""])
     def test_no_subject_yields_no_key(self, subject: str | None) -> None:
@@ -196,7 +201,7 @@ class TestBuildCacheKey:
         [
             (("i", "a", "b:c"), ("i", "a:b", "c")),
             (("i:j", "a", "b"), ("i", "j:a", "b")),
-            ((None, "a:b", "c"), (None, "a", "b:c")),
+            (("i", "a:b", "c"), ("i", "a", "b:c")),
         ],
     )
     def test_colons_in_values_cannot_make_two_users_share_a_key(
@@ -370,6 +375,16 @@ class TestGetScopes:
         fx = _Fixture()
         manager = fx.manager()
         token = _token(claims={"client_id": "client-a", "iss": ISSUER})
+        await manager.get_scopes_from_user_info_async(access_token=token)
+        await manager.get_scopes_from_user_info_async(access_token=token)
+        assert len(fx.requests) == 2
+        assert await fx.store.keys(collection=COLLECTION) == []
+
+    async def test_token_without_issuer_is_not_cached(self) -> None:
+        """Resolved through its client id, but with no issuer its key could be shared across providers."""
+        fx = _Fixture()
+        manager = fx.manager()
+        token = _token(claims={"sub": "user-1", "client_id": "client-a"})
         await manager.get_scopes_from_user_info_async(access_token=token)
         await manager.get_scopes_from_user_info_async(access_token=token)
         assert len(fx.requests) == 2
