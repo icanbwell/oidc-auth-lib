@@ -19,7 +19,7 @@ from oidcauthlib.auth.well_known_configuration.well_known_configuration_manager 
 ISSUER = "https://issuer.example.com"
 USERINFO_URL = f"{ISSUER}/userinfo"
 COLLECTION = "oidc-user-info-cache"
-KEY = "oidc-userinfo-scopes:client-a:user-1|v1"
+KEY = "oidc-userinfo-scopes:https%3A%2F%2Fissuer.example.com:client-a:user-1|v1"
 
 
 def _auth_config(
@@ -173,15 +173,38 @@ class TestBuildScopes:
 
 
 class TestBuildCacheKey:
-    def test_includes_client_id_subject_and_version(self) -> None:
-        assert OidcUserInfoManager.build_cache_key(client_id="client-a", subject="user-1") == KEY
+    def test_includes_issuer_client_id_subject_and_version(self) -> None:
+        assert OidcUserInfoManager.build_cache_key(issuer=ISSUER, client_id="client-a", subject="user-1") == KEY
 
-    def test_omits_missing_client_id(self) -> None:
-        assert OidcUserInfoManager.build_cache_key(client_id=None, subject="user-1") == "oidc-userinfo-scopes:user-1|v1"
+    def test_missing_issuer_and_client_id_are_empty_segments(self) -> None:
+        assert (
+            OidcUserInfoManager.build_cache_key(issuer=None, client_id=None, subject="user-1")
+            == "oidc-userinfo-scopes:::user-1|v1"
+        )
 
     @pytest.mark.parametrize("subject", [None, ""])
     def test_no_subject_yields_no_key(self, subject: str | None) -> None:
-        assert OidcUserInfoManager.build_cache_key(client_id="client-a", subject=subject) is None
+        assert OidcUserInfoManager.build_cache_key(issuer=ISSUER, client_id="client-a", subject=subject) is None
+
+    def test_different_issuers_do_not_share_a_key(self) -> None:
+        a = OidcUserInfoManager.build_cache_key(issuer="https://a.example.com", client_id="c", subject="1")
+        b = OidcUserInfoManager.build_cache_key(issuer="https://b.example.com", client_id="c", subject="1")
+        assert a != b
+
+    @pytest.mark.parametrize(
+        ("first", "second"),
+        [
+            (("i", "a", "b:c"), ("i", "a:b", "c")),
+            (("i:j", "a", "b"), ("i", "j:a", "b")),
+            ((None, "a:b", "c"), (None, "a", "b:c")),
+        ],
+    )
+    def test_colons_in_values_cannot_make_two_users_share_a_key(
+        self, first: tuple[str | None, str, str], second: tuple[str | None, str, str]
+    ) -> None:
+        key_a = OidcUserInfoManager.build_cache_key(issuer=first[0], client_id=first[1], subject=first[2])
+        key_b = OidcUserInfoManager.build_cache_key(issuer=second[0], client_id=second[1], subject=second[2])
+        assert key_a != key_b
 
 
 class TestResolveAuthConfig:
@@ -337,7 +360,7 @@ class TestGetScopes:
     async def test_other_cache_version_is_a_miss(self) -> None:
         fx = _Fixture()
         await fx.store.put(
-            "oidc-userinfo-scopes:client-a:user-1|v0",
+            KEY.replace("|v1", "|v0"),
             {"cache_version": 0, "client_id": None, "value": {"scopes": ["stale"]}},
             collection=COLLECTION,
         )

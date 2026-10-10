@@ -2,6 +2,7 @@ import hashlib
 import logging
 from collections.abc import Sequence
 from typing import Any
+from urllib.parse import quote
 
 import httpx
 from key_value.aio.protocols.key_value import AsyncKeyValueProtocol
@@ -48,7 +49,7 @@ class OidcUserInfoManager:
     - The result is the union of the scopes derived from the token's own claims and from the userinfo
       response.
     - Only the scopes derived from the userinfo response are cached, never the response itself, under
-      ``oidc-userinfo-scopes:<client_id>:<sub>|v<CACHE_VERSION>``. The token's own scopes are always
+      ``oidc-userinfo-scopes:<issuer>:<client_id>:<sub>|v<CACHE_VERSION>`` (each segment percent-encoded). The token's own scopes are always
       re-derived from the presented token, so a narrower token never inherits a broader cached set.
       Bumping ``CACHE_VERSION`` obsoletes every existing entry.
     - A token without ``sub`` is never cached: the key would be shared by every user of the client.
@@ -190,14 +191,16 @@ class OidcUserInfoManager:
 
         Raises:
             ValueError: the cached entry has an unexpected shape, or no provider matches the token.
-                issuer = access_token.issuer or (access_token.claims or {}).get("iss")
-                cache_key = self.build_cache_key(client_id=access_token.client_id, subject=access_token.subject, issuer=issuer)
             httpx.HTTPError: the userinfo request failed.
         """
         tracer = trace.get_tracer(__name__)
         with tracer.start_as_current_span(OidcOpenTelemetrySpanNames.GET_SCOPES_FROM_OIDC_USERINFO):
             token_scopes = self.build_scopes(claims=access_token.claims or {})
-            cache_key = self.build_cache_key(client_id=access_token.client_id, subject=access_token.subject)
+            cache_key = self.build_cache_key(
+                issuer=access_token.issuer or (access_token.claims or {}).get("iss"),
+                client_id=access_token.client_id,
+                subject=access_token.subject,
+            )
 
             user_info_scopes: list[str] | None = None
             if cache_key is not None:
@@ -245,27 +248,25 @@ class OidcUserInfoManager:
         return scope
 
     @classmethod
-    def build_cache_key(cls, *, client_id: str | None, subject: str | None) -> str | None:
-        """Versioned key for one user of one client, or None when the token has no ``sub``."""
+    def build_cache_key(cls, *, issuer: str | None, client_id: str | None, subject: str | None) -> str | None:
+        """Versioned key for one user of one client of one issuer, or None when the token has no ``sub``.
+
+        Each segment is percent-encoded, so a ``:`` inside an issuer, client id or subject can never move a
+        segment boundary and make two different users share a key. A missing issuer or client id is an
+        empty segment, which no encoded value can equal.
+        """
         if not subject:
             return None
-        parts = [cls._KEY_PREFIX]
-        if client_id:
-            parts.append(client_id)
-        parts.append(subject)
-        return f"{':'.join(parts)}|v{cls.CACHE_VERSION}"
+        segments = [quote(value or "", safe="") for value in (issuer, client_id, subject)]
+        return f"{':'.join([cls._KEY_PREFIX, *segments])}|v{cls.CACHE_VERSION}"
 
     async def _read_cached_scopes(self, *, cache_key: str) -> list[str] | None:
-    def build_cache_key(cls, *, client_id: str | None, subject: str | None, issuer: str | None = None) -> str | None:
-        """Versioned key for one user of one client from one OIDC provider, or None when the token has no ``sub``."""
         raw = await self._store.get(cache_key, collection=self._cache_collection)
         key_id = self._loggable(cache_key=cache_key)
         if raw is None:
             logger.debug(f"OIDC userinfo scopes cache miss for key: {key_id}")
             return None
         try:
-        if issuer:
-            parts.append(issuer)
             entry = OidcUserInfoCacheEntry.model_validate(raw)
         except ValueError as exc:
             raise ValueError(f"OIDC userinfo scopes cache entry has invalid shape for key: {key_id}") from exc

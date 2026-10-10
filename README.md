@@ -27,10 +27,12 @@ scopes = await manager.get_scopes_from_user_info_async(access_token=token)
   `scope_claims`, then `group_claims` (each value taken whole). Commas separate like spaces, results are
   de-duplicated, and `scope_remove_prefixes` are stripped (first match wins). Nothing beyond `scope`/`scp`
   is read unless configured.
-- **Provider** is matched to the token's `iss` (exact `issuer`, then contained in `well_known_uri`), then
-  its client id. A token matching no provider raises `ValueError`; it is never sent to another provider.
-- **Cache** key is `oidc-userinfo-scopes:<client_id>:<sub>|v1`; only the userinfo-derived scopes are
-  stored, never the userinfo response. The token's own scopes are re-derived on every call. A token without
+- **Provider** is matched to the token's `iss` (exact `issuer`, then `well_known_uri` equal to or beneath the
+  issuer at a path boundary), then its client id. A token matching no provider raises `ValueError`; it is
+  never sent to another provider.
+- **Cache** key is `oidc-userinfo-scopes:<issuer>:<client_id>:<sub>|v1` with each segment percent-encoded
+  (so values containing `:` cannot collide, and two providers never share an entry); only the
+  userinfo-derived scopes are stored, never the userinfo response. The token's own scopes are re-derived on every call. A token without
   `sub`, or an empty scope list, is not cached. Changes to a user's entitlements are visible after at most
   `cache_ttl_seconds`.
 - **Failures:** a cache write failure is logged and swallowed. A cache read failure, malformed cache
