@@ -1,3 +1,4 @@
+import hashlib
 import logging
 from collections.abc import Sequence
 from typing import Any
@@ -116,7 +117,7 @@ class OidcUserInfoManager:
                 if config.issuer and config.issuer == issuer:
                     return config
             for config in configs:
-                if config.well_known_uri and issuer in config.well_known_uri:
+                if config.well_known_uri and self._is_under_issuer(uri=config.well_known_uri, issuer=issuer):
                     return config
         client_id = access_token.client_id
         if client_id:
@@ -127,8 +128,25 @@ class OidcUserInfoManager:
                     return auth_config
         raise ValueError(f"No auth provider matches token issuer {issuer!r} or client id {client_id!r}")
 
+    @staticmethod
+    def _is_under_issuer(*, uri: str, issuer: str) -> bool:
+        """True when ``uri`` is the issuer itself or a path beneath it.
+
+        A bare substring test would also match ``https://a.example.com.au/...`` for the issuer
+        ``https://a.example.com`` and send the token to the wrong provider.
+        """
+        base = issuer.rstrip("/")
+        return uri == base or uri.startswith(f"{base}/")
+
+    @staticmethod
+    def _loggable(*, cache_key: str) -> str:
+        """Short digest of ``cache_key``: the key embeds the user's ``sub``, which must not reach logs."""
+        return hashlib.sha256(cache_key.encode()).hexdigest()[:12]
+
     async def get_user_info_async(self, *, access_token: Token) -> dict[str, Any]:
         """Fetch the userinfo response for ``access_token``.
+
+        ``access_token`` must already have been verified by the caller; its claims are trusted.
 
         Raises:
             ValueError: the token, auth config, discovery document or response is unusable.
@@ -237,16 +255,17 @@ class OidcUserInfoManager:
 
     async def _read_cached_scopes(self, *, cache_key: str) -> list[str] | None:
         raw = await self._store.get(cache_key, collection=self._cache_collection)
+        key_id = self._loggable(cache_key=cache_key)
         if raw is None:
-            logger.debug(f"OIDC userinfo scopes cache miss for key: {cache_key}")
+            logger.debug(f"OIDC userinfo scopes cache miss for key: {key_id}")
             return None
         try:
             entry = OidcUserInfoCacheEntry.model_validate(raw)
         except ValueError as exc:
-            raise ValueError(f"OIDC userinfo scopes cache entry has invalid shape for key: {cache_key}") from exc
+            raise ValueError(f"OIDC userinfo scopes cache entry has invalid shape for key: {key_id}") from exc
         scopes = entry.value.get("scopes")
         if not isinstance(scopes, list) or not all(isinstance(s, str) for s in scopes):
-            raise ValueError(f"OIDC userinfo scopes cache entry has invalid shape for key: {cache_key}. {type(scopes)}")
+            raise ValueError(f"OIDC userinfo scopes cache entry has invalid shape for key: {key_id}. {type(scopes)}")
         return scopes
 
     async def _write_cached_scopes(self, *, cache_key: str, scopes: list[str]) -> None:
@@ -262,7 +281,7 @@ class OidcUserInfoManager:
                 collection=self._cache_collection,
                 ttl=self._cache_ttl_seconds,
             )
-            logger.debug(f"Cached OIDC userinfo scopes for key: {cache_key}")
+            logger.debug(f"Cached OIDC userinfo scopes for key: {self._loggable(cache_key=cache_key)}")
         except Exception:
             # A cache write failure must not break the auth flow.
-            logger.exception(f"Failed to cache OIDC userinfo scopes for key: {cache_key}")
+            logger.exception(f"Failed to cache OIDC userinfo scopes for key: {self._loggable(cache_key=cache_key)}")

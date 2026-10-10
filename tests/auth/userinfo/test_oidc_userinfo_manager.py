@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, override
 from unittest.mock import AsyncMock, MagicMock
 
 import httpx
@@ -46,11 +46,13 @@ def _token(*, claims: dict[str, Any] | None = None, raw: str = "raw-token") -> T
 
 
 class _WriteFailingStore(MemoryStore):
+    @override
     async def put(self, *args: Any, **kwargs: Any) -> None:
         raise ConnectionError("mongo down")
 
 
 class _ReadFailingStore(MemoryStore):
+    @override
     async def get(self, *args: Any, **kwargs: Any) -> Any:
         raise ConnectionError("mongo down")
 
@@ -195,6 +197,15 @@ class TestResolveAuthConfig:
         token = _token(claims={"sub": "u", "iss": ISSUER})
         assert fx.manager().resolve_auth_config(access_token=token).auth_provider == "BY_URI"
 
+    def test_issuer_is_not_matched_as_a_bare_substring_of_another_host(self) -> None:
+        fx = _Fixture()
+        lookalike = _auth_config(provider="LOOKALIKE", issuer=None, client_id="client-b")
+        lookalike.well_known_uri = "https://issuer.example.com.evil.test/.well-known/openid-configuration"
+        fx.configs[:] = [lookalike]
+        fx.reader.get_provider_for_client_id.return_value = None
+        with pytest.raises(ValueError, match="No auth provider matches"):
+            fx.manager().resolve_auth_config(access_token=_token())
+
     def test_falls_back_to_client_id(self) -> None:
         fx = _Fixture()
         fx.configs[:] = [_auth_config(provider="OTHER", issuer="https://other.example.com")]
@@ -316,11 +327,12 @@ class TestGetScopes:
             {"cache_version": 1, "client_id": None, "value": {"scopes": [1]}},
         ],
     )
-    async def test_invalid_entry_raises(self, raw: dict[str, Any]) -> None:
+    async def test_invalid_entry_raises_without_the_subject_in_the_message(self, raw: dict[str, Any]) -> None:
         fx = _Fixture()
         await fx.store.put(KEY, raw, collection=COLLECTION)
-        with pytest.raises(ValueError, match="invalid shape"):
+        with pytest.raises(ValueError, match="invalid shape") as error:
             await fx.manager().get_scopes_from_user_info_async(access_token=_token())
+        assert "user-1" not in str(error.value)
 
     async def test_other_cache_version_is_a_miss(self) -> None:
         fx = _Fixture()
