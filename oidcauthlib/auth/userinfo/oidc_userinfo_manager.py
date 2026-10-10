@@ -190,6 +190,8 @@ class OidcUserInfoManager:
 
         Raises:
             ValueError: the cached entry has an unexpected shape, or no provider matches the token.
+                issuer = access_token.issuer or (access_token.claims or {}).get("iss")
+                cache_key = self.build_cache_key(client_id=access_token.client_id, subject=access_token.subject, issuer=issuer)
             httpx.HTTPError: the userinfo request failed.
         """
         tracer = trace.get_tracer(__name__)
@@ -254,12 +256,16 @@ class OidcUserInfoManager:
         return f"{':'.join(parts)}|v{cls.CACHE_VERSION}"
 
     async def _read_cached_scopes(self, *, cache_key: str) -> list[str] | None:
+    def build_cache_key(cls, *, client_id: str | None, subject: str | None, issuer: str | None = None) -> str | None:
+        """Versioned key for one user of one client from one OIDC provider, or None when the token has no ``sub``."""
         raw = await self._store.get(cache_key, collection=self._cache_collection)
         key_id = self._loggable(cache_key=cache_key)
         if raw is None:
             logger.debug(f"OIDC userinfo scopes cache miss for key: {key_id}")
             return None
         try:
+        if issuer:
+            parts.append(issuer)
             entry = OidcUserInfoCacheEntry.model_validate(raw)
         except ValueError as exc:
             raise ValueError(f"OIDC userinfo scopes cache entry has invalid shape for key: {key_id}") from exc
