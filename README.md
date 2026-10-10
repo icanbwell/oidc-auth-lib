@@ -1,1 +1,38 @@
 # oidcauthlib
+
+## OIDC userinfo scopes (`OidcUserInfoManager`)
+
+Some providers (e.g. Okta employee access tokens) only carry `openid profile email groups` in the JWT;
+the scopes that authorize a caller appear only on the OIDC userinfo response.
+`oidcauthlib.auth.userinfo.oidc_userinfo_manager.OidcUserInfoManager` resolves a token's effective
+scopes from the token's own claims plus the userinfo endpoint, and caches the userinfo-derived scopes in
+a key-value store.
+
+```python
+manager = OidcUserInfoManager(
+    auth_config_reader=auth_config_reader,
+    well_known_configuration_manager=well_known_configuration_manager,
+    store=store,                      # py-key-value-aio store; yours, not shared with other services
+    cache_collection="oidc-user-info-cache",
+    cache_ttl_seconds=86400,
+    fetch_timeout_seconds=30,
+    scope_claims=["custom:scope"],    # optional extra claims holding scopes
+    group_claims=["groups"],          # optional claims holding group names, used whole as scopes
+    scope_remove_prefixes=["fhir/prod/"],
+)
+scopes = await manager.get_scopes_from_user_info_async(access_token=token)
+```
+
+- **Scope derivation** follows fhir-server-ui's `jwtParser`: the `scope` claim (plus `scp`), then
+  `scope_claims`, then `group_claims` (each value taken whole). Commas separate like spaces, results are
+  de-duplicated, and `scope_remove_prefixes` are stripped (first match wins). Nothing beyond `scope`/`scp`
+  is read unless configured.
+- **Provider** is matched to the token's `iss` (exact `issuer`, then contained in `well_known_uri`), then
+  its client id. A token matching no provider raises `ValueError`; it is never sent to another provider.
+- **Cache** key is `oidc-userinfo-scopes:<client_id>:<sub>|v1`; only the userinfo-derived scopes are
+  stored, never the userinfo response. The token's own scopes are re-derived on every call. A token without
+  `sub`, or an empty scope list, is not cached. Changes to a user's entitlements are visible after at most
+  `cache_ttl_seconds`.
+- **Failures:** a cache write failure is logged and swallowed. A cache read failure, malformed cache
+  entry, userinfo HTTP error or missing provider is raised, so each service decides whether to fail closed
+  or degrade.
