@@ -2,7 +2,7 @@ import hashlib
 import logging
 from collections.abc import Sequence
 from typing import Any
-from urllib.parse import quote
+from urllib.parse import SplitResult, quote, urlsplit
 
 import httpx
 from key_value.aio.protocols.key_value import AsyncKeyValueProtocol
@@ -21,6 +21,8 @@ from oidcauthlib.utilities.logger.log_levels import SRC_LOG_LEVELS
 logger = logging.getLogger(__name__)
 logger.setLevel(SRC_LOG_LEVELS["AUTH"])
 
+_DEFAULT_PORTS = {"http": 80, "https": 443}
+
 
 class OidcUserInfoCacheEntry(BaseModel):
     """Document stored for one cached scope list."""
@@ -37,9 +39,12 @@ class OidcUserInfoManager:
     JWT; the scopes that authorize a caller appear only on the userinfo response.
 
     Behavior:
-    - The provider is matched to the token's ``iss`` claim (exact ``issuer``, then a ``well_known_uri`` equal
-      to or beneath the issuer at a path boundary), then to its client id. A token matching no provider is an error:
-      the bearer token is never sent to an unrelated provider.
+    - The provider is matched to the token's ``iss`` claim (exact ``issuer``, else a ``well_known_uri`` on the
+      same scheme, host and port whose path segments start with the issuer's). Only a token with no ``iss`` at
+      all is matched by its client id. A token matching no provider is an error: the bearer token is never
+      sent to an unrelated provider.
+    - The userinfo response's ``sub`` must equal the token's ``sub`` (OIDC Core 5.3.2), else the lookup fails
+      and nothing is cached.
     - The userinfo endpoint is discovered through ``WellKnownConfigurationManager``.
     - Scopes are derived the way fhir-server-ui's ``jwtParser`` does: the ``scope`` claim (plus ``scp``,
       which Okta uses), the claims named in ``scope_claims``, and each claim named in ``group_claims``
@@ -56,13 +61,15 @@ class OidcUserInfoManager:
       the client, or by every provider that issues tokens without ``iss``.
     - An empty scope list is never cached: it is also what an account with no scopes looks like, and
       caching it would pin that result for the whole TTL.
-    - A cache write failure is logged and swallowed; it never fails the lookup.
+    - The cache is an optimization and never fails a lookup: a write failure is logged and swallowed, and a
+      read failure or an entry of the wrong shape is logged and treated as a miss (the refetched scopes
+      overwrite a bad entry).
 
     The store and collection are supplied by the caller, so each service keeps its own database. A cached
     scope list outlives a change to the user's entitlements by up to ``cache_ttl_seconds``.
 
-    Failures of the lookup itself (no matching provider, HTTP error, unreadable cache entry) are raised so
-    the caller decides whether to fail closed or degrade.
+    Failures of the lookup itself (no matching provider, HTTP error, mismatched subject) are raised so the
+    caller decides whether to fail closed or degrade.
     """
 
     CACHE_VERSION = 1
@@ -109,18 +116,24 @@ class OidcUserInfoManager:
     def resolve_auth_config(self, *, access_token: Token) -> AuthConfig:
         """The configuration of the provider that issued ``access_token``.
 
+        The token's issuer decides: an exact ``issuer`` match, else a ``well_known_uri`` on the same scheme, host
+        and port whose path segments start with the issuer's. The client id is only used for a token that has
+        no issuer at all; a token whose issuer matches no provider is never routed by its client id, which
+        would send it to whichever provider owns that client id.
+
         Raises:
-            ValueError: no configured provider matches the token's issuer or client id.
+            ValueError: no configured provider matches the token.
         """
         issuer = access_token.issuer or (access_token.claims or {}).get("iss")
-        configs = self._auth_config_reader.get_auth_configs_for_all_auth_providers()
         if issuer:
+            configs = self._auth_config_reader.get_auth_configs_for_all_auth_providers()
             for config in configs:
                 if config.issuer and config.issuer == issuer:
                     return config
             for config in configs:
                 if config.well_known_uri and self._is_under_issuer(uri=config.well_known_uri, issuer=issuer):
                     return config
+            raise ValueError(f"No auth provider matches token issuer {issuer!r}")
         client_id = access_token.client_id
         if client_id:
             auth_provider = self._auth_config_reader.get_provider_for_client_id(client_id=client_id)
@@ -128,17 +141,38 @@ class OidcUserInfoManager:
                 auth_config = self._auth_config_reader.get_config_for_auth_provider(auth_provider=auth_provider)
                 if auth_config:
                     return auth_config
-        raise ValueError(f"No auth provider matches token issuer {issuer!r} or client id {client_id!r}")
+        raise ValueError(f"No auth provider matches token client id {client_id!r}")
+
+    @staticmethod
+    def _effective_port(*, parts: SplitResult) -> int | None:
+        if parts.port is not None:
+            return parts.port
+        return _DEFAULT_PORTS.get(parts.scheme.lower())
 
     @staticmethod
     def _is_under_issuer(*, uri: str, issuer: str) -> bool:
-        """True when ``uri`` is the issuer itself or a path beneath it.
+        """True when ``uri`` is on the issuer's origin and its path is the issuer's path or beneath it.
 
-        A bare substring test would also match ``https://a.example.com.au/...`` for the issuer
-        ``https://a.example.com`` and send the token to the wrong provider.
+        Scheme, host (case-insensitive), port (default ports normalized) and path *segments* are compared.
+        A string prefix test would match ``https://a.example.com.au/...`` for ``https://a.example.com``,
+        ``/realms/ab`` for ``/realms/a``, and every https URL for the degenerate issuer ``https://``.
         """
-        base = issuer.rstrip("/")
-        return uri == base or uri.startswith(f"{base}/")
+        try:
+            issuer_parts = urlsplit(issuer)
+            uri_parts = urlsplit(uri)
+            issuer_port = OidcUserInfoManager._effective_port(parts=issuer_parts)
+            uri_port = OidcUserInfoManager._effective_port(parts=uri_parts)
+        except ValueError:
+            return False
+        if not issuer_parts.scheme or not issuer_parts.hostname or not uri_parts.hostname:
+            return False
+        if uri_parts.scheme.lower() != issuer_parts.scheme.lower():
+            return False
+        if uri_parts.hostname.lower() != issuer_parts.hostname.lower() or uri_port != issuer_port:
+            return False
+        issuer_segments = [segment for segment in issuer_parts.path.split("/") if segment]
+        uri_segments = [segment for segment in uri_parts.path.split("/") if segment]
+        return uri_segments[: len(issuer_segments)] == issuer_segments
 
     @staticmethod
     def _loggable(*, cache_key: str) -> str:
@@ -150,8 +184,12 @@ class OidcUserInfoManager:
 
         ``access_token`` must already have been verified by the caller; its claims are trusted.
 
+        Per OIDC Core 5.3.2 the response's ``sub`` must equal the token's ``sub``; a response that carries a
+        different ``sub`` describes another user and is rejected.
+
         Raises:
-            ValueError: the token, auth config, discovery document or response is unusable.
+            ValueError: the token, auth config, discovery document or response is unusable, or the response
+                is for a different subject.
             httpx.HTTPError: the userinfo request failed.
         """
         if not access_token.token:
@@ -183,6 +221,10 @@ class OidcUserInfoManager:
                 user_info = response.json()
             if not isinstance(user_info, dict):
                 raise ValueError("User info response is not a valid JSON object")
+            response_subject = user_info.get("sub")
+            if response_subject is not None and access_token.subject and response_subject != access_token.subject:
+                # Neither subject is logged: they identify users.
+                raise ValueError("User info response is for a different subject than the token")
             return user_info
 
     async def get_scopes_from_user_info_async(self, *, access_token: Token) -> list[str]:
@@ -191,7 +233,7 @@ class OidcUserInfoManager:
         The userinfo scopes come from the cache when present, else from the endpoint (then cached).
 
         Raises:
-            ValueError: the cached entry has an unexpected shape, or no provider matches the token.
+            ValueError: no provider matches the token, or the userinfo response is for another subject.
             httpx.HTTPError: the userinfo request failed.
         """
         tracer = trace.get_tracer(__name__)
@@ -265,18 +307,33 @@ class OidcUserInfoManager:
         return f"{':'.join([cls._KEY_PREFIX, *segments])}|v{cls.CACHE_VERSION}"
 
     async def _read_cached_scopes(self, *, cache_key: str) -> list[str] | None:
-        raw = await self._store.get(cache_key, collection=self._cache_collection)
+        """Cached userinfo scopes, or None for a miss.
+
+        A store failure or an entry of the wrong shape is logged and treated as a miss: the cache is an
+        optimization, so one bad entry (or a store outage) must not fail every request for that key until the
+        TTL expires. The refetched scopes then overwrite the bad entry.
+        """
         key_id = self._loggable(cache_key=cache_key)
+        try:
+            raw = await self._store.get(cache_key, collection=self._cache_collection)
+        except Exception:
+            logger.exception(f"Failed to read OIDC userinfo scopes from the cache for key: {key_id}")
+            return None
         if raw is None:
             logger.debug(f"OIDC userinfo scopes cache miss for key: {key_id}")
             return None
         try:
             entry = OidcUserInfoCacheEntry.model_validate(raw)
-        except ValueError as exc:
-            raise ValueError(f"OIDC userinfo scopes cache entry has invalid shape for key: {key_id}") from exc
+        except ValueError:
+            logger.warning(f"OIDC userinfo scopes cache entry has invalid shape for key: {key_id}; refetching")
+            return None
         scopes = entry.value.get("scopes")
         if not isinstance(scopes, list) or not all(isinstance(s, str) for s in scopes):
-            raise ValueError(f"OIDC userinfo scopes cache entry has invalid shape for key: {key_id}. {type(scopes)}")
+            logger.warning(
+                f"OIDC userinfo scopes cache entry has invalid scopes ({type(scopes).__name__}) for key: {key_id}; "
+                "refetching"
+            )
+            return None
         return scopes
 
     async def _write_cached_scopes(self, *, cache_key: str, scopes: list[str]) -> None:

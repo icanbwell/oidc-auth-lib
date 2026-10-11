@@ -1,3 +1,4 @@
+import logging
 from typing import Any, override
 from unittest.mock import AsyncMock, MagicMock
 
@@ -234,10 +235,16 @@ class TestResolveAuthConfig:
         with pytest.raises(ValueError, match="No auth provider matches"):
             fx.manager().resolve_auth_config(access_token=_token())
 
-    def test_falls_back_to_client_id(self) -> None:
+    def test_client_id_is_used_only_for_a_token_without_an_issuer(self) -> None:
+        fx = _Fixture()
+        fx.reader.get_config_for_auth_provider.return_value = _auth_config(provider="BY_CLIENT")
+        token = _token(claims={"sub": "u", "client_id": "client-a"})
+        assert fx.manager().resolve_auth_config(access_token=token).auth_provider == "BY_CLIENT"
+
+    def test_unmatched_issuer_is_never_routed_by_client_id(self) -> None:
+        """Falling back would send the token to whichever provider owns that client id."""
         fx = _Fixture()
         fx.configs[:] = [_auth_config(provider="OTHER", issuer="https://other.example.com")]
-        fx.reader.get_config_for_auth_provider.return_value = _auth_config(provider="BY_CLIENT")
         token = _token(
             claims={
                 "sub": "u",
@@ -245,7 +252,31 @@ class TestResolveAuthConfig:
                 "iss": "https://unknown.example.com",
             }
         )
-        assert fx.manager().resolve_auth_config(access_token=token).auth_provider == "BY_CLIENT"
+        with pytest.raises(ValueError, match="No auth provider matches token issuer"):
+            fx.manager().resolve_auth_config(access_token=token)
+        fx.reader.get_provider_for_client_id.assert_not_called()
+
+    @pytest.mark.parametrize(
+        ("uri", "issuer", "expected"),
+        [
+            ("https://a.example.com/.well-known/openid-configuration", "https://a.example.com", True),
+            ("https://a.example.com/.well-known/openid-configuration", "https://a.example.com/", True),
+            ("https://A.Example.com/realms/r/.well-known/x", "https://a.example.com/realms/r", True),
+            ("https://a.example.com:443/realms/r/.well-known/x", "https://a.example.com/realms/r", True),
+            ("https://a.example.com/realms/r", "https://a.example.com/realms/r", True),
+            ("https://a.example.com.au/.well-known/x", "https://a.example.com", False),
+            ("http://a.example.com/.well-known/x", "https://a.example.com", False),
+            ("https://a.example.com:8443/.well-known/x", "https://a.example.com", False),
+            ("https://a.example.com/realms/ab/.well-known/x", "https://a.example.com/realms/a", False),
+            ("https://a.example.com/realms/a/.well-known/x", "https://a.example.com/realms/ab", False),
+            ("https://anything.example.com/.well-known/x", "https://", False),
+            ("https://anything.example.com/.well-known/x", "https:", False),
+            ("https://anything.example.com/.well-known/x", "", False),
+            ("not a url", "https://a.example.com", False),
+        ],
+    )
+    def test_issuer_comparison_is_by_origin_and_path_segments(self, uri: str, issuer: str, expected: bool) -> None:
+        assert OidcUserInfoManager._is_under_issuer(uri=uri, issuer=issuer) is expected
 
     def test_no_match_raises_instead_of_using_first_provider(self) -> None:
         fx = _Fixture()
@@ -355,12 +386,21 @@ class TestGetScopes:
             {"cache_version": 1, "client_id": None, "value": {"scopes": [1]}},
         ],
     )
-    async def test_invalid_entry_raises_without_the_subject_in_the_message(self, raw: dict[str, Any]) -> None:
+    async def test_invalid_entry_is_refetched_and_overwritten_without_logging_the_subject(
+        self, raw: dict[str, Any], caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """One bad entry must not fail every request for that key until the TTL expires."""
         fx = _Fixture()
         await fx.store.put(KEY, raw, collection=COLLECTION)
-        with pytest.raises(ValueError, match="invalid shape") as error:
-            await fx.manager().get_scopes_from_user_info_async(access_token=_token())
-        assert "user-1" not in str(error.value)
+        with caplog.at_level(logging.DEBUG):
+            scopes = await fx.manager().get_scopes_from_user_info_async(access_token=_token())
+        assert scopes == ["access/*.*", "team/admins"]
+        assert len(fx.requests) == 1
+        stored = await fx.store.get(KEY, collection=COLLECTION)
+        assert stored is not None
+        assert stored["value"] == {"scopes": ["access/*.*", "team/admins"]}
+        assert "invalid" in caplog.text
+        assert "user-1" not in caplog.text
 
     async def test_other_cache_version_is_a_miss(self) -> None:
         fx = _Fixture()
@@ -402,10 +442,34 @@ class TestGetScopes:
             "team/admins",
         ]
 
-    async def test_read_failure_is_raised_for_the_caller_to_handle(self) -> None:
+    async def test_store_read_failure_falls_through_to_userinfo(self, caplog: pytest.LogCaptureFixture) -> None:
         fx = _Fixture(store=_ReadFailingStore())
-        with pytest.raises(ConnectionError):
+        with caplog.at_level(logging.DEBUG):
+            scopes = await fx.manager().get_scopes_from_user_info_async(access_token=_token())
+        assert scopes == ["access/*.*", "team/admins"]
+        assert len(fx.requests) == 1
+        assert "user-1" not in caplog.text
+
+    async def test_userinfo_for_another_subject_is_rejected_and_not_cached(self) -> None:
+        fx = _Fixture(userinfo=httpx.Response(200, json={"sub": "someone-else", "scope": "admin/*.*"}))
+        with pytest.raises(ValueError, match="different subject"):
             await fx.manager().get_scopes_from_user_info_async(access_token=_token())
+        assert await fx.store.keys(collection=COLLECTION) == []
+
+    @pytest.mark.parametrize("response_subject", ["user-1", None])
+    async def test_userinfo_with_the_same_or_no_subject_is_accepted(self, response_subject: str | None) -> None:
+        body: dict[str, Any] = {"scope": "access/*.*"}
+        if response_subject is not None:
+            body["sub"] = response_subject
+        fx = _Fixture(userinfo=httpx.Response(200, json=body))
+        assert await fx.manager().get_scopes_from_user_info_async(access_token=_token()) == ["access/*.*"]
+
+    async def test_subject_mismatch_error_does_not_contain_either_subject(self) -> None:
+        fx = _Fixture(userinfo=httpx.Response(200, json={"sub": "someone-else"}))
+        with pytest.raises(ValueError) as error:
+            await fx.manager().get_user_info_async(access_token=_token())
+        assert "someone-else" not in str(error.value)
+        assert "user-1" not in str(error.value)
 
     async def test_unmatched_provider_never_calls_userinfo(self) -> None:
         fx = _Fixture()
