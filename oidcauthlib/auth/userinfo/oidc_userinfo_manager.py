@@ -23,6 +23,9 @@ logger.setLevel(SRC_LOG_LEVELS["AUTH"])
 
 _DEFAULT_PORTS = {"http": 80, "https": 443}
 
+# Okta org-server access tokens carry the login in ``sub`` and the stable user id in this claim.
+_OKTA_USER_ID_CLAIM = "uid"
+
 
 class OidcUserInfoCacheEntry(BaseModel):
     """Document stored for one cached scope list."""
@@ -179,14 +182,41 @@ class OidcUserInfoManager:
         """Short digest of ``cache_key``: the key embeds the user's ``sub``, which must not reach logs."""
         return hashlib.sha256(cache_key.encode()).hexdigest()[:12]
 
+    @staticmethod
+    def _user_id(*, access_token: Token) -> str | None:
+        """The token's stable user id claim, when it has a ``sub`` to alias and the claim is a non-empty string."""
+        user_id = (access_token.claims or {}).get(_OKTA_USER_ID_CLAIM)
+        if access_token.subject and isinstance(user_id, str) and user_id:
+            return user_id
+        return None
+
+    @staticmethod
+    def _token_subjects(*, access_token: Token) -> set[str]:
+        """Identifiers a userinfo ``sub`` may legitimately equal for this token; empty for a token without ``sub``.
+
+        Okta org-server access tokens carry the login in ``sub`` and the user id in ``uid``, while the userinfo
+        response's ``sub`` is that user id; so the token's ``uid`` counts as the same subject as its ``sub``.
+        The alias is not issuer-specific and relies on the caller having verified the token (the userinfo
+        request is made with that same token, so the response is always for the token's own user).
+        """
+        subject = access_token.subject
+        if not subject:
+            return set()
+        if not isinstance(subject, str):
+            # A malformed ``sub`` can never be shown to equal the response's; fail closed like any mismatch.
+            raise ValueError("User info response subject is missing or differs from the token's subject")
+        user_id = OidcUserInfoManager._user_id(access_token=access_token)
+        return {subject} | ({user_id} if user_id else set())
+
     async def get_user_info_async(self, *, access_token: Token) -> dict[str, Any]:
         """Fetch the userinfo response for ``access_token``.
 
         ``access_token`` must already have been verified by the caller; its claims are trusted.
 
-        Per OIDC Core 5.3.2 the response must carry a ``sub`` equal to the token's ``sub``; a response without
-        one, or with a different one, cannot be shown to describe the token's user and is rejected. A token
-        that has no ``sub`` has nothing to compare, so its response is accepted (and never cached).
+        Per OIDC Core 5.3.2 the response must carry a ``sub`` equal to the token's ``sub`` (or its ``uid``, see
+        ``_token_subjects``); a response without one, or with a different one, cannot be shown to describe the
+        token's user and is rejected. A token that has no ``sub`` has nothing to compare (its ``uid`` is not
+        consulted), so its response is accepted (and never cached).
 
         Raises:
             ValueError: the token, auth config, discovery document or response is unusable, or the response's
@@ -222,7 +252,8 @@ class OidcUserInfoManager:
                 user_info = response.json()
             if not isinstance(user_info, dict):
                 raise ValueError("User info response is not a valid JSON object")
-            if access_token.subject and user_info.get("sub") != access_token.subject:
+            token_subjects = self._token_subjects(access_token=access_token)
+            if token_subjects and user_info.get("sub") not in token_subjects:
                 # Missing or different: ``sub`` is required in the response, and one that cannot be shown
                 # to be the token's subject must not be turned into scopes. Neither subject is logged.
                 raise ValueError("User info response subject is missing or differs from the token's subject")
@@ -243,7 +274,8 @@ class OidcUserInfoManager:
             cache_key = self.build_cache_key(
                 issuer=access_token.issuer or (access_token.claims or {}).get("iss"),
                 client_id=access_token.client_id,
-                subject=access_token.subject,
+                # The stable user id when the token has one: a login can be reassigned to another user.
+                subject=self._user_id(access_token=access_token) or access_token.subject,
             )
 
             user_info_scopes: list[str] | None = None

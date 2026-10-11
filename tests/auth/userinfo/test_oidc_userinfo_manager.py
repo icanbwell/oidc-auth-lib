@@ -468,6 +468,68 @@ class TestGetScopes:
         fx = _Fixture(userinfo=httpx.Response(200, json={"sub": "user-1", "scope": "access/*.*"}))
         assert await fx.manager().get_scopes_from_user_info_async(access_token=_token()) == ["access/*.*"]
 
+    async def test_userinfo_subject_equal_to_the_token_uid_is_accepted(self) -> None:
+        """Okta org-server access tokens carry the login in ``sub`` and the user id in ``uid``; the userinfo
+        response's ``sub`` is that user id."""
+        fx = _Fixture(userinfo=httpx.Response(200, json={"sub": "00u1", "scope": "access/*.*"}))
+        token = _token(claims={"sub": "a@example.com", "uid": "00u1", "client_id": "client-a", "iss": ISSUER})
+        assert await fx.manager().get_scopes_from_user_info_async(access_token=token) == ["access/*.*"]
+
+    async def test_scopes_for_a_token_with_a_uid_are_cached_under_the_uid_not_the_login(self) -> None:
+        """A login can be reassigned to another user; the stable user id must key the cache."""
+        fx = _Fixture(userinfo=httpx.Response(200, json={"sub": "00u1", "scope": "access/*.*"}))
+        manager = fx.manager()
+        claims = {"sub": "a@example.com", "uid": "00u1", "client_id": "client-a", "iss": ISSUER}
+        await manager.get_scopes_from_user_info_async(access_token=_token(claims=claims))
+        assert await fx.store.keys(collection=COLLECTION) == [
+            "oidc-userinfo-scopes:https%3A%2F%2Fissuer.example.com:client-a:00u1|v1"
+        ]
+        assert await manager.get_scopes_from_user_info_async(access_token=_token(claims=claims)) == ["access/*.*"]
+        assert len(fx.requests) == 1
+
+    async def test_a_reassigned_login_with_a_new_uid_does_not_reuse_the_previous_users_cache(self) -> None:
+        fx = _Fixture(userinfo=httpx.Response(200, json={"sub": "00u1", "scope": "admin/*.*"}))
+        manager = fx.manager()
+        old_user = {"sub": "a@example.com", "uid": "00u1", "client_id": "client-a", "iss": ISSUER}
+        await manager.get_scopes_from_user_info_async(access_token=_token(claims=old_user))
+        fx.userinfo = httpx.Response(200, json={"sub": "00u2", "scope": "access/*.*"})
+        new_user = {**old_user, "uid": "00u2"}
+        assert await manager.get_scopes_from_user_info_async(access_token=_token(claims=new_user)) == ["access/*.*"]
+        assert len(fx.requests) == 2
+
+    async def test_token_with_a_uid_but_no_sub_has_nothing_to_compare_and_is_not_cached(self) -> None:
+        fx = _Fixture(userinfo=httpx.Response(200, json={"sub": "someone-else", "scope": "access/*.*"}))
+        token = _token(claims={"uid": "00u1", "client_id": "client-a", "iss": ISSUER})
+        assert await fx.manager().get_scopes_from_user_info_async(access_token=token) == ["access/*.*"]
+        assert await fx.store.keys(collection=COLLECTION) == []
+
+    @pytest.mark.parametrize("subject", [123, ["user-1"], {"id": "user-1"}])
+    async def test_a_token_with_a_non_string_subject_is_rejected_not_crashed(self, subject: Any) -> None:
+        fx = _Fixture(userinfo=httpx.Response(200, json={"sub": "user-1", "scope": "admin/*.*"}))
+        token = _token(claims={"sub": subject, "client_id": "client-a", "iss": ISSUER})
+        with pytest.raises(ValueError, match="missing or differs"):
+            await fx.manager().get_user_info_async(access_token=token)
+
+    @pytest.mark.parametrize("uid", [123, "", None, ["00u1"]])
+    async def test_a_uid_that_is_not_a_non_empty_string_is_ignored(self, uid: Any) -> None:
+        fx = _Fixture(userinfo=httpx.Response(200, json={"sub": "someone-else", "scope": "admin/*.*"}))
+        token = _token(claims={"sub": "user-1", "uid": uid, "client_id": "client-a", "iss": ISSUER})
+        with pytest.raises(ValueError, match="missing or differs"):
+            await fx.manager().get_user_info_async(access_token=token)
+
+    async def test_userinfo_subject_matching_neither_token_sub_nor_uid_is_rejected_and_not_cached(self) -> None:
+        fx = _Fixture(userinfo=httpx.Response(200, json={"sub": "00u2", "scope": "admin/*.*"}))
+        token = _token(claims={"sub": "a@example.com", "uid": "00u1", "client_id": "client-a", "iss": ISSUER})
+        with pytest.raises(ValueError, match="missing or differs"):
+            await fx.manager().get_scopes_from_user_info_async(access_token=token)
+        assert await fx.store.keys(collection=COLLECTION) == []
+
+    async def test_userinfo_without_a_subject_is_rejected_for_a_token_with_a_uid(self) -> None:
+        fx = _Fixture(userinfo=httpx.Response(200, json={"scope": "admin/*.*"}))
+        token = _token(claims={"sub": "a@example.com", "uid": "00u1", "client_id": "client-a", "iss": ISSUER})
+        with pytest.raises(ValueError, match="missing or differs"):
+            await fx.manager().get_user_info_async(access_token=token)
+
     async def test_token_without_a_subject_has_nothing_to_compare_and_is_not_cached(self) -> None:
         fx = _Fixture(userinfo=httpx.Response(200, json={"scope": "access/*.*"}))
         token = _token(claims={"client_id": "client-a", "iss": ISSUER})
