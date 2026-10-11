@@ -37,8 +37,8 @@ class OidcUserInfoManager:
     JWT; the scopes that authorize a caller appear only on the userinfo response.
 
     Behavior:
-    - The provider is matched to the token's ``iss`` claim (exact ``issuer``, then ``iss`` contained in the
-      provider's ``well_known_uri``), then to its client id. A token matching no provider is an error:
+    - The provider is matched to the token's ``iss`` claim (exact ``issuer``, then a ``well_known_uri`` equal
+      to or beneath the issuer at a path boundary), then to its client id. A token matching no provider is an error:
       the bearer token is never sent to an unrelated provider.
     - The userinfo endpoint is discovered through ``WellKnownConfigurationManager``.
     - Scopes are derived the way fhir-server-ui's ``jwtParser`` does: the ``scope`` claim (plus ``scp``,
@@ -52,7 +52,8 @@ class OidcUserInfoManager:
       ``oidc-userinfo-scopes:<issuer>:<client_id>:<sub>|v<CACHE_VERSION>`` (each segment percent-encoded). The token's own scopes are always
       re-derived from the presented token, so a narrower token never inherits a broader cached set.
       Bumping ``CACHE_VERSION`` obsoletes every existing entry.
-    - A token without ``sub`` is never cached: the key would be shared by every user of the client.
+    - A token without ``sub`` or without an issuer is never cached: the key would be shared by every user of
+      the client, or by every provider that issues tokens without ``iss``.
     - An empty scope list is never cached: it is also what an account with no scopes looks like, and
       caching it would pin that result for the whole TTL.
     - A cache write failure is logged and swallowed; it never fails the lookup.
