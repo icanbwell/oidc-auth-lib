@@ -67,7 +67,7 @@ class _Fixture:
         store: MemoryStore | None = None,
     ) -> None:
         self.requests: list[httpx.Request] = []
-        self.userinfo = userinfo or httpx.Response(200, json={"scope": "access/*.* team/admins"})
+        self.userinfo = userinfo or httpx.Response(200, json={"sub": "user-1", "scope": "access/*.* team/admins"})
         self.store = store or MemoryStore()
         self.configs = [_auth_config()]
 
@@ -431,7 +431,7 @@ class TestGetScopes:
         assert await fx.store.keys(collection=COLLECTION) == []
 
     async def test_empty_userinfo_scopes_are_not_cached(self) -> None:
-        fx = _Fixture(userinfo=httpx.Response(200, json={"name": "no scopes"}))
+        fx = _Fixture(userinfo=httpx.Response(200, json={"sub": "user-1", "name": "no scopes"}))
         assert await fx.manager().get_scopes_from_user_info_async(access_token=_token()) == []
         assert await fx.store.keys(collection=COLLECTION) == []
 
@@ -452,17 +452,27 @@ class TestGetScopes:
 
     async def test_userinfo_for_another_subject_is_rejected_and_not_cached(self) -> None:
         fx = _Fixture(userinfo=httpx.Response(200, json={"sub": "someone-else", "scope": "admin/*.*"}))
-        with pytest.raises(ValueError, match="different subject"):
+        with pytest.raises(ValueError, match="missing or differs"):
             await fx.manager().get_scopes_from_user_info_async(access_token=_token())
         assert await fx.store.keys(collection=COLLECTION) == []
 
-    @pytest.mark.parametrize("response_subject", ["user-1", None])
-    async def test_userinfo_with_the_same_or_no_subject_is_accepted(self, response_subject: str | None) -> None:
-        body: dict[str, Any] = {"scope": "access/*.*"}
-        if response_subject is not None:
-            body["sub"] = response_subject
-        fx = _Fixture(userinfo=httpx.Response(200, json=body))
+    async def test_userinfo_without_a_subject_is_rejected_for_a_token_that_has_one(self) -> None:
+        """OIDC Core 5.3.2 requires ``sub`` in the response; one that cannot be tied to the token's subject
+        must not be turned into scopes or cached under that subject's key."""
+        fx = _Fixture(userinfo=httpx.Response(200, json={"scope": "admin/*.*"}))
+        with pytest.raises(ValueError, match="missing or differs"):
+            await fx.manager().get_scopes_from_user_info_async(access_token=_token())
+        assert await fx.store.keys(collection=COLLECTION) == []
+
+    async def test_userinfo_with_the_same_subject_is_accepted(self) -> None:
+        fx = _Fixture(userinfo=httpx.Response(200, json={"sub": "user-1", "scope": "access/*.*"}))
         assert await fx.manager().get_scopes_from_user_info_async(access_token=_token()) == ["access/*.*"]
+
+    async def test_token_without_a_subject_has_nothing_to_compare_and_is_not_cached(self) -> None:
+        fx = _Fixture(userinfo=httpx.Response(200, json={"scope": "access/*.*"}))
+        token = _token(claims={"client_id": "client-a", "iss": ISSUER})
+        assert await fx.manager().get_scopes_from_user_info_async(access_token=token) == ["access/*.*"]
+        assert await fx.store.keys(collection=COLLECTION) == []
 
     async def test_subject_mismatch_error_does_not_contain_either_subject(self) -> None:
         fx = _Fixture(userinfo=httpx.Response(200, json={"sub": "someone-else"}))

@@ -30,8 +30,8 @@ scopes = await manager.get_scopes_from_user_info_async(access_token=token)
 - **Provider** is matched to the token's `iss`: an exact `issuer`, else a `well_known_uri` on the same scheme,
   host and port whose path segments start with the issuer's. Only a token with no `iss` at all is matched by
   its client id. A token matching no provider raises `ValueError`; it is never sent to another provider.
-- **Subject check:** the userinfo response's `sub` must equal the token's `sub` (OIDC Core 5.3.2); otherwise
-  the lookup raises `ValueError` and nothing is cached.
+- **Subject check:** for a token that has a `sub`, the userinfo response must carry the same `sub`
+  (OIDC Core 5.3.2); a missing or different one raises `ValueError` and nothing is cached.
 - **Cache** key is `oidc-userinfo-scopes:<issuer>:<client_id>:<sub>|v1` with each segment percent-encoded
   (so values containing `:` cannot collide, and two providers never share an entry); only the
   userinfo-derived scopes are stored, never the userinfo response. The token's own scopes are re-derived on every call. A token without

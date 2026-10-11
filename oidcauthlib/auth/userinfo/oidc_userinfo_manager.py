@@ -43,8 +43,8 @@ class OidcUserInfoManager:
       same scheme, host and port whose path segments start with the issuer's). Only a token with no ``iss`` at
       all is matched by its client id. A token matching no provider is an error: the bearer token is never
       sent to an unrelated provider.
-    - The userinfo response's ``sub`` must equal the token's ``sub`` (OIDC Core 5.3.2), else the lookup fails
-      and nothing is cached.
+    - For a token that has a ``sub``, the userinfo response must carry the same ``sub`` (OIDC Core 5.3.2); a
+      missing or different one fails the lookup and nothing is cached.
     - The userinfo endpoint is discovered through ``WellKnownConfigurationManager``.
     - Scopes are derived the way fhir-server-ui's ``jwtParser`` does: the ``scope`` claim (plus ``scp``,
       which Okta uses), the claims named in ``scope_claims``, and each claim named in ``group_claims``
@@ -184,12 +184,13 @@ class OidcUserInfoManager:
 
         ``access_token`` must already have been verified by the caller; its claims are trusted.
 
-        Per OIDC Core 5.3.2 the response's ``sub`` must equal the token's ``sub``; a response that carries a
-        different ``sub`` describes another user and is rejected.
+        Per OIDC Core 5.3.2 the response must carry a ``sub`` equal to the token's ``sub``; a response without
+        one, or with a different one, cannot be shown to describe the token's user and is rejected. A token
+        that has no ``sub`` has nothing to compare, so its response is accepted (and never cached).
 
         Raises:
-            ValueError: the token, auth config, discovery document or response is unusable, or the response
-                is for a different subject.
+            ValueError: the token, auth config, discovery document or response is unusable, or the response's
+                subject is missing or differs from the token's.
             httpx.HTTPError: the userinfo request failed.
         """
         if not access_token.token:
@@ -221,10 +222,10 @@ class OidcUserInfoManager:
                 user_info = response.json()
             if not isinstance(user_info, dict):
                 raise ValueError("User info response is not a valid JSON object")
-            response_subject = user_info.get("sub")
-            if response_subject is not None and access_token.subject and response_subject != access_token.subject:
-                # Neither subject is logged: they identify users.
-                raise ValueError("User info response is for a different subject than the token")
+            if access_token.subject and user_info.get("sub") != access_token.subject:
+                # Missing or different: ``sub`` is required in the response, and one that cannot be shown
+                # to be the token's subject must not be turned into scopes. Neither subject is logged.
+                raise ValueError("User info response subject is missing or differs from the token's subject")
             return user_info
 
     async def get_scopes_from_user_info_async(self, *, access_token: Token) -> list[str]:
