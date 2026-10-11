@@ -468,6 +468,26 @@ class TestGetScopes:
         fx = _Fixture(userinfo=httpx.Response(200, json={"sub": "user-1", "scope": "access/*.*"}))
         assert await fx.manager().get_scopes_from_user_info_async(access_token=_token()) == ["access/*.*"]
 
+    async def test_userinfo_subject_equal_to_the_token_uid_is_accepted(self) -> None:
+        """Okta org-server access tokens carry the login in ``sub`` and the user id in ``uid``; the userinfo
+        response's ``sub`` is that user id."""
+        fx = _Fixture(userinfo=httpx.Response(200, json={"sub": "00u1", "scope": "access/*.*"}))
+        token = _token(claims={"sub": "a@example.com", "uid": "00u1", "client_id": "client-a", "iss": ISSUER})
+        assert await fx.manager().get_scopes_from_user_info_async(access_token=token) == ["access/*.*"]
+
+    async def test_userinfo_subject_matching_neither_token_sub_nor_uid_is_rejected_and_not_cached(self) -> None:
+        fx = _Fixture(userinfo=httpx.Response(200, json={"sub": "00u2", "scope": "admin/*.*"}))
+        token = _token(claims={"sub": "a@example.com", "uid": "00u1", "client_id": "client-a", "iss": ISSUER})
+        with pytest.raises(ValueError, match="missing or differs"):
+            await fx.manager().get_scopes_from_user_info_async(access_token=token)
+        assert await fx.store.keys(collection=COLLECTION) == []
+
+    async def test_userinfo_without_a_subject_is_rejected_for_a_token_with_a_uid(self) -> None:
+        fx = _Fixture(userinfo=httpx.Response(200, json={"scope": "admin/*.*"}))
+        token = _token(claims={"sub": "a@example.com", "uid": "00u1", "client_id": "client-a", "iss": ISSUER})
+        with pytest.raises(ValueError, match="missing or differs"):
+            await fx.manager().get_user_info_async(access_token=token)
+
     async def test_token_without_a_subject_has_nothing_to_compare_and_is_not_cached(self) -> None:
         fx = _Fixture(userinfo=httpx.Response(200, json={"scope": "access/*.*"}))
         token = _token(claims={"client_id": "client-a", "iss": ISSUER})

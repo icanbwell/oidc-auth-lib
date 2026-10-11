@@ -179,12 +179,23 @@ class OidcUserInfoManager:
         """Short digest of ``cache_key``: the key embeds the user's ``sub``, which must not reach logs."""
         return hashlib.sha256(cache_key.encode()).hexdigest()[:12]
 
+    @staticmethod
+    def _token_subjects(*, access_token: Token) -> set[str]:
+        """Identifiers a userinfo ``sub`` may legitimately equal for this token.
+
+        Okta org-server access tokens carry the login in ``sub`` and the user id in ``uid``, while the userinfo
+        response's ``sub`` is that user id; so the token's ``uid`` counts as the same subject as its ``sub``.
+        """
+        claims = access_token.claims or {}
+        return {value for value in (access_token.subject, claims.get("uid")) if value and isinstance(value, str)}
+
     async def get_user_info_async(self, *, access_token: Token) -> dict[str, Any]:
         """Fetch the userinfo response for ``access_token``.
 
         ``access_token`` must already have been verified by the caller; its claims are trusted.
 
-        Per OIDC Core 5.3.2 the response must carry a ``sub`` equal to the token's ``sub``; a response without
+        Per OIDC Core 5.3.2 the response must carry a ``sub`` equal to the token's ``sub`` (or its ``uid``, see
+        ``_token_subjects``); a response without
         one, or with a different one, cannot be shown to describe the token's user and is rejected. A token
         that has no ``sub`` has nothing to compare, so its response is accepted (and never cached).
 
@@ -222,7 +233,8 @@ class OidcUserInfoManager:
                 user_info = response.json()
             if not isinstance(user_info, dict):
                 raise ValueError("User info response is not a valid JSON object")
-            if access_token.subject and user_info.get("sub") != access_token.subject:
+            token_subjects = self._token_subjects(access_token=access_token)
+            if token_subjects and user_info.get("sub") not in token_subjects:
                 # Missing or different: ``sub`` is required in the response, and one that cannot be shown
                 # to be the token's subject must not be turned into scopes. Neither subject is logged.
                 raise ValueError("User info response subject is missing or differs from the token's subject")
