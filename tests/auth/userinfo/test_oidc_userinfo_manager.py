@@ -503,6 +503,13 @@ class TestGetScopes:
         assert await fx.manager().get_scopes_from_user_info_async(access_token=token) == ["access/*.*"]
         assert await fx.store.keys(collection=COLLECTION) == []
 
+    @pytest.mark.parametrize("subject", [123, ["user-1"], {"id": "user-1"}])
+    async def test_a_token_with_a_non_string_subject_is_rejected_not_crashed(self, subject: Any) -> None:
+        fx = _Fixture(userinfo=httpx.Response(200, json={"sub": "user-1", "scope": "admin/*.*"}))
+        token = _token(claims={"sub": subject, "client_id": "client-a", "iss": ISSUER})
+        with pytest.raises(ValueError, match="missing or differs"):
+            await fx.manager().get_user_info_async(access_token=token)
+
     @pytest.mark.parametrize("uid", [123, "", None, ["00u1"]])
     async def test_a_uid_that_is_not_a_non_empty_string_is_ignored(self, uid: Any) -> None:
         fx = _Fixture(userinfo=httpx.Response(200, json={"sub": "someone-else", "scope": "admin/*.*"}))

@@ -199,10 +199,14 @@ class OidcUserInfoManager:
         The alias is not issuer-specific and relies on the caller having verified the token (the userinfo
         request is made with that same token, so the response is always for the token's own user).
         """
-        if not access_token.subject:
+        subject = access_token.subject
+        if not subject:
             return set()
+        if not isinstance(subject, str):
+            # A malformed ``sub`` can never be shown to equal the response's; fail closed like any mismatch.
+            raise ValueError("User info response subject is missing or differs from the token's subject")
         user_id = OidcUserInfoManager._user_id(access_token=access_token)
-        return {access_token.subject} | ({user_id} if user_id else set())
+        return {subject} | ({user_id} if user_id else set())
 
     async def get_user_info_async(self, *, access_token: Token) -> dict[str, Any]:
         """Fetch the userinfo response for ``access_token``.
