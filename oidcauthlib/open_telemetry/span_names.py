@@ -14,6 +14,9 @@ class OidcOpenTelemetrySpanNames:
 
     READ_WELL_KNOWN_CONFIGURATION: str = "auth.oidc.well_known_config.read"
 
+    GET_USER_INFO_FROM_OIDC_ENDPOINT: str = "auth.oidc.userinfo.get"
+    GET_SCOPES_FROM_OIDC_USERINFO: str = "auth.oidc.token.get_scopes"
+
     # Mongo GridFS operations (pruned to only essential spans)
     MONGO_GRIDFS_GET_MANAGED_ENTRY: str = "mongo.gridfs.get_managed_entry"
     MONGO_GRIDFS_PUT_MANAGED_ENTRY: str = "mongo.gridfs.put_managed_entry"
