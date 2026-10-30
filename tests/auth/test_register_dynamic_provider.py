@@ -224,6 +224,24 @@ class TestEnsureInitializedDelegatesToRegisterDynamic:
         call_kwargs = _mock_register(manager).call_args[1]
         assert call_kwargs["server_metadata_url"] == config.well_known_uri
 
+    async def test_already_registered_provider_is_not_read_from_discovery_again(self) -> None:
+        """Repeat logins must not re-read discovery, so another issuer's outage cannot fail them."""
+        manager = _make_auth_manager()
+        config = AuthConfig(
+            auth_provider="discovery",
+            friendly_name="Discovery",
+            audience="aud",
+            client_id="cid",
+            scope="openid",
+            well_known_uri="https://idp.example.com/.well-known/openid-configuration",
+        )
+        manager.auth_configs = [config]
+        await manager.ensure_initialized_async()
+
+        await manager.ensure_initialized_async()
+
+        manager.well_known_configuration_manager.get_async.assert_called_once()  # type: ignore[attr-defined]
+
     async def test_deduplication_across_ensure_and_register(self) -> None:
         """Providers registered via ensure_initialized should not be re-registered by register_dynamic_provider."""
         manager = _make_auth_manager()

@@ -224,14 +224,17 @@ class OidcEnvironmentVariables(AbstractEnvironmentVariables):
         Bounds how often tokens carrying unknown (possibly attacker-chosen) kids can
         force an issuer refetch.
 
-        Set via WELL_KNOWN_KID_MISS_REFETCH_MIN_INTERVAL_SECONDS. Defaults to 60.
+        Set via WELL_KNOWN_KID_MISS_REFETCH_MIN_INTERVAL_SECONDS. Defaults to 60. 0 disables
+        the rate limit; negative values are rejected.
         """
+        message = "WELL_KNOWN_KID_MISS_REFETCH_MIN_INTERVAL_SECONDS must be a non-negative integer representing seconds"
         try:
-            return int(os.environ.get("WELL_KNOWN_KID_MISS_REFETCH_MIN_INTERVAL_SECONDS", "60"))
+            interval = int(os.environ.get("WELL_KNOWN_KID_MISS_REFETCH_MIN_INTERVAL_SECONDS", "60"))
         except ValueError:
-            raise ValueError(
-                "WELL_KNOWN_KID_MISS_REFETCH_MIN_INTERVAL_SECONDS must be a non-negative integer representing seconds"
-            )
+            raise ValueError(message)
+        if interval < 0:
+            raise ValueError(message)
+        return interval
 
     @property
     def well_known_config_http_timeout_seconds(self) -> int:

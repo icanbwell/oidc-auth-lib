@@ -2,7 +2,8 @@ import asyncio
 import logging
 import time
 import warnings
-from typing import Callable, Dict, Any, cast
+from functools import partial
+from typing import Awaitable, Callable, Dict, Any, TypeVar, cast
 
 import httpx
 from httpx import ConnectError
@@ -28,6 +29,8 @@ from oidcauthlib.utilities.url_validator import validate_url
 logger = logging.getLogger(__name__)
 logger.setLevel(SRC_LOG_LEVELS["AUTH"])
 
+_T = TypeVar("_T")
+
 
 class WellKnownConfigurationCache:
     """Read-through accessor for OpenID Connect discovery documents and their JWKS.
@@ -42,9 +45,10 @@ class WellKnownConfigurationCache:
     fetch from the issuer over HTTPS, upsert into the store with a TTL, return.
 
     Single flight:
-    - Within a pod, a per-URI asyncio.Lock coalesces concurrent cold-start fetches. The lock
-      guards only the fetch; it never holds data. The store is re-read after the lock is
-      acquired so waiters reuse the first caller's write.
+    - Within a pod, concurrent callers for the same URI share one in-flight task and its
+      outcome, success or failure, so an unreachable issuer costs one timeout rather than one
+      per queued caller. The task is dropped as soon as it finishes; it never holds data. The
+      store is re-read inside the task so a row another pod just wrote is reused.
     - Across pods, duplicate fetches are tolerated: the fetch is idempotent, the write is an
       upsert, and the cost is at most one issuer fetch per pod per URI per TTL window. An
       advisory lock is deliberately not used; a stuck lock would put a new failure mode on
@@ -96,9 +100,9 @@ class WellKnownConfigurationCache:
             warnings.warn(message, DeprecationWarning, stacklevel=2)
         self._store: BaseStore = well_known_store if well_known_store is not None else MemoryStore()
         self._clock: Callable[[], float] = clock
-        # Coalesces concurrent fetches within this process. Holds no cached data.
-        self._locks: Dict[str, asyncio.Lock] = {}
-        self._locks_lock: asyncio.Lock = asyncio.Lock()
+        # In-flight fetches within this process, keyed by (operation, URI). Entries exist only
+        # while the fetch runs and hold no cached data.
+        self._in_flight: Dict[tuple[str, str], asyncio.Future[Any]] = {}
         # URIs this instance has been asked about (configuration, not cached data). The store
         # has no key listing, so kid lookup and clear need to know which rows to consult.
         self._known_uris: set[str] = set()
@@ -155,17 +159,45 @@ class WellKnownConfigurationCache:
         """Read rows for several configs with ONE store round trip (get_many).
 
         Configs whose row is missing, expired or unusable fall back to the single-config
-        read-through path (which re-reads under the per-URI lock and fetches the issuer).
+        read-through path (which fetches the issuer). A failing provider does not take down
+        the others: its error is logged and its keys are simply absent, so its own tokens
+        still fail closed. If every fallback read fails the first error is raised.
         """
         if not auth_configs:
             return []
         uris = [cast(str, c.well_known_uri) for c in auth_configs]
         self._known_uris.update(uris)
         rows = await self._store.get_many(keys=uris)
-        results: list[WellKnownConfigurationCacheResult | None] = []
-        for auth_config, uri, row in zip(auth_configs, uris, rows):
-            usable = self._parse_row(well_known_uri=uri, cached=row)
-            results.append(usable if usable is not None else await self.read_async(auth_config=auth_config))
+        usable_rows = [self._parse_row(well_known_uri=uri, cached=row) for uri, row in zip(uris, rows)]
+        missing = [c for c, usable in zip(auth_configs, usable_rows) if usable is None]
+        fetched = iter(
+            self._tolerate_partial_failure(
+                outcomes=await asyncio.gather(
+                    *[self.read_async(auth_config=c) for c in missing],
+                    return_exceptions=True,
+                ),
+                uris=[cast(str, c.well_known_uri) for c in missing],
+            )
+        )
+        return [usable if usable is not None else next(fetched) for usable in usable_rows]
+
+    @staticmethod
+    def _tolerate_partial_failure(*, outcomes: list[_T | BaseException], uris: list[str]) -> list[_T | None]:
+        """Turn per-provider failures into None unless every provider failed.
+
+        Isolates providers from each other's outages. When all of them failed there is nothing
+        healthy to protect, so the first error is raised (fail closed, caller sees the cause).
+        """
+        failures = [o for o in outcomes if isinstance(o, BaseException)]
+        if outcomes and len(failures) == len(outcomes):
+            raise failures[0]
+        results: list[_T | None] = []
+        for uri, outcome in zip(uris, outcomes):
+            if isinstance(outcome, BaseException):
+                logger.error(f"Could not read OIDC configuration for {uri}; continuing without it: {outcome!r}")
+                results.append(None)
+            else:
+                results.append(outcome)
         return results
 
     def _is_fresh(self, *, result: WellKnownConfigurationCacheResult) -> bool:
@@ -211,11 +243,27 @@ class WellKnownConfigurationCache:
             return None
         return result
 
-    async def _uri_lock(self, *, well_known_uri: str) -> asyncio.Lock:
-        async with self._locks_lock:
-            if well_known_uri not in self._locks:
-                self._locks[well_known_uri] = asyncio.Lock()
-            return self._locks[well_known_uri]
+    def _discard_flight(self, key: tuple[str, str], flight: "asyncio.Future[Any]") -> None:
+        if self._in_flight.get(key) is flight:
+            del self._in_flight[key]
+
+    async def _single_flight_async(
+        self, *, operation: str, well_known_uri: str, work: Callable[[], Awaitable[_T]]
+    ) -> _T:
+        """Run ``work`` once per (operation, URI) at a time; concurrent callers share its outcome.
+
+        Success or failure is shared with everyone who arrived while it ran, so callers do not
+        queue up and repeat a timed-out fetch one after another. A caller arriving after it has
+        finished starts a new run. The entry is removed on completion and holds no data.
+        """
+        key = (operation, well_known_uri)
+        flight = self._in_flight.get(key)
+        if flight is None:
+            flight = asyncio.ensure_future(work())
+            self._in_flight[key] = flight
+            flight.add_done_callback(partial(self._discard_flight, key))
+        # shield: one waiter being cancelled must not cancel the fetch the others share
+        return cast(_T, await asyncio.shield(flight))
 
     async def read_async(self, *, auth_config: AuthConfig) -> WellKnownConfigurationCacheResult | None:
         """Return the discovery document for one config, reading the store on every call.
@@ -240,13 +288,17 @@ class WellKnownConfigurationCache:
         if stored is not None:
             return stored
 
-        async with await self._uri_lock(well_known_uri=well_known_uri):
-            # Another coroutine (or pod) may have filled the row while we waited.
+        async def _read_or_fetch_async() -> WellKnownConfigurationCacheResult:
+            # Another pod may have filled the row since the read above.
             stored = await self._read_stored_async(well_known_uri=well_known_uri)
             if stored is not None:
                 return stored
             logger.info(f"Store miss for {well_known_uri}; fetching from issuer")
             return await self._fetch_and_store_async(auth_config=auth_config, well_known_uri=well_known_uri)
+
+        return await self._single_flight_async(
+            operation="read", well_known_uri=well_known_uri, work=_read_or_fetch_async
+        )
 
     async def refresh_async(self, *, auth_configs: list[AuthConfig]) -> None:
         """Refetch discovery documents and JWKS because a token presented an unknown kid.
@@ -255,13 +307,21 @@ class WellKnownConfigurationCache:
         ``well_known_kid_miss_refetch_min_interval_seconds`` ago (by any pod), the refetch is
         skipped and the caller's validation proceeds against the stored keys and fails closed.
         The row is overwritten, never deleted first, so there is no window with no row.
+        One provider failing to refetch does not stop the others; if all fail the first error is raised.
         """
-        await asyncio.gather(*[self._refresh_one_async(auth_config=c) for c in auth_configs if c.well_known_uri])
+        targets = [c for c in auth_configs if c.well_known_uri]
+        self._tolerate_partial_failure(
+            outcomes=await asyncio.gather(
+                *[self._refresh_one_async(auth_config=c) for c in targets], return_exceptions=True
+            ),
+            uris=[cast(str, c.well_known_uri) for c in targets],
+        )
 
     async def _refresh_one_async(self, *, auth_config: AuthConfig) -> None:
         well_known_uri = cast(str, auth_config.well_known_uri)
         self._known_uris.add(well_known_uri)
-        async with await self._uri_lock(well_known_uri=well_known_uri):
+
+        async def _rate_limited_refetch_async() -> None:
             stored = await self._read_stored_async(well_known_uri=well_known_uri)
             if stored is not None and stored.fetched_at is not None:
                 age = self._clock() - stored.fetched_at
@@ -269,6 +329,10 @@ class WellKnownConfigurationCache:
                     logger.info(f"Skipping kid-miss refetch for {well_known_uri}: row is {age:.0f}s old (rate limited)")
                     return
             await self._fetch_and_store_async(auth_config=auth_config, well_known_uri=well_known_uri)
+
+        await self._single_flight_async(
+            operation="refresh", well_known_uri=well_known_uri, work=_rate_limited_refetch_async
+        )
 
     async def _fetch_and_store_async(
         self, *, auth_config: AuthConfig, well_known_uri: str

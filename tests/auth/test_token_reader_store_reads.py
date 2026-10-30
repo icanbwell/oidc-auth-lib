@@ -256,3 +256,27 @@ async def test_store_failure_during_validation_fails_closed(test_container: ICon
 
     with pytest.raises(RuntimeError, match="mongo unavailable"):
         await reader.verify_token_async(token=providers.token(signer=3, iss=3, aud=3))
+
+
+async def test_decode_and_validity_checks_accept_a_token_whose_iss_differs_from_the_configured_issuer(
+    test_container: IContainer, providers: Providers
+) -> None:
+    """Only verify_token_async pins the issuer, so the other two paths must not narrow by it."""
+    store, clock = FakeStore(), FakeClock()
+    reader = await _warmed_reader(test_container=test_container, store=store, clock=clock)
+    token = providers.token(signer=2, iss=99, aud=2)
+
+    claims = await reader.decode_token_async(token=token, verify_signature=True)
+
+    assert claims is not None and claims["iss"] == _issuer(99)
+    assert await reader.is_token_valid_async(access_token=token) is True
+
+
+async def test_is_token_valid_returns_false_instead_of_raising_when_the_store_fails(
+    test_container: IContainer, providers: Providers
+) -> None:
+    store, clock = FakeStore(), FakeClock()
+    reader = await _warmed_reader(test_container=test_container, store=store, clock=clock)
+    store.fail_get = ConnectionError("store down")
+
+    assert await reader.is_token_valid_async(access_token=providers.token(signer=1, iss=1, aud=1)) is False
