@@ -161,7 +161,7 @@ class WellKnownConfigurationCache:
         Configs whose row is missing, expired or unusable fall back to the single-config
         read-through path (which fetches the issuer). A failing provider does not take down
         the others: its error is logged and its keys are simply absent, so its own tokens
-        still fail closed. If every fallback read fails the first error is raised.
+        still fail closed. If no provider has a usable row and every fallback read fails, the first error is raised.
         """
         if not auth_configs:
             return []
@@ -177,19 +177,23 @@ class WellKnownConfigurationCache:
                     return_exceptions=True,
                 ),
                 uris=[cast(str, c.well_known_uri) for c in missing],
+                has_usable_rows=any(usable is not None for usable in usable_rows),
             )
         )
         return [usable if usable is not None else next(fetched) for usable in usable_rows]
 
     @staticmethod
-    def _tolerate_partial_failure(*, outcomes: list[_T | BaseException], uris: list[str]) -> list[_T | None]:
+    def _tolerate_partial_failure(
+        *, outcomes: list[_T | BaseException], uris: list[str], has_usable_rows: bool
+    ) -> list[_T | None]:
         """Turn per-provider failures into None unless every provider failed.
 
-        Isolates providers from each other's outages. When all of them failed there is nothing
-        healthy to protect, so the first error is raised (fail closed, caller sees the cause).
+        Isolates providers from each other's outages. Providers whose stored row was already
+        usable count as healthy: the error is raised only when no provider has a usable row and
+        every fetch failed, so there is nothing healthy to protect (fail closed, caller sees the cause).
         """
         failures = [o for o in outcomes if isinstance(o, BaseException)]
-        if outcomes and len(failures) == len(outcomes):
+        if outcomes and len(failures) == len(outcomes) and not has_usable_rows:
             raise failures[0]
         results: list[_T | None] = []
         for uri, outcome in zip(uris, outcomes):
@@ -315,6 +319,7 @@ class WellKnownConfigurationCache:
                 *[self._refresh_one_async(auth_config=c) for c in targets], return_exceptions=True
             ),
             uris=[cast(str, c.well_known_uri) for c in targets],
+            has_usable_rows=False,
         )
 
     async def _refresh_one_async(self, *, auth_config: AuthConfig) -> None:

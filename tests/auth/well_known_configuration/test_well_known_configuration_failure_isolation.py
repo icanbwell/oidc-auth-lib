@@ -76,6 +76,20 @@ async def test_all_providers_failing_raises_instead_of_returning_empty_keys(
         await cache.get_jwks_async(auth_configs=[_broken_config()])
 
 
+async def test_one_failing_provider_with_other_rows_usable_does_not_raise(
+    env: OidcEnvironmentVariables, issuer: HealthyAndBrokenIssuers
+) -> None:
+    store = FakeStore()
+    await _cache(env=env, store=store).read_async(auth_config=_auth_config())
+    cache = _cache(env=env, store=store)
+
+    jwks = await cache.get_jwks_async(auth_configs=[_auth_config(), _broken_config()])
+
+    assert [key.get("kid") for key in jwks.keys] == ["kid-1"]
+    assert issuer.broken.call_count == 1
+    assert issuer.discovery.call_count == 1
+
+
 async def test_refresh_continues_for_healthy_providers_when_one_fails(
     env: OidcEnvironmentVariables, issuer: HealthyAndBrokenIssuers
 ) -> None:
