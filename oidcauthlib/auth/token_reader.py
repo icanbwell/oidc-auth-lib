@@ -122,7 +122,8 @@ class TokenReader:
         """
         try:
             payload = json.loads(jws.extract_compact(token.encode()).payload)
-        except Exception:
+        except Exception as e:
+            logger.debug(f"Could not read iss from token payload ({type(e).__name__}); loading all providers")
             return None
         issuer = payload.get("iss") if isinstance(payload, dict) else None
         return issuer if isinstance(issuer, str) else None

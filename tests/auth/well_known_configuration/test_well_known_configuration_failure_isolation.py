@@ -15,8 +15,9 @@ from oidcauthlib.utilities.environment.oidc_environment_variables import (
 from simple_container.container.interfaces import IContainer
 from tests.auth.well_known_configuration.test_well_known_configuration_store_only import (
     _PATCH_VALIDATE,
+    ISSUER,
+    JWKS_URI,
     MIN_INTERVAL_SECONDS,
-    WELL_KNOWN_URI,
     FakeClock,
     FakeStore,
     IssuerStub,
@@ -126,16 +127,21 @@ async def test_a_caller_arriving_after_a_failure_retries_the_issuer(
 async def test_cancelling_one_waiter_does_not_fail_the_others(
     env: OidcEnvironmentVariables, issuer: HealthyAndBrokenIssuers
 ) -> None:
-    cache = _cache(env=env, store=FakeStore(latency_seconds=0.01))
+    async def slow_discovery(request: httpx.Request) -> httpx.Response:
+        await asyncio.sleep(0.05)
+        return httpx.Response(200, json={"issuer": ISSUER, "jwks_uri": JWKS_URI})
+
+    issuer.discovery.side_effect = slow_discovery
+    cache = _cache(env=env, store=FakeStore())
     waiters = [asyncio.ensure_future(cache.read_async(auth_config=_auth_config())) for _ in range(3)]
-    await asyncio.sleep(0)
+    await asyncio.sleep(0.01)  # the shared fetch is now in flight
     waiters[0].cancel()
 
     results = await asyncio.gather(*waiters, return_exceptions=True)
 
     assert isinstance(results[0], asyncio.CancelledError)
     assert all(r is not None and not isinstance(r, BaseException) for r in results[1:])
-    assert WELL_KNOWN_URI in cache._known_uris
+    assert issuer.discovery.call_count == 1
 
 
 @pytest.mark.parametrize(

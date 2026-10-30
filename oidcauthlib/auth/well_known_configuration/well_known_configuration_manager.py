@@ -85,10 +85,6 @@ class WellKnownConfigurationManager:
         """Like refresh_async but refetches only the providers that could match ``issuer``."""
         await self._cache.refresh_async(auth_configs=self._configs_for_issuer(issuer=issuer))
 
-    def has_provider_for_issuer(self, *, issuer: str | None) -> bool:
-        """True if any provider with a well-known URI could match ``issuer`` (no I/O)."""
-        return bool(self._configs_for_issuer(issuer=issuer))
-
     async def get_jwks_async(self) -> KeySet:
         """Return a freshly assembled JWKS KeySet for configured providers.
 

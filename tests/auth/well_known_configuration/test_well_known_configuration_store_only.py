@@ -520,23 +520,14 @@ async def test_manager_refresh_does_not_delete_and_is_rate_limited(
     assert "kid-new" in [k.kid for k in await manager.get_jwks_async()]
 
 
-@pytest.mark.parametrize("store_latency_ms", [2, 15])
-async def test_added_cost_per_validation_is_one_concurrent_store_round_trip(
-    env: OidcEnvironmentVariables, issuer: IssuerStub, store_latency_ms: int, capsys: pytest.CaptureFixture[str]
-) -> None:
-    """Benchmark-style: per-validation overhead of get_jwks_async with an injected store latency."""
+async def test_each_validation_costs_one_store_round_trip(env: OidcEnvironmentVariables, issuer: IssuerStub) -> None:
     store = FakeStore()
     cache = _cache(env=env, store=store)
     await cache.read_async(auth_config=_auth_config())  # warm the store
-    store.latency_seconds = store_latency_ms / 1000
+    before = store.read_round_trips
     iterations = 30
 
-    started = time.perf_counter()
     for _ in range(iterations):
         await cache.get_jwks_async(auth_configs=[_auth_config()])
-    per_call_ms = (time.perf_counter() - started) / iterations * 1000
 
-    with capsys.disabled():
-        print(f"\n[bench] store latency {store_latency_ms} ms -> get_jwks_async {per_call_ms:.2f} ms per validation")
-    # one store round trip + KeySet assembly; generous upper bound to avoid CI flakiness
-    assert store_latency_ms <= per_call_ms < store_latency_ms + 25
+    assert store.read_round_trips - before == iterations

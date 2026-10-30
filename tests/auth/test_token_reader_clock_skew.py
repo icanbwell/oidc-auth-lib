@@ -56,9 +56,6 @@ class _StaticJwksManager(WellKnownConfigurationManager):
         return None
 
     @override
-    def has_provider_for_issuer(self, *, issuer: str | None) -> bool:
-        return True
-
     @override
     async def get_well_known_urls(self) -> List[str]:
         return [c.well_known_uri for c in self._auth_configs if c.well_known_uri]
