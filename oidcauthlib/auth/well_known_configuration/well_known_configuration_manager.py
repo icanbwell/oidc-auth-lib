@@ -25,23 +25,18 @@ class WellKnownConfigurationManager:
     - Provide a safe, deadlock-free orchestration layer over WellKnownConfigurationCache under high concurrency.
 
     Responsibilities:
-    - Read well-known configurations for all configured providers once per lifecycle.
-    - Aggregate JWKS via the cache and expose it for token verification.
-    - Serialize refresh operations and guard initialization with an event to avoid deadlocks.
+    - Read well-known configurations for all configured providers from the shared store.
+    - Assemble the JWKS per call via the cache and expose it for token verification.
+    - Trigger a rate-limited refetch when a token's kid is unknown.
 
-    Concurrency Strategy:
-    - WellKnownConfigurationCache handles per-URI network fetch locking.
-    - Manager uses:
-      * _lock: guards state mutations (_loaded, _initializing) and event coordination.
-      * _init_event: notifies waiters when initialization completes (success or failure).
-      * _refresh_lock: serializes refresh operations to avoid racing with initialization.
-    - No network I/O is performed while holding _lock to prevent lock inversion with cache locks.
+    This class holds no discovery or JWKS data and has no "loaded" flag; it is a thin,
+    stateless coordinator over WellKnownConfigurationCache.
 
     Public API:
-    - get_jwks_async(): Ensure initialized, then return de-duplicated JWKS KeySet.
-    - ensure_initialized_async(): Fetch well-known configs and JWKS once; deadlock-free.
-    - refresh_async(): Clear and re-initialize caches/JWKS, serialized across callers.
-    - get_async(auth_config): Retrieve a cached config for a specific provider.
+    - get_jwks_async(): Return a freshly assembled JWKS KeySet.
+    - ensure_initialized_async(): Read (and fetch if missing) every provider's config.
+    - refresh_async(): Rate-limited refetch for an unknown kid.
+    - get_async(auth_config): Read-through for a specific provider.
 
     Notes:
     - OpenTelemetry spans use enums from oidcauthlib.open_telemetry.span_names.
@@ -60,57 +55,73 @@ class WellKnownConfigurationManager:
             raise TypeError(
                 f"cache must be an instance of WellKnownConfigurationCache, got {type(self._cache).__name__}"
             )
-        self._loaded: bool = False
+
+    def _configs_with_well_known_uri(self) -> List[AuthConfig]:
+        return [c for c in self._auth_configs if c.well_known_uri]
+
+    def _configs_for_issuer(self, *, issuer: str | None) -> List[AuthConfig]:
+        """Providers that could have issued a token claiming ``issuer``.
+
+        This only chooses which provider rows to READ; it is never the validation decision.
+        Providers with a configured issuer are included only on an exact match (the same rule
+        TokenReader applies afterwards); providers without a configured issuer are always
+        included; an unreadable issuer (None) selects every provider.
+        """
+        configs = self._configs_with_well_known_uri()
+        if issuer is None:
+            return configs
+        return [c for c in configs if c.issuer is None or c.issuer == issuer]
+
+    async def get_jwks_for_issuer_async(self, *, issuer: str | None) -> KeySet:
+        """Like get_jwks_async but reads only the providers that could match ``issuer``.
+
+        ``issuer`` comes from the token's UNVERIFIED claims and only narrows the keys offered
+        to signature verification (a subset of get_jwks_async's keys), so it can make
+        validation stricter but never more permissive.
+        """
+        return await self._cache.get_jwks_async(auth_configs=self._configs_for_issuer(issuer=issuer))
+
+    async def refresh_for_issuer_async(self, *, issuer: str | None) -> None:
+        """Like refresh_async but refetches only the providers that could match ``issuer``."""
+        await self._cache.refresh_async(auth_configs=self._configs_for_issuer(issuer=issuer))
+
+    def has_provider_for_issuer(self, *, issuer: str | None) -> bool:
+        """True if any provider with a well-known URI could match ``issuer`` (no I/O)."""
+        return bool(self._configs_for_issuer(issuer=issuer))
 
     async def get_jwks_async(self) -> KeySet:
-        """Return the aggregated JWKS KeySet for configured providers.
+        """Return a freshly assembled JWKS KeySet for configured providers.
 
-        Behavior:
-            - Ensures initialization has completed (well-known configs loaded).
-            - Returns the cache's combined JWKS KeySet.
-        Returns:
-            KeySet: Combined, de-duplicated JWKS suitable for token verification.
+        Every call reads the backing store (and fetches from the issuer on a miss or
+        expired row). Nothing is held in this process between calls.
         """
-        await self.ensure_initialized_async()
-        return self._cache.jwks
+        return await self._cache.get_jwks_async(auth_configs=self._configs_with_well_known_uri())
 
     async def ensure_initialized_async(self) -> None:
-        """Initialize well-known configs and JWKS exactly once (deadlock-free)."""
-        if self._loaded:
-            return None
+        """Read (fetching if missing or expired) every provider's configuration.
 
-        logger.debug("Manager fetching well-known configurations and JWKS.")
-        configs_to_load = [c for c in self._auth_configs if c.well_known_uri]
-        await self._cache.read_list_async(auth_configs=configs_to_load)
-        self._loaded = True
+        Not a once-per-process flag: it consults the shared store each time.
+        """
+        logger.debug("Manager reading well-known configurations and JWKS from the store.")
+        await self._cache.read_list_async(auth_configs=self._configs_with_well_known_uri())
         return None
 
     async def refresh_async(self) -> None:
-        """Force a refresh of well-known configs and JWKS.
+        """Refetch the issuers because a token presented an unknown kid.
 
-        Behavior:
-            - Serializes refresh operations to prevent races.
-            - Waits for any in-progress initialization to complete before clearing.
-            - Clears caches, resets state, and re-initializes.
+        Rate limited (shared across pods) by the cache; when limited this is a no-op and
+        the caller's validation fails closed against the stored keys.
         """
-        # Reset manager state before clearing the underlying cache to keep flags consistent.
-        self._loaded = False
-        # Now clear and reset - no concurrent initialization can be running
-        await self._cache.clear_async()
-
-        await self.ensure_initialized_async()
+        await self._cache.refresh_async(auth_configs=self._configs_with_well_known_uri())
 
     async def get_async(self, auth_config: AuthConfig) -> WellKnownConfigurationCacheResult | None:
-        """Retrieve a cached well-known configuration for a specific provider.
+        """Retrieve the well-known configuration for a specific provider (read-through).
 
         Args:
             auth_config: Provider configuration specifying well_known_uri.
         Returns:
-            WellKnownConfigurationCacheResult if present, otherwise None.
-        Notes:
-            Ensures manager is initialized before reading from cache.
+            WellKnownConfigurationCacheResult, or None if the provider has no well_known_uri.
         """
-        await self.ensure_initialized_async()
         return await self._cache.get_async(auth_config=auth_config)
 
     async def get_well_known_urls(self) -> List[str]:

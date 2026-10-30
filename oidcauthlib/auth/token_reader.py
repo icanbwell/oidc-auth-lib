@@ -114,6 +114,20 @@ class TokenReader:
         self.environment_variables: OidcEnvironmentVariables = environment_variables or OidcEnvironmentVariables()
 
     @staticmethod
+    def _peek_issuer(*, token: str) -> str | None:
+        """Read ``iss`` from the UNVERIFIED payload, only to choose which provider keys to load.
+
+        Never used for the validation decision: the signature is verified and iss/aud are
+        checked against provider config afterwards, exactly as before.
+        """
+        try:
+            payload = json.loads(jws.extract_compact(token.encode()).payload)
+        except Exception:
+            return None
+        issuer = payload.get("iss") if isinstance(payload, dict) else None
+        return issuer if isinstance(issuer, str) else None
+
+    @staticmethod
     def extract_token(*, authorization_header: str | None) -> Optional[str]:
         """
         Extract a JWT token from an HTTP Authorization header.
@@ -157,16 +171,17 @@ class TokenReader:
             logger.warning(f"Token does not appear to be a JWT, skipping decode: {token}")
             return None
         if verify_signature:
-            jwks: KeySet = await self._well_known_config_manager.get_jwks_async()
-            if not jwks:
+            peeked_issuer = self._peek_issuer(token=token)
+            jwks: KeySet = await self._well_known_config_manager.get_jwks_for_issuer_async(issuer=peeked_issuer)
+            if not jwks and self._well_known_config_manager.has_provider_for_issuer(issuer=peeked_issuer):
                 raise RuntimeError("JWKS must be fetched before verifying tokens")
             try:
                 try:
                     decoded = jwt.decode(token, jwks, algorithms=self.algorithms)
                 except InvalidKeyIdError:
                     logger.info("Unknown kid in token during decode; refreshing JWKS and retrying.")
-                    await self._well_known_config_manager.refresh_async()
-                    jwks = await self._well_known_config_manager.get_jwks_async()
+                    await self._well_known_config_manager.refresh_for_issuer_async(issuer=peeked_issuer)
+                    jwks = await self._well_known_config_manager.get_jwks_for_issuer_async(issuer=peeked_issuer)
                     decoded = jwt.decode(token, jwks, algorithms=self.algorithms)
                 return decoded.claims
             except Exception as e:
@@ -210,7 +225,8 @@ class TokenReader:
         # surfaces as a config error, not a per-request "invalid token" failure.
         leeway = self.environment_variables.jwt_clock_skew_leeway_seconds
 
-        jwks: KeySet = await self._well_known_config_manager.get_jwks_async()
+        peeked_issuer = self._peek_issuer(token=token)
+        jwks: KeySet = await self._well_known_config_manager.get_jwks_for_issuer_async(issuer=peeked_issuer)
 
         # get kids from jwks for logging
         jwks_kids = [key.get("kid") for key in jwks.keys]
@@ -227,8 +243,8 @@ class TokenReader:
                 verified = jwt.decode(token, jwks, algorithms=self.algorithms)
             except InvalidKeyIdError:
                 logger.info("Unknown kid in token; refreshing JWKS from identity providers and retrying.")
-                await self._well_known_config_manager.refresh_async()
-                jwks = await self._well_known_config_manager.get_jwks_async()
+                await self._well_known_config_manager.refresh_for_issuer_async(issuer=peeked_issuer)
+                jwks = await self._well_known_config_manager.get_jwks_for_issuer_async(issuer=peeked_issuer)
                 jwks_kids = [key.get("kid") for key in jwks.keys]
                 verified = jwt.decode(token, jwks, algorithms=self.algorithms)
             issuer = verified.claims.get("iss")
@@ -362,14 +378,15 @@ class TokenReader:
             Call is_token_valid_async with an access token to get a boolean validity result.
         """
         assert access_token, "Access token must not be empty"
-        jwks: KeySet = await self._well_known_config_manager.get_jwks_async()
+        peeked_issuer = self._peek_issuer(token=access_token)
+        jwks: KeySet = await self._well_known_config_manager.get_jwks_for_issuer_async(issuer=peeked_issuer)
         try:
             try:
                 verified = jwt.decode(access_token, jwks, algorithms=self.algorithms)
             except InvalidKeyIdError:
                 logger.info("Unknown kid in token during validity check; refreshing JWKS and retrying.")
-                await self._well_known_config_manager.refresh_async()
-                jwks = await self._well_known_config_manager.get_jwks_async()
+                await self._well_known_config_manager.refresh_for_issuer_async(issuer=peeked_issuer)
+                jwks = await self._well_known_config_manager.get_jwks_for_issuer_async(issuer=peeked_issuer)
                 verified = jwt.decode(access_token, jwks, algorithms=self.algorithms)
             exp = verified.claims.get("exp")
             now = time.time()
