@@ -15,5 +15,10 @@ class WellKnownConfigurationCacheResult(BaseModel):
     well_known_config: dict[str, object] | None = Field(description="The OIDC well-known configuration document")
     client_key_set: ClientKeySet | None = Field(description="The client key set containing JWKS and related info")
 
+    fetched_at: float | None = Field(
+        default=None,
+        description="Epoch seconds when the issuer was fetched; lets readers enforce TTL and rate-limit refetches",
+    )
+
     def is_schema_current(self) -> bool:
         return self.schema_version == self.SCHEMA_VERSION
