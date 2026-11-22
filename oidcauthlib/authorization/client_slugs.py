@@ -13,6 +13,8 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from types import MappingProxyType
 
+from oidcauthlib.authorization.scopes import normalize_scope
+
 logger = logging.getLogger(__name__)
 
 ACCESS_SCOPE_PREFIX = "access/"
@@ -23,7 +25,7 @@ WILDCARD_SLUG = "*"
 
 def normalize_slug(*, slug: str) -> str:
     """Strip and casefold a slug or a client name so they compare equal."""
-    return slug.strip().casefold()
+    return normalize_scope(scope=slug)
 
 
 def slug_from_access_scope(*, scope: str) -> str | None:
@@ -32,8 +34,11 @@ def slug_from_access_scope(*, scope: str) -> str | None:
     ``access/tenant.*`` gives ``tenant`` and ``access/*.*`` gives ``*``. The suffix
     must be exactly ``.*``: ``access/demo.read``, ``access/*.read``, ``access/demo``
     and an empty slug (``access/.*``) all give ``None``.
+
+    Args:
+        scope: any scope string.
     """
-    normalized = scope.strip().casefold()
+    normalized = normalize_scope(scope=scope)
     if not normalized.startswith(ACCESS_SCOPE_PREFIX):
         return None
     if not normalized.endswith(ACCESS_SCOPE_SUFFIX):
@@ -45,10 +50,16 @@ def slug_from_access_scope(*, scope: str) -> str | None:
 
 @dataclass(frozen=True)
 class ClientSlugResolver:
-    """Slug to its one client key, and every eligible client key."""
+    """Slug to its one client key, and every eligible client key.
 
-    keys_by_slug: Mapping[str, str] = field(default_factory=lambda: MappingProxyType({}))
-    all_keys: frozenset[str] = frozenset()
+    ``all_keys`` is what ``access/*.*`` selects when a caller opts in. It holds every
+    eligible client's key, including the keys of clients whose slug is ambiguous (which
+    ``keys_for`` refuses one by one). Client keys identify tenants, so both fields stay
+    out of ``repr``.
+    """
+
+    keys_by_slug: Mapping[str, str] = field(default_factory=lambda: MappingProxyType({}), repr=False)
+    all_keys: frozenset[str] = field(default=frozenset(), repr=False)
 
     @classmethod
     def from_client_keys(
@@ -60,7 +71,8 @@ class ClientSlugResolver:
         """Build the resolver from a ``name -> key`` map.
 
         Args:
-            clients: the client-key mapping. Entries with a blank name or key are
+            clients: the client-key mapping. Entries with a blank name or key, or a
+                key that is not a string (for example a JSON ``null`` or number), are
                 skipped.
             is_eligible: optional strategy ``(name, key) -> bool``. A client it
                 rejects is in neither ``keys_by_slug`` nor ``all_keys``, and does
@@ -68,8 +80,10 @@ class ClientSlugResolver:
         """
         keys_by_slug_candidates: dict[str, list[str]] = {}
         for name, key in clients.items():
+            if not isinstance(key, str):
+                continue
             slug = normalize_slug(slug=str(name))
-            clean_key = str(key).strip()
+            clean_key = key.strip()
             if not slug or not clean_key:
                 continue
             if is_eligible is not None and not is_eligible(str(name), clean_key):

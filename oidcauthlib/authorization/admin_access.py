@@ -17,7 +17,7 @@ grants the reader tier.
 """
 
 from collections.abc import Iterable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import StrEnum
 
 from oidcauthlib.authorization.client_slugs import (
@@ -25,10 +25,12 @@ from oidcauthlib.authorization.client_slugs import (
     ClientSlugResolver,
     slug_from_access_scope,
 )
-from oidcauthlib.authorization.scopes import has_admin_scopes, has_patient_scope
+from oidcauthlib.authorization.scopes import has_admin_scopes, has_blank_scope, has_patient_scope
 
 
 class AdminTier(StrEnum):
+    """The tier a granted caller holds; a denied caller has no tier."""
+
     ADMIN = "admin"
     READER = "reader"
 
@@ -58,10 +60,14 @@ class AdminAccess:
     """
 
     tier: AdminTier | None
-    allowed_client_keys: frozenset[str] | None
+    # repr=False: client keys identify tenants and stay out of logs and tracebacks.
+    allowed_client_keys: frozenset[str] | None = field(repr=False)
     denial_reason: DenialReason | None
 
     def __post_init__(self) -> None:
+        if self.allowed_client_keys is not None and not isinstance(self.allowed_client_keys, frozenset):
+            # A mutable set would let a caller widen the decision after it was made.
+            object.__setattr__(self, "allowed_client_keys", frozenset(self.allowed_client_keys))
         if self.tier is AdminTier.READER and not self.allowed_client_keys:
             raise ValueError("a reader needs a non-empty set of client keys it may read")
         if self.tier is AdminTier.ADMIN and self.allowed_client_keys is not None:
@@ -74,10 +80,12 @@ class AdminAccess:
 
     @classmethod
     def admin(cls) -> "AdminAccess":
+        """An unrestricted administrator."""
         return cls(tier=AdminTier.ADMIN, allowed_client_keys=None, denial_reason=None)
 
     @classmethod
     def reader(cls, *, allowed_client_keys: frozenset[str]) -> "AdminAccess":
+        """A tenant reader limited to ``allowed_client_keys`` (which must not be empty)."""
         return cls(
             tier=AdminTier.READER,
             allowed_client_keys=allowed_client_keys,
@@ -86,6 +94,7 @@ class AdminAccess:
 
     @classmethod
     def denied(cls, *, reason: DenialReason) -> "AdminAccess":
+        """A denied caller: no tier, an empty key set and the ``reason``."""
         return cls(tier=None, allowed_client_keys=frozenset(), denial_reason=reason)
 
 
@@ -99,17 +108,26 @@ def resolve_admin_access(
 ) -> AdminAccess:
     """The tier ``scopes`` (the merged token and userinfo scopes) grant.
 
-    ``admin_scopes`` and ``reader_scopes`` are all-of requirements; an empty one
-    admits nobody. ``allow_all_tenants`` lets ``access/*.*`` select every client
-    in ``clients``. Never raises.
+    ``admin_scopes`` and ``reader_scopes`` are all-of requirements; an empty one,
+    or one with a blank entry, admits nobody. Entries of ``scopes`` that are not
+    strings are ignored. ``allow_all_tenants`` lets ``access/*.*`` select every
+    client in ``clients``, including a client whose own slug is ambiguous. Never
+    raises.
+
+    Args:
+        scopes: the merged token and userinfo scopes of the caller.
+        admin_scopes: every one of these must be held for the administrator tier.
+        reader_scopes: every one of these must be held for the reader tier.
+        clients: resolves ``access/<slug>.*`` scopes to client keys.
+        allow_all_tenants: whether ``access/*.*`` selects every client.
     """
-    held = set(scopes)
+    held = {scope for scope in scopes if isinstance(scope, str)}
     if has_patient_scope(scopes=held):
         return AdminAccess.denied(reason=DenialReason.PATIENT_SCOPE)
     if has_admin_scopes(scopes=held, required_scopes=admin_scopes):
         return AdminAccess.admin()
     # An empty requirement would admit everyone (``issubset`` of the empty set).
-    if not reader_scopes or not set(reader_scopes).issubset(held):
+    if not reader_scopes or has_blank_scope(scopes=reader_scopes) or not set(reader_scopes).issubset(held):
         return AdminAccess.denied(reason=DenialReason.NOT_A_READER)
     slugs = {slug for scope in held if (slug := slug_from_access_scope(scope=scope)) is not None}
     if not slugs:

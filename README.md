@@ -47,7 +47,10 @@ scopes = await manager.get_scopes_from_user_info_async(access_token=token)
 Pure helpers that turn a caller's merged scopes (for example the result of `OidcUserInfoManager`) into a
 tier: `admin` (unrestricted), `reader` (limited to the client keys its `access/<slug>.*` scopes select), or
 denied. The subpackage reads no environment variable, does no I/O and imports nothing else from
-`oidcauthlib`; the caller verifies the token, looks up the user and passes the configuration in.
+`oidcauthlib`; the caller verifies the token, looks up the user and passes the configuration in. The
+`access/<slug>.*` and `patient/` scope convention is the FHIR server's, described in its
+[security guide](https://github.com/icanbwell/fhir-server/blob/main/readme/security.md) (section 5); the tier
+model is recorded in [ADR 0001](adrs/0001-authorization-tiers-from-scopes.md).
 
 ```python
 from oidcauthlib.authorization import (
@@ -82,7 +85,11 @@ access = resolve_admin_access(
   `reader`; anything else is denied with a `DenialReason`. An empty admin or reader requirement admits nobody.
 - **Slugs:** `access/<slug>.*` selects the client whose name, stripped and casefolded, equals the slug. Two
   names that casefold alike make the slug ambiguous and it selects nothing. The suffix must be exactly `.*`.
-  `access/*.*` selects every client only when `allow_all_tenants=True`.
+  `access/*.*` selects every client only when `allow_all_tenants=True`, including a client whose own slug is
+  ambiguous. An ambiguous slug is logged by slug only, through the standard `logging` module (the package
+  configures no logger of its own).
+- **Blank scopes:** an admin or reader scope list that is empty, or has a blank entry, admits nobody, and
+  `validate_reader_configuration` refuses a blank or padded entry in either list.
 - **No default for "all tenants":** `allowed_client_keys` is `None` only for `admin`. A reader always has a
   non-empty set and a denied caller always has `frozenset()`, so a denial can never be read as unrestricted.
   `AdminAccess` enforces this when it is constructed.

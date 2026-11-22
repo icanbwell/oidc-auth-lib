@@ -13,7 +13,6 @@ Error messages name the rule that failed, never a client name or a key.
 """
 
 import json
-from typing import Any
 
 
 class ClientKeysFormatError(ValueError):
@@ -25,6 +24,9 @@ def parse_client_keys_lenient(*, raw: str) -> dict[str, str]:
 
     An empty value gives ``{}``. A JSON object parses as is; invalid JSON falls
     back to comma parsing. In the comma form, an entry without ``=`` is dropped.
+
+    Args:
+        raw: the setting's value, a JSON object or a comma-separated ``name=key`` list.
     """
     if not raw:
         return {}
@@ -44,6 +46,9 @@ def parse_client_keys_lenient(*, raw: str) -> dict[str, str]:
 
 def parse_client_keys_strict(*, raw: str) -> dict[str, str]:
     """Parse the mapping and refuse anything the lenient parser would repair.
+
+    Args:
+        raw: the setting's value, a JSON object or a comma-separated ``name=key`` list.
 
     Raises:
         ClientKeysFormatError: invalid JSON (no fall-back to comma parsing), a
@@ -71,12 +76,12 @@ def parse_client_keys_strict(*, raw: str) -> dict[str, str]:
 
 
 def _json_pairs(text: str) -> list[tuple[str, str]]:
+    # The caller passes text that starts with "{", so a successful parse is always an
+    # object, and ``object_pairs_hook`` gives its (name, value) pairs in order.
     try:
-        parsed: Any = json.loads(text, object_pairs_hook=lambda pairs: pairs)
+        parsed: list[tuple[str, object]] = json.loads(text, object_pairs_hook=lambda pairs: pairs)
     except json.JSONDecodeError as exc:
         raise ClientKeysFormatError("the value is not valid JSON") from exc
-    if not isinstance(parsed, list):
-        raise ClientKeysFormatError("the JSON value is not an object")
     pairs: list[tuple[str, str]] = []
     for position, (name, key) in enumerate(parsed, start=1):
         if not isinstance(key, str):

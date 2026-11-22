@@ -3,7 +3,9 @@ import pytest
 from oidcauthlib.authorization.scopes import (
     PATIENT_SCOPE_PREFIX,
     has_admin_scopes,
+    has_blank_scope,
     has_patient_scope,
+    normalize_scope,
 )
 
 
@@ -45,3 +47,33 @@ def test_has_patient_scope(scopes: list[str], expected: bool) -> None:
 )
 def test_has_admin_scopes(scopes: list[str], required: list[str], expected: bool) -> None:
     assert has_admin_scopes(scopes=scopes, required_scopes=required) is expected
+
+
+@pytest.mark.parametrize(
+    ("scopes", "expected"),
+    [
+        ([""], True),
+        (["   "], True),
+        (["a", ""], True),
+        (["a", "b"], False),
+        ([], False),
+    ],
+)
+def test_has_blank_scope(scopes: list[str], expected: bool) -> None:
+    assert has_blank_scope(scopes=scopes) is expected
+
+
+@pytest.mark.parametrize("required", [[""], [" "], ["example/admin", ""]])
+def test_a_blank_required_scope_admits_nobody_even_when_the_held_scopes_contain_a_blank(required: list[str]) -> None:
+    held = "example/admin  other".split(" ")
+
+    assert "" in held
+    assert has_admin_scopes(scopes=held, required_scopes=required) is False
+
+
+@pytest.mark.parametrize(
+    ("scope", "expected"),
+    [("  Example/Admin ", "example/admin"), ("STRASSE", "strasse"), ("Straße", "strasse"), ("", "")],
+)
+def test_normalize_scope(scope: str, expected: str) -> None:
+    assert normalize_scope(scope=scope) == expected

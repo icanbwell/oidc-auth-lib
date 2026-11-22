@@ -54,3 +54,45 @@ def test_authorization_package_never_reads_the_environment() -> None:
                     if alias.name in FORBIDDEN_ENVIRONMENT_NAMES:
                         offenders.append(f"{path.name}:{node.lineno} from os import {alias.name}")
     assert offenders == []
+
+
+FORBIDDEN_IO_MODULES = {
+    "os",
+    "io",
+    "pathlib",
+    "shutil",
+    "tempfile",
+    "socket",
+    "ssl",
+    "http",
+    "urllib",
+    "requests",
+    "subprocess",
+    "sqlite3",
+}
+
+
+def test_authorization_package_performs_no_io() -> None:
+    offenders: list[str] = []
+    for path in _source_files():
+        tree = ast.parse(path.read_text())
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                offenders.extend(
+                    f"{path.name}:{node.lineno} import {alias.name}"
+                    for alias in node.names
+                    if alias.name.split(".")[0] in FORBIDDEN_IO_MODULES
+                )
+            elif (
+                isinstance(node, ast.ImportFrom)
+                and node.level == 0
+                and (node.module or "").split(".")[0] in FORBIDDEN_IO_MODULES
+            ):
+                offenders.append(f"{path.name}:{node.lineno} from {node.module} import ...")
+            elif (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Name)
+                and node.func.id in {"open", "print", "input"}
+            ):
+                offenders.append(f"{path.name}:{node.lineno} {node.func.id}(...)")
+    assert offenders == []

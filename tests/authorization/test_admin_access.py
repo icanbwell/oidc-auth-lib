@@ -150,3 +150,56 @@ def test_admin_access_invariants(
 ) -> None:
     with pytest.raises(ValueError):
         AdminAccess(tier=tier, allowed_client_keys=keys, denial_reason=reason)
+
+
+@pytest.mark.parametrize(
+    ("admin_scopes", "reader_scopes", "held", "reason"),
+    [
+        ([""], READER, ["openid", "", "profile"], DenialReason.NOT_A_READER),
+        (ADMIN, [""], ["openid", "", "access/syntheticone.*"], DenialReason.NOT_A_READER),
+        (ADMIN, ["example/reader", " "], ["example/reader", " ", "access/syntheticone.*"], DenialReason.NOT_A_READER),
+    ],
+)
+def test_a_blank_required_scope_never_grants_a_tier(
+    admin_scopes: list[str], reader_scopes: list[str], held: list[str], reason: DenialReason
+) -> None:
+    access = resolve_admin_access(
+        scopes=held,
+        admin_scopes=admin_scopes,
+        reader_scopes=reader_scopes,
+        clients=CLIENTS,
+        allow_all_tenants=False,
+    )
+
+    assert access == AdminAccess.denied(reason=reason)
+
+
+def test_non_string_scopes_are_ignored_instead_of_raising() -> None:
+    access = _resolve(scopes=["example/reader", 5, None, "access/syntheticone.*"])  # type: ignore[list-item]
+
+    assert access == AdminAccess.reader(allowed_client_keys=frozenset({"synthetic-key-1"}))
+
+
+def test_a_mutable_key_set_is_frozen_and_cannot_widen_the_decision() -> None:
+    keys = {"synthetic-key-1"}
+    access = AdminAccess(tier=AdminTier.READER, allowed_client_keys=keys, denial_reason=None)  # type: ignore[arg-type]
+
+    keys.add("synthetic-key-2")
+
+    assert access.allowed_client_keys == frozenset({"synthetic-key-1"})
+    assert isinstance(access.allowed_client_keys, frozenset)
+
+
+def test_client_keys_do_not_appear_in_repr() -> None:
+    access = AdminAccess.reader(allowed_client_keys=frozenset({"synthetic-key-1"}))
+
+    assert "synthetic-key-1" not in repr(access)
+    assert "synthetic-key-1" not in str(access)
+
+
+def test_wildcard_selects_every_client_including_one_whose_slug_is_ambiguous() -> None:
+    access = _resolve(scopes=["example/reader", "access/*.*"], allow_all_tenants=True)
+
+    assert access.allowed_client_keys == CLIENTS.all_keys
+    assert {"synthetic-key-3", "synthetic-key-4"} <= (access.allowed_client_keys or frozenset())
+    assert CLIENTS.keys_for(slug="dup") == frozenset()

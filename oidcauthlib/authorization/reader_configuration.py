@@ -11,10 +11,12 @@ from oidcauthlib.authorization.client_keys import (
     parse_client_keys_strict,
 )
 from oidcauthlib.authorization.client_slugs import ACCESS_SCOPE_PREFIX, WILDCARD_SLUG
-from oidcauthlib.authorization.scopes import PATIENT_SCOPE_PREFIX
+from oidcauthlib.authorization.scopes import PATIENT_SCOPE_PREFIX, normalize_scope
 
 # Scopes every token carries; as a reader requirement they would admit everyone.
 GENERIC_SCOPES = frozenset({"openid", "profile", "email", "groups"})
+# A reader scope with this suffix would read like the all-tenants access scope.
+WILDCARD_SCOPE_SUFFIX = "*.*"
 
 
 class ReaderConfigurationError(ValueError):
@@ -27,10 +29,20 @@ def validate_reader_configuration(
     admin_scopes: Sequence[str],
     client_keys_raw: str,
 ) -> None:
-    """Refuse an unsafe reader-tier configuration. A no-op when no reader scopes are set.
+    """Refuse an unsafe reader-tier configuration.
+
+    A blank or padded entry in either scope list is always refused, because scopes
+    match exactly and a blank requirement is satisfiable by a blank held scope. The
+    remaining checks are skipped when no reader scopes are set.
+
+    Args:
+        reader_scopes: the scopes that together grant the reader tier.
+        admin_scopes: the scopes that together grant the administrator tier.
+        client_keys_raw: the raw client-key mapping setting.
 
     Raises:
-        ReaderConfigurationError: when reader scopes are set and the client-key
+        ReaderConfigurationError: when either scope list has a blank entry or an
+            entry with surrounding whitespace; when reader scopes are set and the client-key
             mapping fails the strict parser, is empty, or has a name containing
             ``*``; a reader scope overlaps an administrator scope, starts with
             ``access/`` or ``patient/``, is generic (``openid``, ``profile``,
@@ -38,6 +50,9 @@ def validate_reader_configuration(
             starts with ``access/`` (a reader holding ``access/*.*`` would then be
             an administrator).
     """
+    for scopes in (reader_scopes, admin_scopes):
+        if any(scope != scope.strip() or not scope for scope in scopes):
+            raise ReaderConfigurationError("a scope is blank or has surrounding whitespace")
     if not reader_scopes:
         return
     try:
@@ -50,9 +65,9 @@ def validate_reader_configuration(
         raise ReaderConfigurationError(
             f"a client name contains '{WILDCARD_SLUG}', which collides with the wildcard slug"
         )
-    admin_normalized = {scope.strip().casefold() for scope in admin_scopes}
+    admin_normalized = {normalize_scope(scope=scope) for scope in admin_scopes}
     for scope in reader_scopes:
-        normalized = scope.strip().casefold()
+        normalized = normalize_scope(scope=scope)
         if normalized in admin_normalized:
             raise ReaderConfigurationError("a reader scope overlaps an administrator scope")
         if normalized.startswith(ACCESS_SCOPE_PREFIX) or normalized.startswith(PATIENT_SCOPE_PREFIX):
@@ -61,9 +76,9 @@ def validate_reader_configuration(
             )
         if normalized in GENERIC_SCOPES:
             raise ReaderConfigurationError("a reader scope is a generic scope every token carries")
-        if normalized.endswith("*.*"):
-            raise ReaderConfigurationError("a reader scope ends in '*.*'")
-    if any(scope.strip().casefold().startswith(ACCESS_SCOPE_PREFIX) for scope in admin_scopes):
+        if normalized.endswith(WILDCARD_SCOPE_SUFFIX):
+            raise ReaderConfigurationError(f"a reader scope ends in '{WILDCARD_SCOPE_SUFFIX}'")
+    if any(normalize_scope(scope=scope).startswith(ACCESS_SCOPE_PREFIX) for scope in admin_scopes):
         raise ReaderConfigurationError(
             f"an administrator scope starts with '{ACCESS_SCOPE_PREFIX}': "
             "a reader holding the wildcard access scope would be an administrator"

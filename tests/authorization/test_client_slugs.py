@@ -95,3 +95,19 @@ def test_ambiguity_is_logged_by_slug_only(caplog: pytest.LogCaptureFixture) -> N
     assert "demo" in caplog.text
     assert "secret-key-a" not in caplog.text
     assert "secret-key-b" not in caplog.text
+
+
+@pytest.mark.parametrize("value", [None, 12345, True, ["k"], {"k": "v"}])
+def test_a_client_whose_key_is_not_a_string_is_skipped(value: object) -> None:
+    resolver = ClientSlugResolver.from_client_keys(
+        clients={"Bad": value, "Good": "synthetic-key-1"}  # type: ignore[dict-item]
+    )
+
+    assert resolver.keys_for(slug="bad") == frozenset()
+    assert resolver.all_keys == frozenset({"synthetic-key-1"})
+
+
+def test_client_keys_do_not_appear_in_repr() -> None:
+    resolver = ClientSlugResolver.from_client_keys(clients={"Demo": "synthetic-key-1"})
+
+    assert "synthetic-key-1" not in repr(resolver)
