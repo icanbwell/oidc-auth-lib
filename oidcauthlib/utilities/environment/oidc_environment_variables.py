@@ -217,6 +217,26 @@ class OidcEnvironmentVariables(AbstractEnvironmentVariables):
             raise ValueError("WELL_KNOWN_CACHE_TTL_SECONDS must be a positive integer representing seconds")
 
     @property
+    def well_known_kid_miss_refetch_min_interval_seconds(self) -> int:
+        """Minimum seconds between issuer refetches triggered by an unknown token kid.
+
+        Measured against the stored row's fetch time, so it is shared across pods.
+        Bounds how often tokens carrying unknown (possibly attacker-chosen) kids can
+        force an issuer refetch.
+
+        Set via WELL_KNOWN_KID_MISS_REFETCH_MIN_INTERVAL_SECONDS. Defaults to 60. 0 disables
+        the rate limit; negative values are rejected.
+        """
+        message = "WELL_KNOWN_KID_MISS_REFETCH_MIN_INTERVAL_SECONDS must be a non-negative integer representing seconds"
+        try:
+            interval = int(os.environ.get("WELL_KNOWN_KID_MISS_REFETCH_MIN_INTERVAL_SECONDS", "60"))
+        except ValueError:
+            raise ValueError(message)
+        if interval < 0:
+            raise ValueError(message)
+        return interval
+
+    @property
     def well_known_config_http_timeout_seconds(self) -> int:
         """HTTP timeout in seconds for fetching well-known configurations.
 
