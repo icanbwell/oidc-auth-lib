@@ -1,3 +1,5 @@
+import logging
+
 import pytest
 
 from oidcauthlib.authorization.client_keys import (
@@ -71,3 +73,32 @@ def test_strict_error_never_contains_a_key_or_name() -> None:
     assert "secret-key" not in message
     assert "other-key" not in message
     assert "SecretName" not in message
+
+
+def test_lenient_parser_logs_the_json_fallback_once_without_the_value(caplog: pytest.LogCaptureFixture) -> None:
+    with caplog.at_level(logging.WARNING):
+        parse_client_keys_lenient(raw='{"SecretName": "secret-key"')
+
+    messages = [record.getMessage() for record in caplog.records]
+    assert any("falling back to comma parsing" in message for message in messages)
+    assert all("SecretName" not in message and "secret-key" not in message for message in messages)
+
+
+def test_lenient_parser_logs_only_a_count_of_dropped_entries(caplog: pytest.LogCaptureFixture) -> None:
+    with caplog.at_level(logging.WARNING):
+        clients = parse_client_keys_lenient(raw="One=key-1,SecretOne,SecretTwo,,")
+
+    assert clients == {"One": "key-1"}
+    assert [record.getMessage() for record in caplog.records] == ["Dropped 2 client-key entries that have no '='"]
+
+
+@pytest.mark.parametrize("raw", ["One=key-1,Two=key-2", '{"One": "key-1"}', "", "One=key-1,"])
+def test_lenient_parser_logs_nothing_for_well_formed_or_empty_input(raw: str, caplog: pytest.LogCaptureFixture) -> None:
+    with caplog.at_level(logging.WARNING):
+        parse_client_keys_lenient(raw=raw)
+
+    assert caplog.records == []
+
+
+def test_strict_parser_allows_two_names_to_share_one_key_as_aliases() -> None:
+    assert parse_client_keys_strict(raw="One=key-1,Alias=key-1") == {"One": "key-1", "Alias": "key-1"}

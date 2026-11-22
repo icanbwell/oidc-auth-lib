@@ -31,7 +31,10 @@ def normalize_slug(*, slug: str) -> str:
 def slug_from_access_scope(*, scope: str) -> str | None:
     """The slug of an ``access/<slug>.*`` scope, normalized; ``None`` for any other scope.
 
-    ``access/tenant.*`` gives ``tenant`` and ``access/*.*`` gives ``*``. The suffix
+    The match is case-insensitive over the whole scope (prefix, slug and suffix), so
+    ``Access/Tenant.*`` gives ``tenant``; this differs on purpose from the exact match of
+    the administrator and reader requirements, and keeps the ``patient/`` deny and the
+    access scopes in step. ``access/tenant.*`` gives ``tenant`` and ``access/*.*`` gives ``*``. The suffix
     must be exactly ``.*``: ``access/demo.read``, ``access/*.read``, ``access/demo``
     and an empty slug (``access/.*``) all give ``None``.
 

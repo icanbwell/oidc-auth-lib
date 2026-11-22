@@ -107,3 +107,31 @@ def test_one_shot_iterators_are_validated_in_full() -> None:
             admin_scopes=(scope for scope in ["example/admin"]),  # type: ignore[arg-type]  # deliberately off-type input
             client_keys_raw=VALID_KEYS,
         )
+
+
+@pytest.mark.parametrize(
+    ("reader_scopes", "admin_scopes"),
+    [
+        ([], ["openid"]),
+        (["example/reader"], ["openid"]),
+        ([], ["Profile", "EMAIL"]),
+        (["example/reader"], ["offline_access", "groups"]),
+    ],
+)
+def test_an_administrator_requirement_made_only_of_generic_scopes_is_refused(
+    reader_scopes: list[str], admin_scopes: list[str]
+) -> None:
+    with pytest.raises(ReaderConfigurationError):
+        validate_reader_configuration(
+            reader_scopes=reader_scopes, admin_scopes=admin_scopes, client_keys_raw=VALID_KEYS
+        )
+
+
+@pytest.mark.parametrize(
+    ("reader_scopes", "admin_scopes"),
+    [([], ["openid", "example/admin"]), (["example/reader"], ["openid", "example/admin"]), ([], ["example/admin"])],
+)
+def test_an_administrator_requirement_with_a_specific_scope_is_accepted(
+    reader_scopes: list[str], admin_scopes: list[str]
+) -> None:
+    validate_reader_configuration(reader_scopes=reader_scopes, admin_scopes=admin_scopes, client_keys_raw=VALID_KEYS)

@@ -132,3 +132,21 @@ def test_no_warning_when_every_key_is_a_string(caplog: pytest.LogCaptureFixture)
         ClientSlugResolver.from_client_keys(clients={"Good": "synthetic-key-1"})
 
     assert caplog.records == []
+
+
+@pytest.mark.parametrize("scope", ["access/two.*", "Access/Two.*", "ACCESS/TWO.*", " access/two.* "])
+def test_an_access_scope_selects_its_client_whatever_its_case_or_padding(scope: str) -> None:
+    resolver = ClientSlugResolver.from_client_keys(clients={"Two": "synthetic-key-2"})
+
+    slug = slug_from_access_scope(scope=scope)
+
+    assert slug is not None
+    assert resolver.keys_for(slug=slug) == frozenset({"synthetic-key-2"})
+
+
+def test_two_aliases_for_one_key_each_select_that_key() -> None:
+    resolver = ClientSlugResolver.from_client_keys(clients={"One": "synthetic-key-1", "Alias": "synthetic-key-1"})
+
+    assert resolver.keys_for(slug="one") == frozenset({"synthetic-key-1"})
+    assert resolver.keys_for(slug="alias") == frozenset({"synthetic-key-1"})
+    assert resolver.all_keys == frozenset({"synthetic-key-1"})

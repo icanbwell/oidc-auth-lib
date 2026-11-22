@@ -32,7 +32,8 @@ def validate_reader_configuration(
     """Refuse an unsafe reader-tier configuration.
 
     A blank, non-printing or padded entry in either scope list is always refused, because
-    scopes match exactly and a blank requirement is satisfiable by a blank held scope. The
+    scopes match exactly and a blank requirement is satisfiable by a blank held scope. An
+    administrator requirement made only of generic scopes is always refused too. The
     remaining checks are skipped when no reader scopes are set.
 
     Args:
@@ -42,7 +43,8 @@ def validate_reader_configuration(
 
     Raises:
         ReaderConfigurationError: when either scope list has a blank or non-printing
-            entry or an entry with surrounding whitespace; when reader scopes are set and the client-key
+            entry or an entry with surrounding whitespace; when every administrator
+            scope is generic; when reader scopes are set and the client-key
             mapping fails the strict parser, is empty, or has a name containing
             ``*``; a reader scope overlaps an administrator scope, starts with
             ``access/`` or ``patient/``, is generic (``openid``, ``profile``,
@@ -58,6 +60,10 @@ def validate_reader_configuration(
             raise ReaderConfigurationError(
                 "a scope is blank, has characters that do not print, or has surrounding whitespace"
             )
+    if admins and all(normalize_scope(scope=scope) in GENERIC_SCOPES for scope in admins):
+        # Checked before the no-reader-scopes return: an administrator requirement made only of
+        # scopes every token carries (for example ["openid"]) makes every verified token an admin.
+        raise ReaderConfigurationError("an administrator requirement made only of generic scopes admits every token")
     if not readers:
         return
     try:

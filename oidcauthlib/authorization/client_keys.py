@@ -13,6 +13,9 @@ Error messages name the rule that failed, never a client name or a key.
 """
 
 import json
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class ClientKeysFormatError(ValueError):
@@ -24,6 +27,7 @@ def parse_client_keys_lenient(*, raw: str) -> dict[str, str]:
 
     An empty value gives ``{}``. A JSON object parses as is; invalid JSON falls
     back to comma parsing. In the comma form, an entry without ``=`` is dropped.
+    The fallback and the number of dropped entries are each logged once, never the entries.
 
     Args:
         raw: the setting's value, a JSON object or a comma-separated ``name=key`` list.
@@ -34,18 +38,26 @@ def parse_client_keys_lenient(*, raw: str) -> dict[str, str]:
         try:
             return dict(json.loads(raw))
         except (json.JSONDecodeError, TypeError):
-            pass
+            logger.warning("The client-key mapping is not a valid JSON object; falling back to comma parsing")
     clients: dict[str, str] = {}
+    dropped = 0
     for entry in raw.split(","):
         entry = entry.strip()
         if "=" in entry:
             name, value = entry.split("=", 1)
             clients[name.strip()] = value.strip()
+        elif entry:
+            dropped += 1
+    if dropped:
+        # Count only: an entry can hold a client name or key.
+        logger.warning("Dropped %d client-key entries that have no '='", dropped)
     return clients
 
 
 def parse_client_keys_strict(*, raw: str) -> dict[str, str]:
     """Parse the mapping and refuse anything the lenient parser would repair.
+
+    Two different names may share one key: each is an alias that selects that key.
 
     Args:
         raw: the setting's value, a JSON object or a comma-separated ``name=key`` list.

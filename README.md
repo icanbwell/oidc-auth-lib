@@ -84,7 +84,7 @@ access = resolve_admin_access(
   gives `admin`; then every reader scope plus at least one `access/<slug>.*` that selects a client gives
   `reader`; anything else is denied with a `DenialReason`. An empty admin or reader requirement admits nobody.
 - **Slugs:** `access/<slug>.*` selects the client whose name, stripped and casefolded, equals the slug. Two
-  names that casefold alike make the slug ambiguous and it selects nothing. The suffix must be exactly `.*`.
+  names that casefold alike make the slug ambiguous and it selects nothing. The suffix must be exactly `.*`. The `access/` prefix, the slug and the suffix match case-insensitively, while the administrator and reader scope requirements match exactly.
   `access/*.*` selects every client only when `allow_all_tenants=True`, including a client whose own slug is
   ambiguous. An ambiguous slug is logged by slug only, through the standard `logging` module (the package
   configures no logger of its own).
@@ -96,6 +96,6 @@ access = resolve_admin_access(
 - **Client-key mapping:** a `name -> key` map given as a JSON object or `One=key-1,Two=key-2`.
   `parse_client_keys_lenient` keeps the permissive behavior (a malformed JSON object falls back to comma
   parsing, an entry without `=` is dropped); `parse_client_keys_strict` refuses both, and refuses blank or
-  repeated names. Error messages name the rule, never a name or key.
+  repeated names (two names may share one key, an alias). The lenient parser logs the JSON fallback and the number of dropped entries once each. Error messages name the rule, never a name or key.
 - **Eligibility:** `from_client_keys(..., is_eligible=...)` takes a `(name, key) -> bool` strategy for
   callers that exclude some clients; an excluded client is in no view and takes no part in ambiguity.
