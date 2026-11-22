@@ -15,6 +15,8 @@ Error messages name the rule that failed, never a client name or a key.
 import json
 import logging
 
+from oidcauthlib.authorization.client_slugs import normalize_slug
+
 logger = logging.getLogger(__name__)
 
 
@@ -66,7 +68,8 @@ def parse_client_keys_strict(*, raw: str) -> dict[str, str]:
         ClientKeysFormatError: invalid JSON (no fall-back to comma parsing), a
             JSON value that is not an object of strings, duplicate JSON keys, a
             comma entry without ``=``, a blank name or key, or a name repeated
-            after stripping and casefolding (exact repeats included).
+            after stripping and lowercasing ASCII letters, the way the resolver
+            matches slugs (exact repeats included).
     """
     text = raw.strip()
     if not text:
@@ -79,9 +82,9 @@ def parse_client_keys_strict(*, raw: str) -> dict[str, str]:
         clean_key = key.strip()
         if not clean_name or not clean_key:
             raise ClientKeysFormatError(f"entry {position} has a blank name or key")
-        folded = clean_name.casefold()
+        folded = normalize_slug(slug=clean_name)
         if folded in seen:
-            raise ClientKeysFormatError(f"entry {position} repeats a name after stripping and ignoring case")
+            raise ClientKeysFormatError(f"entry {position} repeats a name after stripping and ignoring ASCII case")
         seen.add(folded)
         clients[clean_name] = clean_key
     return clients

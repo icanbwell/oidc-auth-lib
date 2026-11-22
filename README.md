@@ -83,8 +83,11 @@ access = resolve_admin_access(
 - **Order:** any `patient/` scope (trimmed, case-insensitive) denies first; then holding every admin scope
   gives `admin`; then every reader scope plus at least one `access/<slug>.*` that selects a client gives
   `reader`; anything else is denied with a `DenialReason`. An empty admin or reader requirement admits nobody.
-- **Slugs:** `access/<slug>.*` selects the client whose name, stripped and casefolded, equals the slug. Two
-  names that casefold alike make the slug ambiguous and it selects nothing. The suffix must be exactly `.*`. The `access/` prefix, the slug and the suffix match case-insensitively, while the administrator and reader scope requirements match exactly.
+- **Slugs:** `access/<slug>.*` selects the client whose name, stripped and with ASCII letters lowercased,
+  equals the slug treated the same way; other characters are never folded. Two names that lowercase alike
+  make the slug ambiguous and it selects nothing. The `access/` prefix and the `.*` suffix match exactly and
+  case-sensitively, like the FHIR server's own check, so `Access/Tenant.*` selects nothing. The `patient/` deny
+  is case-insensitive because it can only deny.
   `access/*.*` selects every client only when `allow_all_tenants=True`, including a client whose own slug is
   ambiguous. An ambiguous slug is logged by slug only, through the standard `logging` module (the package
   configures no logger of its own).

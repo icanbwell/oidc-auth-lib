@@ -38,7 +38,10 @@ Option 2. `resolve_admin_access` takes scopes, the all-of administrator and read
   this on construction.
 - An empty requirement list, or one with a blank entry, admits nobody.
 - `access/*.*` selects every client only when the caller sets `allow_all_tenants`.
-- Two client names that casefold alike make their slug ambiguous: the slug selects nothing. The wildcard still
+- The `access/` prefix and `.*` suffix match exactly and case-sensitively, as the FHIR server's `access/` check does,
+  so this package never grants more than the server would. Only the `patient/` deny is case-insensitive, because it
+  can only deny. A slug matches a client name with ASCII letters lowercased and no other folding.
+- Two client names that lowercase alike make their slug ambiguous: the slug selects nothing. The wildcard still
   covers those clients, because it means every client in the mapping.
 - Two parsers read the client-key mapping. The lenient one keeps the behavior existing services rely on; the
   strict one is for `validate_reader_configuration`, which a service calls once at startup.

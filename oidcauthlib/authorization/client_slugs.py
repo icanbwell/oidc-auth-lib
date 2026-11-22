@@ -1,19 +1,20 @@
 """Which client keys an ``access/<slug>.*`` scope selects.
 
-A slug is the text between ``access/`` and the trailing ``.*`` of the scope. It
-selects the client whose name, stripped and casefolded, equals the stripped,
-casefolded slug. One slug selects one key. A slug that matches no name is
-unmapped; two names that casefold alike make the slug ambiguous, and an
-ambiguous slug selects nothing (logged by slug only, never by key). The ``*``
-slug is the wildcard and never selects a single key.
+A slug is the text between ``access/`` and the trailing ``.*`` of the scope. The
+prefix and suffix match exactly and case-sensitively, like the FHIR server's own
+``access/`` check. The slug selects the client whose name, stripped and with ASCII
+letters lowercased, equals the slug stripped and lowercased the same way; other
+characters are never folded, so ``ß`` and ``SS`` stay different. One slug selects one
+key. A slug that matches no name is unmapped; two names that lowercase alike make the
+slug ambiguous, and an ambiguous slug selects nothing (logged by slug only, never by
+key). The ``*`` slug is the wildcard and never selects a single key.
 """
 
 import logging
+import string
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from types import MappingProxyType
-
-from oidcauthlib.authorization.scopes import normalize_scope
 
 logger = logging.getLogger(__name__)
 
@@ -23,31 +24,39 @@ ACCESS_SCOPE_SUFFIX = ".*"
 WILDCARD_SLUG = "*"
 
 
+_ASCII_LOWER = str.maketrans(string.ascii_uppercase, string.ascii_lowercase)
+
+
 def normalize_slug(*, slug: str) -> str:
-    """Strip and casefold a slug or a client name so they compare equal."""
-    return normalize_scope(scope=slug)
+    """Strip a slug or a client name and lowercase its ASCII letters so they compare equal.
+
+    Only ``A`` to ``Z`` is folded. ``str.casefold`` would also map ``ß`` to ``ss`` and the
+    Kelvin sign to ``k``, which would let a scope the identity provider treats as different
+    select a client.
+    """
+    return slug.strip().translate(_ASCII_LOWER)
 
 
 def slug_from_access_scope(*, scope: str) -> str | None:
     """The slug of an ``access/<slug>.*`` scope, normalized; ``None`` for any other scope.
 
-    The match is case-insensitive over the whole scope (prefix, slug and suffix), so
-    ``Access/Tenant.*`` gives ``tenant``; this differs on purpose from the exact match of
-    the administrator and reader requirements, and keeps the ``patient/`` deny and the
-    access scopes in step. ``access/tenant.*`` gives ``tenant`` and ``access/*.*`` gives ``*``. The suffix
-    must be exactly ``.*``: ``access/demo.read``, ``access/*.read``, ``access/demo``
-    and an empty slug (``access/.*``) all give ``None``.
+    The ``access/`` prefix and the ``.*`` suffix match exactly and case-sensitively, so
+    ``Access/Tenant.*`` and ``ACCESS/TENANT.*`` give ``None``, as they select nothing on the
+    FHIR server. The slug is normalized with ``normalize_slug``: ``access/Tenant.*`` gives
+    ``tenant`` and ``access/*.*`` gives ``*``. The suffix must be exactly ``.*``:
+    ``access/demo.read``, ``access/*.read``, ``access/demo`` and an empty slug
+    (``access/.*``) all give ``None``. Padding around the scope is ignored.
 
     Args:
         scope: any scope string.
     """
-    normalized = normalize_scope(scope=scope)
-    if not normalized.startswith(ACCESS_SCOPE_PREFIX):
+    stripped = scope.strip()
+    if not stripped.startswith(ACCESS_SCOPE_PREFIX):
         return None
-    if not normalized.endswith(ACCESS_SCOPE_SUFFIX):
+    if not stripped.endswith(ACCESS_SCOPE_SUFFIX):
         return None
-    body = normalized[len(ACCESS_SCOPE_PREFIX) :]
-    slug = body[: -len(ACCESS_SCOPE_SUFFIX)].strip()
+    body = stripped[len(ACCESS_SCOPE_PREFIX) :]
+    slug = normalize_slug(slug=body[: -len(ACCESS_SCOPE_SUFFIX)])
     return slug or None
 
 
@@ -105,7 +114,7 @@ class ClientSlugResolver:
                 continue
             if len(keys) > 1:
                 logger.warning(
-                    "Client names that casefold to %s are ambiguous; the access slug selects no client",
+                    "Client names that lowercase to %s are ambiguous; the access slug selects no client",
                     slug,
                 )
                 continue

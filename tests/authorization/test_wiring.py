@@ -36,7 +36,7 @@ def _access(*, scopes: list[str], raw: str = RAW_CLIENTS, allow_all_tenants: boo
         (["example/admin"], False, AdminAccess.admin()),
         (["example/reader", "access/one.*"], False, AdminAccess.reader(allowed_client_keys=frozenset({"key-1"}))),
         (
-            ["example/reader", "ACCESS/TWO.*", "access/one.*"],
+            ["example/reader", "access/TWO.*", "access/one.*"],
             False,
             AdminAccess.reader(allowed_client_keys=frozenset({"key-1", "key-2"})),
         ),
@@ -47,6 +47,11 @@ def _access(*, scopes: list[str], raw: str = RAW_CLIENTS, allow_all_tenants: boo
         ),
         (["example/reader", "access/*.*"], False, AdminAccess.denied(reason=DenialReason.UNMAPPED_ACCESS_SCOPE)),
         (["example/reader"], False, AdminAccess.denied(reason=DenialReason.NO_ACCESS_SCOPE)),
+        (
+            ["example/reader", "ACCESS/TWO.*", "access/one.*"],
+            False,
+            AdminAccess.reader(allowed_client_keys=frozenset({"key-1"})),
+        ),
         (["example/admin", "patient/x.read"], False, AdminAccess.denied(reason=DenialReason.PATIENT_SCOPE)),
     ],
 )

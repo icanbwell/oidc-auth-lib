@@ -53,7 +53,9 @@ def _resolve(
         (["example/other", "access/syntheticone.*"], False, None, frozenset(), DenialReason.NOT_A_READER),
         (["access/syntheticone.*"], False, None, frozenset(), DenialReason.NOT_A_READER),
         (["example/reader", "access/syntheticone.*"], False, AdminTier.READER, frozenset({"synthetic-key-1"}), None),
-        (["example/reader", "Access/SyntheticOne.*"], False, AdminTier.READER, frozenset({"synthetic-key-1"}), None),
+        (["example/reader", "access/SyntheticOne.*"], False, AdminTier.READER, frozenset({"synthetic-key-1"}), None),
+        (["example/reader", "Access/SyntheticOne.*"], False, None, frozenset(), DenialReason.NO_ACCESS_SCOPE),
+        (["example/reader", "ACCESS/SYNTHETICONE.*"], False, None, frozenset(), DenialReason.NO_ACCESS_SCOPE),
         (
             ["example/reader", "access/syntheticone.*", "access/synthetictwo.*"],
             False,

@@ -102,3 +102,10 @@ def test_lenient_parser_logs_nothing_for_well_formed_or_empty_input(raw: str, ca
 
 def test_strict_parser_allows_two_names_to_share_one_key_as_aliases() -> None:
     assert parse_client_keys_strict(raw="One=key-1,Alias=key-1") == {"One": "key-1", "Alias": "key-1"}
+
+
+def test_strict_parser_treats_names_that_differ_only_by_non_ascii_folding_as_distinct() -> None:
+    assert parse_client_keys_strict(raw="Straße=key-1,STRASSE=key-2") == {
+        "Straße": "key-1",
+        "STRASSE": "key-2",
+    }

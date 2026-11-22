@@ -14,7 +14,13 @@ from oidcauthlib.authorization.client_slugs import (
     ("scope", "expected"),
     [
         ("access/tenant.*", "tenant"),
-        ("Access/Tenant.*", "tenant"),
+        ("access/Tenant.*", "tenant"),
+        ("access/TENANT.*", "tenant"),
+        ("Access/Tenant.*", None),
+        ("ACCESS/TENANT.*", None),
+        ("access/Tenant.Read", None),
+        ("access/Stra\u00dfe.*", "stra\u00dfe"),
+        ("access/\u212a.*", "\u212a"),
         (" access/tenant.* ", "tenant"),
         ("access/*.*", "*"),
         ("access/a.b.*", "a.b"),
@@ -34,8 +40,18 @@ def test_slug_from_access_scope(scope: str, expected: str | None) -> None:
     assert slug_from_access_scope(scope=scope) == expected
 
 
-def test_normalize_slug_strips_and_casefolds() -> None:
-    assert normalize_slug(slug="  SyntheticOne ") == "syntheticone"
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ("  SyntheticOne ", "syntheticone"),
+        ("Stra\u00dfe", "stra\u00dfe"),
+        ("STRASSE", "strasse"),
+        ("\u212a", "\u212a"),
+        ("\u0130", "\u0130"),
+    ],
+)
+def test_normalize_slug_strips_and_lowercases_ascii_letters_only(value: str, expected: str) -> None:
+    assert normalize_slug(slug=value) == expected
 
 
 def test_wildcard_slug_constant() -> None:
@@ -134,8 +150,8 @@ def test_no_warning_when_every_key_is_a_string(caplog: pytest.LogCaptureFixture)
     assert caplog.records == []
 
 
-@pytest.mark.parametrize("scope", ["access/two.*", "Access/Two.*", "ACCESS/TWO.*", " access/two.* "])
-def test_an_access_scope_selects_its_client_whatever_its_case_or_padding(scope: str) -> None:
+@pytest.mark.parametrize("scope", ["access/two.*", "access/Two.*", "access/TWO.*", " access/two.* "])
+def test_an_access_scope_selects_its_client_whatever_the_case_of_the_slug_or_the_padding(scope: str) -> None:
     resolver = ClientSlugResolver.from_client_keys(clients={"Two": "synthetic-key-2"})
 
     slug = slug_from_access_scope(scope=scope)
@@ -150,3 +166,24 @@ def test_two_aliases_for_one_key_each_select_that_key() -> None:
     assert resolver.keys_for(slug="one") == frozenset({"synthetic-key-1"})
     assert resolver.keys_for(slug="alias") == frozenset({"synthetic-key-1"})
     assert resolver.all_keys == frozenset({"synthetic-key-1"})
+
+
+@pytest.mark.parametrize("scope", ["Access/Two.*", "ACCESS/TWO.*", "access/Two.Read"])
+def test_a_scope_with_a_different_prefix_or_suffix_case_selects_no_client(scope: str) -> None:
+    assert slug_from_access_scope(scope=scope) is None
+
+
+def test_names_that_differ_only_by_non_ascii_folding_are_distinct_clients() -> None:
+    resolver = ClientSlugResolver.from_client_keys(
+        clients={
+            "Stra\u00dfe": "synthetic-key-1",
+            "STRASSE": "synthetic-key-2",
+            "\u212a": "synthetic-key-3",
+            "k": "synthetic-key-4",
+        }
+    )
+
+    assert resolver.keys_for(slug="stra\u00dfe") == frozenset({"synthetic-key-1"})
+    assert resolver.keys_for(slug="strasse") == frozenset({"synthetic-key-2"})
+    assert resolver.keys_for(slug="\u212a") == frozenset({"synthetic-key-3"})
+    assert resolver.keys_for(slug="k") == frozenset({"synthetic-key-4"})
