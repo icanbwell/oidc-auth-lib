@@ -51,14 +51,14 @@ def validate_reader_configuration(
             reader holding ``access/*.*`` would then be an administrator).
     """
     # Materialize: the lists are read several times, and a generator is used up by the first pass.
-    reader_scopes = tuple(reader_scopes)
-    admin_scopes = tuple(admin_scopes)
-    for scopes in (reader_scopes, admin_scopes):
+    readers = tuple(reader_scopes)
+    admins = tuple(admin_scopes)
+    for scopes in (readers, admins):
         if has_blank_scope(scopes=scopes) or any(scope != scope.strip() for scope in scopes):
             raise ReaderConfigurationError(
                 "a scope is blank, has characters that do not print, or has surrounding whitespace"
             )
-    if not reader_scopes:
+    if not readers:
         return
     try:
         clients = parse_client_keys_strict(raw=client_keys_raw)
@@ -70,8 +70,8 @@ def validate_reader_configuration(
         raise ReaderConfigurationError(
             f"a client name contains '{WILDCARD_SLUG}', which collides with the wildcard slug"
         )
-    admin_normalized = {normalize_scope(scope=scope) for scope in admin_scopes}
-    for scope in reader_scopes:
+    admin_normalized = {normalize_scope(scope=scope) for scope in admins}
+    for scope in readers:
         normalized = normalize_scope(scope=scope)
         if normalized in admin_normalized:
             raise ReaderConfigurationError("a reader scope overlaps an administrator scope")
@@ -83,7 +83,7 @@ def validate_reader_configuration(
             raise ReaderConfigurationError("a reader scope is a generic scope every token carries")
         if normalized.endswith(WILDCARD_SCOPE_SUFFIX):
             raise ReaderConfigurationError(f"a reader scope ends in '{WILDCARD_SCOPE_SUFFIX}'")
-    if any(normalize_scope(scope=scope).startswith(ACCESS_SCOPE_PREFIX) for scope in admin_scopes):
+    if any(normalize_scope(scope=scope).startswith(ACCESS_SCOPE_PREFIX) for scope in admins):
         raise ReaderConfigurationError(
             f"an administrator scope starts with '{ACCESS_SCOPE_PREFIX}': "
             "a reader holding the wildcard access scope would be an administrator"
