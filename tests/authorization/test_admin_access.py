@@ -259,3 +259,59 @@ def test_no_warning_when_every_held_scope_is_a_string(caplog: pytest.LogCaptureF
         _resolve(scopes=["example/reader", "access/syntheticone.*"])
 
     assert caplog.records == []
+
+
+def test_one_shot_iterator_requirements_never_grant_a_tier() -> None:
+    admin_from_empty = resolve_admin_access(
+        scopes=["other"],
+        admin_scopes=iter(()),  # type: ignore[arg-type]  # deliberately off-type input
+        reader_scopes=READER,
+        clients=CLIENTS,
+        allow_all_tenants=False,
+    )
+    reader_from_empty = resolve_admin_access(
+        scopes=["other", "access/syntheticone.*"],
+        admin_scopes=ADMIN,
+        reader_scopes=iter(()),  # type: ignore[arg-type]  # deliberately off-type input
+        clients=CLIENTS,
+        allow_all_tenants=False,
+    )
+    reader_from_generator = resolve_admin_access(
+        scopes=["example/reader", "access/syntheticone.*"],
+        admin_scopes=ADMIN,
+        reader_scopes=(scope for scope in READER),  # type: ignore[arg-type]  # deliberately off-type input
+        clients=CLIENTS,
+        allow_all_tenants=False,
+    )
+
+    assert admin_from_empty == AdminAccess.denied(reason=DenialReason.NOT_A_READER)
+    assert reader_from_empty == AdminAccess.denied(reason=DenialReason.NOT_A_READER)
+    assert reader_from_generator == AdminAccess.reader(allowed_client_keys=frozenset({"synthetic-key-1"}))
+
+
+@pytest.mark.parametrize(
+    ("tier", "keys", "reason"),
+    [
+        ("reader", None, None),
+        ("reader", frozenset(), None),
+        ("admin", frozenset({"synthetic-key-1"}), None),
+        ("admn", None, None),
+        (5, None, None),
+        (AdminTier.ADMIN, None, DenialReason.NOT_A_READER),
+        (AdminTier.READER, frozenset({"synthetic-key-1"}), DenialReason.PATIENT_SCOPE),
+    ],
+)
+def test_access_with_an_inconsistent_or_unknown_tier_is_refused(
+    tier: object, keys: frozenset[str] | None, reason: DenialReason | None
+) -> None:
+    with pytest.raises(ValueError):
+        AdminAccess(tier=tier, allowed_client_keys=keys, denial_reason=reason)  # type: ignore[arg-type]  # deliberately off-type input
+
+
+@pytest.mark.parametrize(("tier", "expected"), [("admin", AdminTier.ADMIN), ("reader", AdminTier.READER)])
+def test_a_plain_string_tier_is_coerced_to_the_enum(tier: str, expected: AdminTier) -> None:
+    keys = None if expected is AdminTier.ADMIN else frozenset({"synthetic-key-1"})
+
+    access = AdminAccess(tier=tier, allowed_client_keys=keys, denial_reason=None)  # type: ignore[arg-type]  # deliberately off-type input
+
+    assert access.tier is expected

@@ -94,3 +94,13 @@ def test_non_string_held_scopes_are_ignored_by_the_predicates() -> None:
     held: list[str] = ["example/admin", None, 5]  # type: ignore[list-item]  # deliberately off-type input
     assert has_admin_scopes(scopes=held, required_scopes=["example/admin"]) is True
     assert has_patient_scope(scopes=held) is False
+
+
+def test_a_one_shot_iterator_requirement_is_read_once_and_never_admits_everyone() -> None:
+    requirement = (scope for scope in ["example/admin"])
+
+    first = has_admin_scopes(scopes=["example/admin"], required_scopes=requirement)  # type: ignore[arg-type]  # deliberately off-type input
+    second = has_admin_scopes(scopes=["other"], required_scopes=iter(()))  # type: ignore[arg-type]  # deliberately off-type input
+
+    assert first is True
+    assert second is False

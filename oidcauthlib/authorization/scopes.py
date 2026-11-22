@@ -47,9 +47,12 @@ def has_admin_scopes(*, scopes: Iterable[str], required_scopes: Collection[str])
         scopes: the scopes the caller holds; non-string entries are ignored.
         required_scopes: every one of these must be held, matched exactly.
     """
-    if not required_scopes or has_blank_scope(scopes=required_scopes):
+    # Materialize first: a generator is always truthy and is used up by the first pass, which
+    # would leave an empty requirement that every token satisfies.
+    required = tuple(required_scopes)
+    if not required or has_blank_scope(scopes=required):
         return False
     held = {scope for scope in scopes if isinstance(scope, str)}
     if has_patient_scope(scopes=held):
         return False
-    return set(required_scopes).issubset(held)
+    return set(required).issubset(held)

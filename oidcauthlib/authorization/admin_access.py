@@ -69,6 +69,12 @@ class AdminAccess:
     denial_reason: DenialReason | None
 
     def __post_init__(self) -> None:
+        if self.tier is not None:
+            # A plain string such as "reader" (for example after a JSON round trip) is coerced, so
+            # the invariants below apply to it; an unknown value raises ValueError.
+            object.__setattr__(self, "tier", AdminTier(self.tier))
+            if self.denial_reason is not None:
+                raise ValueError("a granted caller carries no denial reason")
         if isinstance(self.allowed_client_keys, str | bytes):
             # A bare string would silently become a set of its characters.
             raise TypeError("allowed_client_keys must be a collection of keys, not a string")
@@ -138,7 +144,12 @@ def resolve_admin_access(
     if has_admin_scopes(scopes=held, required_scopes=admin_scopes):
         return AdminAccess.admin()
     # An empty requirement would admit everyone (``issubset`` of the empty set).
-    if not reader_scopes or has_blank_scope(scopes=reader_scopes) or not set(reader_scopes).issubset(held):
+    required_reader_scopes = tuple(reader_scopes)  # a generator would be used up by the first pass
+    if (
+        not required_reader_scopes
+        or has_blank_scope(scopes=required_reader_scopes)
+        or not set(required_reader_scopes).issubset(held)
+    ):
         return AdminAccess.denied(reason=DenialReason.NOT_A_READER)
     slugs = {slug for scope in held if (slug := slug_from_access_scope(scope=scope)) is not None}
     if not slugs:

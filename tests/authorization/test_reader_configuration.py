@@ -92,3 +92,18 @@ def test_a_non_string_scope_entry_is_refused_with_the_typed_error(
             admin_scopes=admin_scopes,  # type: ignore[arg-type]  # deliberately off-type input
             client_keys_raw=VALID_KEYS,
         )
+
+
+@pytest.mark.parametrize("scope", ["address", "phone", "offline_access", "Offline_Access"])
+def test_every_standard_oidc_scope_is_refused_as_a_reader_requirement(scope: str) -> None:
+    with pytest.raises(ReaderConfigurationError):
+        validate_reader_configuration(reader_scopes=[scope], admin_scopes=["example/admin"], client_keys_raw=VALID_KEYS)
+
+
+def test_one_shot_iterators_are_validated_in_full() -> None:
+    with pytest.raises(ReaderConfigurationError):
+        validate_reader_configuration(
+            reader_scopes=(scope for scope in ["example/reader", "openid"]),  # type: ignore[arg-type]  # deliberately off-type input
+            admin_scopes=(scope for scope in ["example/admin"]),  # type: ignore[arg-type]  # deliberately off-type input
+            client_keys_raw=VALID_KEYS,
+        )

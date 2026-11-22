@@ -14,7 +14,7 @@ from oidcauthlib.authorization.client_slugs import ACCESS_SCOPE_PREFIX, WILDCARD
 from oidcauthlib.authorization.scopes import PATIENT_SCOPE_PREFIX, has_blank_scope, normalize_scope
 
 # Scopes every token carries; as a reader requirement they would admit everyone.
-GENERIC_SCOPES = frozenset({"openid", "profile", "email", "groups"})
+GENERIC_SCOPES = frozenset({"openid", "profile", "email", "address", "phone", "offline_access", "groups"})
 # A reader scope with this suffix would read like the all-tenants access scope.
 WILDCARD_SCOPE_SUFFIX = "*.*"
 
@@ -46,10 +46,13 @@ def validate_reader_configuration(
             mapping fails the strict parser, is empty, or has a name containing
             ``*``; a reader scope overlaps an administrator scope, starts with
             ``access/`` or ``patient/``, is generic (``openid``, ``profile``,
-            ``email``, ``groups``) or ends in ``*.*``; or any administrator scope
-            starts with ``access/`` (a reader holding ``access/*.*`` would then be
-            an administrator).
+            ``email``, ``address``, ``phone``, ``offline_access``, ``groups``) or
+            ends in ``*.*``; or any administrator scope starts with ``access/`` (a
+            reader holding ``access/*.*`` would then be an administrator).
     """
+    # Materialize: the lists are read several times, and a generator is used up by the first pass.
+    reader_scopes = tuple(reader_scopes)
+    admin_scopes = tuple(admin_scopes)
     for scopes in (reader_scopes, admin_scopes):
         if has_blank_scope(scopes=scopes) or any(scope != scope.strip() for scope in scopes):
             raise ReaderConfigurationError(
