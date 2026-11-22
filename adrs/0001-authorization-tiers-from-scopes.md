@@ -23,8 +23,8 @@ decision.
 ## Considered options
 
 1. Leave each service with its own copy.
-2. A pure subpackage, `oidcauthlib.authorization`, with explicit inputs and no I/O, environment or logging
-   configuration of its own (chosen).
+2. A pure subpackage, `oidcauthlib.authorization`, with explicit inputs, no file or network I/O, no environment
+   reads and no logging configuration of its own (it only calls the standard `logging` module) (chosen).
 3. A class that reads settings from the environment and verifies tokens itself.
 
 ## Decision outcome
@@ -46,7 +46,7 @@ Option 2. `resolve_admin_access` takes scopes, the all-of administrator and read
 ### Consequences
 
 - Good: one implementation, with the tenant-isolation rules in tests.
-- Good: the package imports nothing from the rest of `oidcauthlib` and performs no I/O (tests enforce both).
+- Good: the package imports nothing from the rest of `oidcauthlib` and performs no file or network I/O (tests enforce both; its only side effect is a standard `logging` warning with a slug or a count).
 - Bad: safety depends on the service calling `validate_reader_configuration` at startup and building the
   resolver from the same raw setting. The package cannot enforce that.
 - Bad: the lenient parser can still repair or drop malformed input for services that skip validation.

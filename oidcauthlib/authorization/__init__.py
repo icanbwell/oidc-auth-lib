@@ -1,8 +1,10 @@
 """Pure authorization helpers: administrator and tenant-reader tiers from OAuth scopes.
 
-Everything here is a pure function of the values passed in. The package reads no
-environment variable, performs no I/O and imports nothing else from ``oidcauthlib``,
-so callers keep control of token verification, user lookup and configuration.
+Every decision is a pure function of the values passed in. The package reads no
+environment variable, performs no file or network I/O and imports nothing else from
+``oidcauthlib``, so callers keep control of token verification, user lookup and
+configuration. Its only side effect is a standard-library ``logging`` warning that
+carries a slug or a count, never a client name or key.
 """
 
 from oidcauthlib.authorization.admin_access import (

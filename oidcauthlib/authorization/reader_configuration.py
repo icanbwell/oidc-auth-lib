@@ -11,7 +11,7 @@ from oidcauthlib.authorization.client_keys import (
     parse_client_keys_strict,
 )
 from oidcauthlib.authorization.client_slugs import ACCESS_SCOPE_PREFIX, WILDCARD_SLUG
-from oidcauthlib.authorization.scopes import PATIENT_SCOPE_PREFIX, normalize_scope
+from oidcauthlib.authorization.scopes import PATIENT_SCOPE_PREFIX, has_blank_scope, normalize_scope
 
 # Scopes every token carries; as a reader requirement they would admit everyone.
 GENERIC_SCOPES = frozenset({"openid", "profile", "email", "groups"})
@@ -31,8 +31,8 @@ def validate_reader_configuration(
 ) -> None:
     """Refuse an unsafe reader-tier configuration.
 
-    A blank or padded entry in either scope list is always refused, because scopes
-    match exactly and a blank requirement is satisfiable by a blank held scope. The
+    A blank, non-printing or padded entry in either scope list is always refused, because
+    scopes match exactly and a blank requirement is satisfiable by a blank held scope. The
     remaining checks are skipped when no reader scopes are set.
 
     Args:
@@ -41,8 +41,8 @@ def validate_reader_configuration(
         client_keys_raw: the raw client-key mapping setting.
 
     Raises:
-        ReaderConfigurationError: when either scope list has a blank entry or an
-            entry with surrounding whitespace; when reader scopes are set and the client-key
+        ReaderConfigurationError: when either scope list has a blank or non-printing
+            entry or an entry with surrounding whitespace; when reader scopes are set and the client-key
             mapping fails the strict parser, is empty, or has a name containing
             ``*``; a reader scope overlaps an administrator scope, starts with
             ``access/`` or ``patient/``, is generic (``openid``, ``profile``,
@@ -51,8 +51,10 @@ def validate_reader_configuration(
             an administrator).
     """
     for scopes in (reader_scopes, admin_scopes):
-        if any(scope != scope.strip() or not scope for scope in scopes):
-            raise ReaderConfigurationError("a scope is blank or has surrounding whitespace")
+        if has_blank_scope(scopes=scopes) or any(scope != scope.strip() for scope in scopes):
+            raise ReaderConfigurationError(
+                "a scope is blank, has characters that do not print, or has surrounding whitespace"
+            )
     if not reader_scopes:
         return
     try:

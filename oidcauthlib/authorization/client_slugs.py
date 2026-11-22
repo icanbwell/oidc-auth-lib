@@ -79,8 +79,10 @@ class ClientSlugResolver:
                 not take part in ambiguity checks.
         """
         keys_by_slug_candidates: dict[str, list[str]] = {}
+        skipped_non_string = 0
         for name, key in clients.items():
             if not isinstance(key, str):
+                skipped_non_string += 1
                 continue
             slug = normalize_slug(slug=str(name))
             clean_key = key.strip()
@@ -89,6 +91,11 @@ class ClientSlugResolver:
             if is_eligible is not None and not is_eligible(str(name), clean_key):
                 continue
             keys_by_slug_candidates.setdefault(slug, []).append(clean_key)
+        if skipped_non_string:
+            logger.warning(
+                "Skipped %d client-key entries whose key is not a string; their clients select nothing",
+                skipped_non_string,
+            )
         keys_by_slug: dict[str, str] = {}
         for slug, keys in keys_by_slug_candidates.items():
             if slug == WILDCARD_SLUG:

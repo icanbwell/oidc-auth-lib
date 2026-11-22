@@ -100,7 +100,7 @@ def test_ambiguity_is_logged_by_slug_only(caplog: pytest.LogCaptureFixture) -> N
 @pytest.mark.parametrize("value", [None, 12345, True, ["k"], {"k": "v"}])
 def test_a_client_whose_key_is_not_a_string_is_skipped(value: object) -> None:
     resolver = ClientSlugResolver.from_client_keys(
-        clients={"Bad": value, "Good": "synthetic-key-1"}  # type: ignore[dict-item]
+        clients={"Bad": value, "Good": "synthetic-key-1"}  # type: ignore[dict-item]  # deliberately off-type input
     )
 
     assert resolver.keys_for(slug="bad") == frozenset()
@@ -111,3 +111,24 @@ def test_client_keys_do_not_appear_in_repr() -> None:
     resolver = ClientSlugResolver.from_client_keys(clients={"Demo": "synthetic-key-1"})
 
     assert "synthetic-key-1" not in repr(resolver)
+
+
+def test_skipped_non_string_keys_are_counted_in_one_warning_without_names_or_keys(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    with caplog.at_level(logging.WARNING):
+        ClientSlugResolver.from_client_keys(
+            clients={"SecretName": 12345, "OtherSecret": None, "Good": "synthetic-key-1"}  # type: ignore[dict-item]  # deliberately off-type input
+        )
+
+    messages = [record.getMessage() for record in caplog.records]
+    assert messages == ["Skipped 2 client-key entries whose key is not a string; their clients select nothing"]
+    assert "SecretName" not in messages[0]
+    assert "12345" not in messages[0]
+
+
+def test_no_warning_when_every_key_is_a_string(caplog: pytest.LogCaptureFixture) -> None:
+    with caplog.at_level(logging.WARNING):
+        ClientSlugResolver.from_client_keys(clients={"Good": "synthetic-key-1"})
+
+    assert caplog.records == []

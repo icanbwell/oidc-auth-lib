@@ -60,8 +60,17 @@ def test_a_malformed_mapping_fails_at_startup_instead_of_reaching_the_resolver(r
         _access(scopes=["example/reader", "access/one.*"], raw=raw)
 
 
-@pytest.mark.parametrize("raw", ['{"One": null, "Two": "key-2"}', "One=key-1,{broken"])
-def test_the_lenient_parser_keeps_what_it_can_read_without_inventing_keys(raw: str) -> None:
+@pytest.mark.parametrize(
+    ("raw", "expected_keys"),
+    [
+        ('{"One": null, "Two": "key-2"}', frozenset({"key-2"})),
+        ('{"One": 12345, "Two": "key-2"}', frozenset({"key-2"})),
+        ("One=key-1,{broken", frozenset({"key-1"})),
+    ],
+)
+def test_the_lenient_parser_keeps_what_it_can_read_without_inventing_keys(
+    raw: str, expected_keys: frozenset[str]
+) -> None:
     clients = ClientSlugResolver.from_client_keys(clients=parse_client_keys_lenient(raw=raw))
 
-    assert "None" not in clients.all_keys
+    assert clients.all_keys == expected_keys

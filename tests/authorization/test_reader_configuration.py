@@ -42,6 +42,9 @@ VALID_KEYS = "SyntheticOne=synthetic-key-1,SyntheticTwo=synthetic-key-2"
         ([""], ["example/admin"], ""),
         ([], [""], ""),
         ([], [" example/admin"], ""),
+        (["\u200b"], ["example/admin"], VALID_KEYS),
+        (["example/reader"], ["\ufeffexample/admin"], VALID_KEYS),
+        ([], ["\u200b"], ""),
     ],
 )
 def test_validate_reader_configuration_refuses(reader_scopes: list[str], admin_scopes: list[str], keys: str) -> None:
@@ -74,3 +77,18 @@ def test_error_messages_never_contain_a_key_or_client_name() -> None:
     assert "secret-key" not in message
     assert "other-key" not in message
     assert "SecretName" not in message
+
+
+@pytest.mark.parametrize(
+    ("reader_scopes", "admin_scopes"),
+    [([None], ["example/admin"]), (["example/reader"], [None]), ([5], [5]), ([], [None])],
+)
+def test_a_non_string_scope_entry_is_refused_with_the_typed_error(
+    reader_scopes: list[object], admin_scopes: list[object]
+) -> None:
+    with pytest.raises(ReaderConfigurationError):
+        validate_reader_configuration(
+            reader_scopes=reader_scopes,  # type: ignore[arg-type]  # deliberately off-type input
+            admin_scopes=admin_scopes,  # type: ignore[arg-type]  # deliberately off-type input
+            client_keys_raw=VALID_KEYS,
+        )

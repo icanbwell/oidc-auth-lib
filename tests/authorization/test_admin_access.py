@@ -175,15 +175,13 @@ def test_a_blank_required_scope_never_grants_a_tier(
 
 
 def test_non_string_scopes_are_ignored_instead_of_raising() -> None:
-    access = _resolve(scopes=["example/reader", 5, None, "access/syntheticone.*"])  # type: ignore[list-item]
-
+    access = _resolve(scopes=["example/reader", 5, None, "access/syntheticone.*"])  # type: ignore[list-item]  # deliberately off-type input
     assert access == AdminAccess.reader(allowed_client_keys=frozenset({"synthetic-key-1"}))
 
 
 def test_a_mutable_key_set_is_frozen_and_cannot_widen_the_decision() -> None:
     keys = {"synthetic-key-1"}
-    access = AdminAccess(tier=AdminTier.READER, allowed_client_keys=keys, denial_reason=None)  # type: ignore[arg-type]
-
+    access = AdminAccess(tier=AdminTier.READER, allowed_client_keys=keys, denial_reason=None)  # type: ignore[arg-type]  # deliberately off-type input
     keys.add("synthetic-key-2")
 
     assert access.allowed_client_keys == frozenset({"synthetic-key-1"})
@@ -203,3 +201,61 @@ def test_wildcard_selects_every_client_including_one_whose_slug_is_ambiguous() -
     assert access.allowed_client_keys == CLIENTS.all_keys
     assert {"synthetic-key-3", "synthetic-key-4"} <= (access.allowed_client_keys or frozenset())
     assert CLIENTS.keys_for(slug="dup") == frozenset()
+
+
+@pytest.mark.parametrize("keys", ["key-1", b"key-1"])
+def test_a_bare_string_is_refused_instead_of_becoming_a_set_of_characters(keys: str | bytes) -> None:
+    with pytest.raises(TypeError):
+        AdminAccess.reader(allowed_client_keys=keys)  # type: ignore[arg-type]  # deliberately off-type input
+
+
+def test_an_invisible_character_requirement_never_grants_a_tier() -> None:
+    access = resolve_admin_access(
+        scopes=["\u200b", "access/syntheticone.*"],
+        admin_scopes=["\u200b"],
+        reader_scopes=["\u200b"],
+        clients=CLIENTS,
+        allow_all_tenants=False,
+    )
+
+    assert access == AdminAccess.denied(reason=DenialReason.NOT_A_READER)
+
+
+@pytest.mark.parametrize(
+    ("admin_scopes", "reader_scopes", "expected"),
+    [
+        # A malformed admin requirement can never grant admin; a caller that holds the reader scopes stays a reader.
+        ([None], READER, AdminAccess.reader(allowed_client_keys=frozenset({"synthetic-key-1"}))),
+        ([5], READER, AdminAccess.reader(allowed_client_keys=frozenset({"synthetic-key-1"}))),
+        (ADMIN, [None], AdminAccess.denied(reason=DenialReason.NOT_A_READER)),
+        (ADMIN, [5], AdminAccess.denied(reason=DenialReason.NOT_A_READER)),
+        ([None], [None], AdminAccess.denied(reason=DenialReason.NOT_A_READER)),
+    ],
+)
+def test_a_non_string_requirement_entry_never_grants_a_tier_and_never_raises(
+    admin_scopes: list[object], reader_scopes: list[object], expected: AdminAccess
+) -> None:
+    access = resolve_admin_access(
+        scopes=["example/reader", "access/syntheticone.*"],
+        admin_scopes=admin_scopes,  # type: ignore[arg-type]  # deliberately off-type input
+        reader_scopes=reader_scopes,  # type: ignore[arg-type]  # deliberately off-type input
+        clients=CLIENTS,
+        allow_all_tenants=False,
+    )
+
+    assert access == expected
+    assert access.tier is not AdminTier.ADMIN
+
+
+def test_ignored_non_string_held_scopes_are_counted_in_one_warning(caplog: pytest.LogCaptureFixture) -> None:
+    with caplog.at_level("WARNING"):
+        _resolve(scopes=["example/reader", 5, None, "access/syntheticone.*"])  # type: ignore[list-item]  # deliberately off-type input
+
+    assert [record.getMessage() for record in caplog.records] == ["Ignored 2 held scope entries that are not strings"]
+
+
+def test_no_warning_when_every_held_scope_is_a_string(caplog: pytest.LogCaptureFixture) -> None:
+    with caplog.at_level("WARNING"):
+        _resolve(scopes=["example/reader", "access/syntheticone.*"])
+
+    assert caplog.records == []

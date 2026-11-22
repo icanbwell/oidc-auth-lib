@@ -1,4 +1,4 @@
-"""The authorization package stays pure: standard library only, no environment access."""
+"""The authorization package stays pure: standard library only, no environment access, no file or network I/O."""
 
 import ast
 from pathlib import Path
@@ -72,7 +72,7 @@ FORBIDDEN_IO_MODULES = {
 }
 
 
-def test_authorization_package_performs_no_io() -> None:
+def test_authorization_package_performs_no_file_or_network_io() -> None:
     offenders: list[str] = []
     for path in _source_files():
         tree = ast.parse(path.read_text())

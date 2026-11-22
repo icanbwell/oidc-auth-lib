@@ -16,6 +16,7 @@ Scope matching is exact on the required scopes, and ``access/*.*`` alone never
 grants the reader tier.
 """
 
+import logging
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from enum import StrEnum
@@ -26,6 +27,9 @@ from oidcauthlib.authorization.client_slugs import (
     slug_from_access_scope,
 )
 from oidcauthlib.authorization.scopes import has_admin_scopes, has_blank_scope, has_patient_scope
+
+
+logger = logging.getLogger(__name__)
 
 
 class AdminTier(StrEnum):
@@ -65,6 +69,9 @@ class AdminAccess:
     denial_reason: DenialReason | None
 
     def __post_init__(self) -> None:
+        if isinstance(self.allowed_client_keys, str | bytes):
+            # A bare string would silently become a set of its characters.
+            raise TypeError("allowed_client_keys must be a collection of keys, not a string")
         if self.allowed_client_keys is not None and not isinstance(self.allowed_client_keys, frozenset):
             # A mutable set would let a caller widen the decision after it was made.
             object.__setattr__(self, "allowed_client_keys", frozenset(self.allowed_client_keys))
@@ -110,7 +117,7 @@ def resolve_admin_access(
 
     ``admin_scopes`` and ``reader_scopes`` are all-of requirements; an empty one,
     or one with a blank entry, admits nobody. Entries of ``scopes`` that are not
-    strings are ignored. ``allow_all_tenants`` lets ``access/*.*`` select every
+    strings are ignored (and counted in one warning). ``allow_all_tenants`` lets ``access/*.*`` select every
     client in ``clients``, including a client whose own slug is ambiguous. Never
     raises.
 
@@ -121,7 +128,11 @@ def resolve_admin_access(
         clients: resolves ``access/<slug>.*`` scopes to client keys.
         allow_all_tenants: whether ``access/*.*`` selects every client.
     """
-    held = {scope for scope in scopes if isinstance(scope, str)}
+    all_scopes = list(scopes)
+    held = {scope for scope in all_scopes if isinstance(scope, str)}
+    if ignored := len(all_scopes) - sum(1 for scope in all_scopes if isinstance(scope, str)):
+        # Count only: a malformed claim can only narrow the decision, but operators should see it.
+        logger.warning("Ignored %d held scope entries that are not strings", ignored)
     if has_patient_scope(scopes=held):
         return AdminAccess.denied(reason=DenialReason.PATIENT_SCOPE)
     if has_admin_scopes(scopes=held, required_scopes=admin_scopes):

@@ -15,19 +15,23 @@ def normalize_scope(*, scope: str) -> str:
 
 
 def has_blank_scope(*, scopes: Iterable[str]) -> bool:
-    """True when any scope is empty or whitespace only.
+    """True when any scope is not a string, is empty, is whitespace only, or has characters that do not print.
 
+    Characters that do not print include a zero-width space, a byte-order mark and control
+    characters, which look blank in a settings file but are not caught by ``str.strip``.
     A blank required scope, for example the ``[""]`` that ``"".split(",")`` gives for an
     unset setting, is satisfied by any held scope list that contains ``""`` (a token
     scope claim split on single spaces with a double or trailing space does). Callers
     treat a requirement list with a blank entry as unsatisfiable.
     """
-    return any(not scope.strip() for scope in scopes)
+    return any(not isinstance(scope, str) or not scope.strip() or not scope.isprintable() for scope in scopes)
 
 
 def has_patient_scope(*, scopes: Iterable[str]) -> bool:
-    """True when any scope starts with ``patient/`` (trimmed, case-insensitive)."""
-    return any(normalize_scope(scope=scope).startswith(PATIENT_SCOPE_PREFIX) for scope in scopes)
+    """True when any scope starts with ``patient/`` (trimmed, case-insensitive); non-string entries are ignored."""
+    return any(
+        isinstance(scope, str) and normalize_scope(scope=scope).startswith(PATIENT_SCOPE_PREFIX) for scope in scopes
+    )
 
 
 def has_admin_scopes(*, scopes: Iterable[str], required_scopes: Collection[str]) -> bool:
@@ -40,12 +44,12 @@ def has_admin_scopes(*, scopes: Iterable[str], required_scopes: Collection[str])
     administrator path applies to the merged scope set.
 
     Args:
-        scopes: the scopes the caller holds.
+        scopes: the scopes the caller holds; non-string entries are ignored.
         required_scopes: every one of these must be held, matched exactly.
     """
     if not required_scopes or has_blank_scope(scopes=required_scopes):
         return False
-    held = set(scopes)
+    held = {scope for scope in scopes if isinstance(scope, str)}
     if has_patient_scope(scopes=held):
         return False
     return set(required_scopes).issubset(held)
