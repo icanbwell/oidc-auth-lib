@@ -52,6 +52,12 @@ class _FakeWellKnownConfigurationManager:
     async def refresh_async(self) -> None:
         return None
 
+    async def get_jwks_for_issuer_async(self, *, issuer: str | None) -> KeySet:
+        return _JWKS
+
+    async def refresh_for_issuer_async(self, *, issuer: str | None) -> None:
+        return None
+
 
 class _TestTokenReader(TokenReader):
     """TokenReader with dependencies injected directly, bypassing __init__."""

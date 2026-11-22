@@ -48,6 +48,15 @@ class _StaticJwksManager(WellKnownConfigurationManager):
         return None
 
     @override
+    async def get_jwks_for_issuer_async(self, *, issuer: str | None) -> KeySet:
+        return self._jwks
+
+    @override
+    async def refresh_for_issuer_async(self, *, issuer: str | None) -> None:
+        return None
+
+    @override
+    @override
     async def get_well_known_urls(self) -> List[str]:
         return [c.well_known_uri for c in self._auth_configs if c.well_known_uri]
 

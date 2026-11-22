@@ -115,6 +115,11 @@ class AuthManager:
     async def ensure_initialized_async(self) -> None:
         auth_config: AuthConfig
         for auth_config in self.auth_configs:
+            if auth_config.auth_provider.lower() in self._registered_dynamic_providers:
+                # Already registered: discovery is read through the shared store, so re-reading it
+                # here on every login would add store reads and let another provider's issuer
+                # outage fail this login.
+                continue
             if auth_config.well_known_uri:
                 await self.well_known_configuration_manager.get_async(auth_config=auth_config)
             await self.register_dynamic_provider(auth_config=auth_config)
