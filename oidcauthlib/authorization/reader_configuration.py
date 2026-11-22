@@ -19,6 +19,12 @@ GENERIC_SCOPES = frozenset({"openid", "profile", "email", "address", "phone", "o
 WILDCARD_SCOPE_SUFFIX = "*.*"
 
 
+def _is_ordinary_caller_scope(scope: str) -> bool:
+    """True for a generic scope or an ``access/`` scope: both are carried by ordinary tenant callers."""
+    normalized = normalize_scope(scope=scope)
+    return normalized in GENERIC_SCOPES or normalized.startswith(ACCESS_SCOPE_PREFIX)
+
+
 class ReaderConfigurationError(ValueError):
     """The reader-tier configuration is unsafe to apply."""
 
@@ -33,7 +39,7 @@ def validate_reader_configuration(
 
     A blank, non-printing or padded entry in either scope list is always refused, because
     scopes match exactly and a blank requirement is satisfiable by a blank held scope. An
-    administrator requirement made only of generic scopes is always refused too. The
+    administrator requirement made only of generic or ``access/`` scopes is always refused too. The
     remaining checks are skipped when no reader scopes are set.
 
     Args:
@@ -44,7 +50,7 @@ def validate_reader_configuration(
     Raises:
         ReaderConfigurationError: when either scope list has a blank or non-printing
             entry or an entry with surrounding whitespace; when every administrator
-            scope is generic; when reader scopes are set and the client-key
+            scope is generic or an ``access/`` scope; when reader scopes are set and the client-key
             mapping fails the strict parser, is empty, or has a name containing
             ``*``; a reader scope overlaps an administrator scope, starts with
             ``access/`` or ``patient/``, is generic (``openid``, ``profile``,
@@ -60,10 +66,12 @@ def validate_reader_configuration(
             raise ReaderConfigurationError(
                 "a scope is blank, has characters that do not print, or has surrounding whitespace"
             )
-    if admins and all(normalize_scope(scope=scope) in GENERIC_SCOPES for scope in admins):
-        # Checked before the no-reader-scopes return: an administrator requirement made only of
-        # scopes every token carries (for example ["openid"]) makes every verified token an admin.
-        raise ReaderConfigurationError("an administrator requirement made only of generic scopes admits every token")
+    if admins and all(_is_ordinary_caller_scope(scope) for scope in admins):
+        # Checked before the no-reader-scopes return: a requirement made only of scopes that
+        # ordinary callers carry makes them administrators, unrestricted across every tenant.
+        raise ReaderConfigurationError(
+            "an administrator requirement made only of generic or access scopes admits ordinary callers"
+        )
     if not readers:
         return
     try:

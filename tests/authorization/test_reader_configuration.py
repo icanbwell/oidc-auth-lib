@@ -34,6 +34,7 @@ VALID_KEYS = "SyntheticOne=synthetic-key-1,SyntheticTwo=synthetic-key-2"
         (["example/*.*"], ["example/admin"], VALID_KEYS),
         (["example/reader"], ["access/*.*"], VALID_KEYS),
         (["example/reader"], ["Access/Anything.*"], VALID_KEYS),
+        (["example/reader"], ["access/acme.*", "example/admin"], VALID_KEYS),
         ([""], ["example/admin"], VALID_KEYS),
         (["example/reader"], [""], VALID_KEYS),
         (["example/reader", " "], ["example/admin"], VALID_KEYS),
@@ -58,7 +59,6 @@ def test_validate_reader_configuration_refuses(reader_scopes: list[str], admin_s
         (["example/reader"], ["example/admin"], VALID_KEYS),
         (["example/reader"], ["example/admin"], '{"SyntheticOne": "synthetic-key-1"}'),
         ([], ["example/admin"], ""),
-        ([], ["access/*.*"], ""),
         ([], ["example/admin"], "not even parseable"),
     ],
 )
@@ -115,6 +115,10 @@ def test_one_shot_iterators_are_validated_in_full() -> None:
         ([], ["openid"]),
         (["example/reader"], ["openid"]),
         ([], ["Profile", "EMAIL"]),
+        ([], ["access/*.*"]),
+        ([], ["access/acme.*"]),
+        ([], ["openid", "access/acme.*"]),
+        ([], ["Access/Acme.*", "groups"]),
         (["example/reader"], ["offline_access", "groups"]),
     ],
 )
@@ -129,7 +133,12 @@ def test_an_administrator_requirement_made_only_of_generic_scopes_is_refused(
 
 @pytest.mark.parametrize(
     ("reader_scopes", "admin_scopes"),
-    [([], ["openid", "example/admin"]), (["example/reader"], ["openid", "example/admin"]), ([], ["example/admin"])],
+    [
+        ([], ["openid", "example/admin"]),
+        (["example/reader"], ["openid", "example/admin"]),
+        ([], ["example/admin"]),
+        ([], ["access/acme.*", "example/admin"]),
+    ],
 )
 def test_an_administrator_requirement_with_a_specific_scope_is_accepted(
     reader_scopes: list[str], admin_scopes: list[str]
