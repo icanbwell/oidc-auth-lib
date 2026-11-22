@@ -41,3 +41,54 @@ scopes = await manager.get_scopes_from_user_info_async(access_token=token)
   malformed entry is logged and treated as a miss, and the refetched scopes overwrite the bad entry. A
   userinfo HTTP error, a missing provider or a mismatched subject is raised, so each service decides whether
   to fail closed or degrade.
+
+## Administrator and tenant-reader tiers (`oidcauthlib.authorization`)
+
+Pure helpers that turn a caller's merged scopes (for example the result of `OidcUserInfoManager`) into a
+tier: `admin` (unrestricted), `reader` (limited to the client keys its `access/<slug>.*` scopes select), or
+denied. The subpackage reads no environment variable, does no I/O and imports nothing else from
+`oidcauthlib`; the caller verifies the token, looks up the user and passes the configuration in.
+
+```python
+from oidcauthlib.authorization import (
+    ClientSlugResolver,
+    parse_client_keys_lenient,
+    resolve_admin_access,
+    validate_reader_configuration,
+)
+
+RAW_CLIENTS = "One=key-1,Two=key-2"  # the setting that holds the client-key mapping
+
+# At startup: refuse an unsafe configuration (a no-op when no reader scopes are set).
+validate_reader_configuration(
+    reader_scopes=["example/reader"],
+    admin_scopes=["example/admin"],
+    client_keys_raw=RAW_CLIENTS,
+)
+
+clients = ClientSlugResolver.from_client_keys(clients=parse_client_keys_lenient(raw=RAW_CLIENTS))
+access = resolve_admin_access(
+    scopes=["example/reader", "access/one.*"],
+    admin_scopes=["example/admin"],
+    reader_scopes=["example/reader"],
+    clients=clients,
+    allow_all_tenants=False,
+)
+# access.tier is AdminTier.READER and access.allowed_client_keys == frozenset({"key-1"})
+```
+
+- **Order:** any `patient/` scope (trimmed, case-insensitive) denies first; then holding every admin scope
+  gives `admin`; then every reader scope plus at least one `access/<slug>.*` that selects a client gives
+  `reader`; anything else is denied with a `DenialReason`. An empty admin or reader requirement admits nobody.
+- **Slugs:** `access/<slug>.*` selects the client whose name, stripped and casefolded, equals the slug. Two
+  names that casefold alike make the slug ambiguous and it selects nothing. The suffix must be exactly `.*`.
+  `access/*.*` selects every client only when `allow_all_tenants=True`.
+- **No default for "all tenants":** `allowed_client_keys` is `None` only for `admin`. A reader always has a
+  non-empty set and a denied caller always has `frozenset()`, so a denial can never be read as unrestricted.
+  `AdminAccess` enforces this when it is constructed.
+- **Client-key mapping:** a `name -> key` map given as a JSON object or `One=key-1,Two=key-2`.
+  `parse_client_keys_lenient` keeps the permissive behavior (a malformed JSON object falls back to comma
+  parsing, an entry without `=` is dropped); `parse_client_keys_strict` refuses both, and refuses blank or
+  repeated names. Error messages name the rule, never a name or key.
+- **Eligibility:** `from_client_keys(..., is_eligible=...)` takes a `(name, key) -> bool` strategy for
+  callers that exclude some clients; an excluded client is in no view and takes no part in ambiguity.
