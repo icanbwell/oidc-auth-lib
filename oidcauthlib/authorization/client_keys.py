@@ -27,9 +27,10 @@ class ClientKeysFormatError(ValueError):
 def parse_client_keys_lenient(*, raw: str) -> dict[str, str]:
     """Parse the mapping, repairing or dropping what it cannot read.
 
-    An empty value gives ``{}``. A JSON object parses as is; invalid JSON falls
-    back to comma parsing. In the comma form, an entry without ``=`` is dropped.
-    The fallback and the number of dropped entries are each logged once, never the entries.
+    An empty value gives ``{}``. A JSON object keeps its string values (a repeated name
+    keeps the last value); invalid JSON falls back to comma parsing. In the comma form,
+    an entry without ``=`` is dropped. The fallback, the number of repeated JSON names
+    and the number of dropped entries are each logged once, never the entries.
 
     Args:
         raw: the setting's value, a JSON object or a comma-separated ``name=key`` list.
@@ -38,9 +39,11 @@ def parse_client_keys_lenient(*, raw: str) -> dict[str, str]:
         return {}
     if raw.strip().startswith("{"):
         try:
-            return dict(json.loads(raw))
-        except (json.JSONDecodeError, TypeError):
+            pairs: list[tuple[str, object]] = json.loads(raw, object_pairs_hook=lambda items: items)
+        except json.JSONDecodeError:
             logger.warning("The client-key mapping is not a valid JSON object; falling back to comma parsing")
+        else:
+            return _string_entries(pairs)
     clients: dict[str, str] = {}
     dropped = 0
     for entry in raw.split(","):
@@ -53,6 +56,25 @@ def parse_client_keys_lenient(*, raw: str) -> dict[str, str]:
     if dropped:
         # Count only: an entry can hold a client name or key.
         logger.warning("Dropped %d client-key entries that have no '='", dropped)
+    return clients
+
+
+def _string_entries(pairs: list[tuple[str, object]]) -> dict[str, str]:
+    clients: dict[str, str] = {}
+    repeated = 0
+    not_strings = 0
+    for name, value in pairs:
+        if name in clients:
+            repeated += 1
+        if not isinstance(value, str):
+            not_strings += 1
+            continue
+        clients[name] = value
+    # Counts only: a name or a value can identify a client.
+    if repeated:
+        logger.warning("Found %d repeated names in the client-key mapping; the last value is kept", repeated)
+    if not_strings:
+        logger.warning("Dropped %d client-key entries whose value is not a string", not_strings)
     return clients
 
 

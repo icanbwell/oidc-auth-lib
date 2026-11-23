@@ -21,7 +21,8 @@ from oidcauthlib.authorization.client_slugs import (
         ("access/Tenant.Read", None),
         ("access/Stra\u00dfe.*", "stra\u00dfe"),
         ("access/\u212a.*", "\u212a"),
-        (" access/tenant.* ", "tenant"),
+        (" access/tenant.* ", None),
+        ("access/tenant.*\n", None),
         ("access/*.*", "*"),
         ("access/a.b.*", "a.b"),
         ("user/example", None),
@@ -150,8 +151,8 @@ def test_no_warning_when_every_key_is_a_string(caplog: pytest.LogCaptureFixture)
     assert caplog.records == []
 
 
-@pytest.mark.parametrize("scope", ["access/two.*", "access/Two.*", "access/TWO.*", " access/two.* "])
-def test_an_access_scope_selects_its_client_whatever_the_case_of_the_slug_or_the_padding(scope: str) -> None:
+@pytest.mark.parametrize("scope", ["access/two.*", "access/Two.*", "access/TWO.*"])
+def test_an_access_scope_selects_its_client_whatever_the_case_of_the_slug(scope: str) -> None:
     resolver = ClientSlugResolver.from_client_keys(clients={"Two": "synthetic-key-2"})
 
     slug = slug_from_access_scope(scope=scope)

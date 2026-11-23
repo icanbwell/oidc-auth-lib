@@ -45,17 +45,18 @@ def slug_from_access_scope(*, scope: str) -> str | None:
     FHIR server. The slug is normalized with ``normalize_slug``: ``access/Tenant.*`` gives
     ``tenant`` and ``access/*.*`` gives ``*``. The suffix must be exactly ``.*``:
     ``access/demo.read``, ``access/*.read``, ``access/demo`` and an empty slug
-    (``access/.*``) all give ``None``. Padding around the scope is ignored.
+    (``access/.*``) all give ``None``. The scope is not stripped: a padded scope gives
+    ``None``, because the reader and administrator requirements match exactly and a held
+    scope must not grant more than the server would.
 
     Args:
         scope: any scope string.
     """
-    stripped = scope.strip()
-    if not stripped.startswith(ACCESS_SCOPE_PREFIX):
+    if not scope.startswith(ACCESS_SCOPE_PREFIX):
         return None
-    if not stripped.endswith(ACCESS_SCOPE_SUFFIX):
+    if not scope.endswith(ACCESS_SCOPE_SUFFIX):
         return None
-    body = stripped[len(ACCESS_SCOPE_PREFIX) :]
+    body = scope[len(ACCESS_SCOPE_PREFIX) :]
     slug = normalize_slug(slug=body[: -len(ACCESS_SCOPE_SUFFIX)])
     return slug or None
 

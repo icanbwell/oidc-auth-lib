@@ -109,3 +109,23 @@ def test_strict_parser_treats_names_that_differ_only_by_non_ascii_folding_as_dis
         "Straße": "key-1",
         "STRASSE": "key-2",
     }
+
+
+def test_lenient_parser_logs_only_a_count_of_repeated_json_names(caplog: pytest.LogCaptureFixture) -> None:
+    with caplog.at_level(logging.WARNING):
+        clients = parse_client_keys_lenient(raw='{"SecretOne": "k1", "SecretOne": "k2"}')
+
+    assert clients == {"SecretOne": "k2"}
+    assert [record.getMessage() for record in caplog.records] == [
+        "Found 1 repeated names in the client-key mapping; the last value is kept"
+    ]
+
+
+def test_lenient_parser_keeps_only_string_json_values_and_logs_a_count(caplog: pytest.LogCaptureFixture) -> None:
+    with caplog.at_level(logging.WARNING):
+        clients = parse_client_keys_lenient(raw='{"One": "k1", "Two": null, "Three": 3}')
+
+    assert clients == {"One": "k1"}
+    assert [record.getMessage() for record in caplog.records] == [
+        "Dropped 2 client-key entries whose value is not a string"
+    ]
