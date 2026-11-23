@@ -101,11 +101,6 @@ def test_ambiguity_is_judged_among_eligible_clients_only() -> None:
     assert resolver.keys_for(slug="demo") == frozenset({"k2"})
 
 
-def test_slugs_by_key_maps_only_unambiguous_requested_keys() -> None:
-    resolver = ClientSlugResolver.from_client_keys(clients={"One": "k1", "Two": "k2", "Dup": "k3", "dup": "k4"})
-    assert dict(resolver.slugs_by_key(keys=frozenset({"k1", "k3", "k4"}))) == {"k1": "one"}
-
-
 def test_ambiguity_is_logged_by_slug_only(caplog: pytest.LogCaptureFixture) -> None:
     with caplog.at_level(logging.WARNING):
         ClientSlugResolver.from_client_keys(clients={"Demo": "secret-key-a", "demo": "secret-key-b"})

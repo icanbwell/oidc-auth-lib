@@ -129,11 +129,3 @@ class ClientSlugResolver:
         """The one key ``slug`` selects, or an empty set when it is unmapped or ambiguous."""
         key = self.keys_by_slug.get(normalize_slug(slug=slug))
         return frozenset() if key is None else frozenset({key})
-
-    def slugs_by_key(self, *, keys: frozenset[str]) -> Mapping[str, str]:
-        """Each of ``keys`` that has an unambiguous slug, with that slug.
-
-        The slug is a bounded label that is safe to use in metrics and audit
-        records where the key itself must not appear.
-        """
-        return MappingProxyType({key: slug for slug, key in self.keys_by_slug.items() if key in keys})
