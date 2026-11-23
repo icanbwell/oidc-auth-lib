@@ -155,6 +155,8 @@ def resolve_admin_access(
     if not slugs:
         return AdminAccess.denied(reason=DenialReason.NO_ACCESS_SCOPE)
     if WILDCARD_SLUG in slugs and allow_all_tenants and clients.all_keys:
+        # Count only: the grant covers every client, and a key or name can identify a tenant.
+        logger.info("Granted reader access to all %d clients through the all-tenants scope", len(clients.all_keys))
         return AdminAccess.reader(allowed_client_keys=clients.all_keys)
     keys = frozenset(key for slug in slugs - {WILDCARD_SLUG} for key in clients.keys_for(slug=slug))
     if not keys:

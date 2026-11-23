@@ -317,3 +317,29 @@ def test_a_plain_string_tier_is_coerced_to_the_enum(tier: str, expected: AdminTi
     access = AdminAccess(tier=tier, allowed_client_keys=keys, denial_reason=None)  # type: ignore[arg-type]  # deliberately off-type input
 
     assert access.tier is expected
+
+
+def test_the_all_tenants_grant_is_logged_once_with_a_count_only(caplog: pytest.LogCaptureFixture) -> None:
+    with caplog.at_level("INFO"):
+        access = _resolve(scopes=["example/reader", "access/*.*"], allow_all_tenants=True)
+
+    assert access.tier is AdminTier.READER
+    assert [record.getMessage() for record in caplog.records] == [
+        f"Granted reader access to all {len(CLIENTS.all_keys)} clients through the all-tenants scope"
+    ]
+
+
+@pytest.mark.parametrize(
+    ("scopes", "allow_all_tenants"),
+    [
+        (["example/reader", "access/*.*"], False),
+        (["example/reader", "access/syntheticone.*"], True),
+    ],
+)
+def test_no_all_tenants_log_when_the_wildcard_grant_is_not_used(
+    scopes: list[str], allow_all_tenants: bool, caplog: pytest.LogCaptureFixture
+) -> None:
+    with caplog.at_level("INFO"):
+        _resolve(scopes=scopes, allow_all_tenants=allow_all_tenants)
+
+    assert caplog.records == []

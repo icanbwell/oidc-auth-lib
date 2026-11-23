@@ -93,6 +93,8 @@ access = resolve_admin_access(
   configures no logger of its own).
 - **Blank scopes:** an admin or reader scope list that is empty, or has a blank entry, admits nobody, and
   `validate_reader_configuration` refuses a blank or padded entry in either list.
+- **Auditing:** the all-tenants grant logs one info line with the client count, never a slug or key. The package
+  records no tier or other decision; consuming services record the tier and `allow_all_tenants` for each decision.
 - **No default for "all tenants":** `allowed_client_keys` is `None` only for `admin`. A reader always has a
   non-empty set and a denied caller always has `frozenset()`, so a denial can never be read as unrestricted.
   `AdminAccess` enforces this when it is constructed.
