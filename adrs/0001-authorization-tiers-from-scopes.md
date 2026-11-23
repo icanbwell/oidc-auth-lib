@@ -1,6 +1,6 @@
 # 0001. Administrator and tenant-reader tiers from OAuth scopes
 
-- Status: proposed. The Tech Design Review is waived by Imran Qureshi because this package moves existing code into one shared place; no EA review was held. The scope convention it builds on is documented in the [FHIR server security guide](https://github.com/icanbwell/fhir-server/blob/main/readme/security.md), section 5.
+- Status: proposed. No Tech Design Review is required, decided by Imran Qureshi (BAI-1945). Scope: this package moves scope-to-tier logic that services already run into one shared, tested place. It adds no service, datastore, event, FHIR resource usage or client-facing API, and it changes no existing behavior. No EA review was held and no EA approval is claimed. A change beyond that scope needs its own review. The scope convention it builds on is documented in the [FHIR server security guide](https://github.com/icanbwell/fhir-server/blob/main/readme/security.md), section 5.
 - Ticket: BAI-1945
 
 ## Context and problem statement
